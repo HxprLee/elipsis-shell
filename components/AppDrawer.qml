@@ -372,6 +372,7 @@ PanelWindow {
                             id: appMouse
                             anchors.fill: parent
                             hoverEnabled: true
+                            pressAndHoldInterval: 300
                             acceptedButtons: Qt.LeftButton | Qt.RightButton
                             onClicked: (mouse) => {
                                 if (mouse.button === Qt.RightButton) {

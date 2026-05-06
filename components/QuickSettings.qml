@@ -1,5 +1,6 @@
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 import Quickshell.Services.Pipewire
 import Quickshell.Services.SystemTray
 import QtQuick
@@ -21,6 +22,8 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
     aboveWindows: true
+    
+    WlrLayershell.keyboardFocus: (isOpen || visible) ? WlrLayershell.OnDemand : WlrLayershell.None
 
     property bool isOpen: shellRoot.panelOpen
     property real dragOffset: shellRoot.panelDragOffset
@@ -43,19 +46,12 @@ PanelWindow {
     property int batteryPct: -1
     property string batteryStatus: ""
 
-    Process { id: wifiToggle; running: false }
-    Process { id: btToggle; running: false }
 
     function toggleWifi() {
-        wifiToggle.command = ["nmcli", "radio", "wifi", wifiEnabled ? "off" : "on"]
-        wifiToggle.running = true
-        // Predict the state instantly while waiting for the global timer to catch up
-        shellRoot.wifiEnabled = !wifiEnabled
+        shellRoot.toggleWifi()
     }
     function toggleBluetooth() {
-        btToggle.command = ["bluetoothctl", "power", bluetoothEnabled ? "off" : "on"]
-        btToggle.running = true
-        shellRoot.bluetoothEnabled = !bluetoothEnabled
+        shellRoot.toggleBluetooth()
     }
 
     // ── Brightness ──
@@ -514,6 +510,16 @@ PanelWindow {
                 }
             }
 
+            Timer {
+                id: morphStartTimer
+                interval: 20
+                onTriggered: {
+                    expandedCard.animationsEnabled = true
+                    expandedLoader.sourceComponent = expandedOverlay.widgetItem.expandedComponent
+                    expandedOverlay.open()
+                }
+            }
+
             function openExpandedView(sourceRect, widgetItem) {
                 let pos = sourceRect.mapToItem(controlPanel, 0, 0)
                 expandedOverlay.sourceItem = sourceRect
@@ -523,14 +529,16 @@ PanelWindow {
                 expandedOverlay.startWidth = sourceRect.width
                 expandedOverlay.startHeight = sourceRect.height
                 
-                // Set initial morph position
+                // Disable animations to instantly snap to the source toggle
+                expandedCard.animationsEnabled = false
                 expandedCard.x = expandedOverlay.startX
                 expandedCard.y = expandedOverlay.startY
                 expandedCard.width = expandedOverlay.startWidth
                 expandedCard.height = expandedOverlay.startHeight
+                expandedCard.radius = (expandedOverlay.startWidth === expandedOverlay.startHeight) ? expandedOverlay.startWidth / 2 : 24
                 
-                expandedLoader.sourceComponent = widgetItem.expandedComponent
-                expandedOverlay.open()
+                // Use a Timer to ensure QML engine commits the geometry snap before re-enabling animations
+                morphStartTimer.start()
             }
 
             function closeExpandedView() {
@@ -589,137 +597,137 @@ PanelWindow {
                             spacing: 8
                             anchors.verticalCenter: parent.verticalCenter
                             Repeater {
-                        model: SystemTray.items
-                        delegate: Item {
-                            width: 20; height: 20
+                                model: SystemTray.items
+                                delegate: Item {
+                                    width: 20; height: 20
+                                    Image {
+                                        id: trayIconMorph
+                                        anchors.fill: parent
+                                        sourceSize: Qt.size(24, 24)
+                                        source: modelData.icon
+                                        visible: false
+                                    }
+                                    ColorOverlay {
+                                        anchors.fill: trayIconMorph
+                                        source: trayIconMorph
+                                        color: "white"
+                                    }
+                                }
+                            }
+                        }
+
+                        // Replicate Status Icons from StatusBar.qml
+                        // Bluetooth
+                        Item {
+                            width: (shellRoot.bluetoothEnabled && shellRoot.bluetoothConnected) ? 20 : 0
+                            height: 20
+                            visible: width > 0
+                            anchors.verticalCenter: parent.verticalCenter
                             Image {
-                                id: trayIconMorph
+                                id: btIconMorph
                                 anchors.fill: parent
+                                source: shellRoot.icon(shellRoot.bluetoothEnabled ? "network-bluetooth" : "bluetooth-disabled-symbolic")
                                 sourceSize: Qt.size(24, 24)
-                                source: modelData.icon
                                 visible: false
                             }
                             ColorOverlay {
-                                anchors.fill: trayIconMorph
-                                source: trayIconMorph
+                                anchors.fill: btIconMorph
+                                source: btIconMorph
                                 color: "white"
                             }
                         }
-                    }
 
-                    // Replicate Status Icons from StatusBar.qml
-                    // Bluetooth
-                    Item {
-                    width: (shellRoot.bluetoothEnabled && shellRoot.bluetoothConnected) ? 20 : 0
-                    height: 20
-                    visible: width > 0
-                    anchors.verticalCenter: parent.verticalCenter
-                    Image {
-                        id: btIconMorph
-                        anchors.fill: parent
-                        source: shellRoot.icon(shellRoot.bluetoothEnabled ? "network-bluetooth" : "bluetooth-disabled-symbolic")
-                        sourceSize: Qt.size(24, 24)
-                        visible: false
-                    }
-                    ColorOverlay {
-                        anchors.fill: btIconMorph
-                        source: btIconMorph
-                        color: "white"
-                    }
-                }
-
-                // WiFi
-                Item {
-                    width: (shellRoot.wifiEnabled && shellRoot.wifiConnected) ? 20 : 0
-                    height: 20
-                    visible: width > 0
-                    anchors.verticalCenter: parent.verticalCenter
-                    Image {
-                        id: wifiIconMorph
-                        anchors.fill: parent
-                        source: {
-                            if (!shellRoot.wifiEnabled) return shellRoot.icon("network-wireless-offline-symbolic");
-                            if (!shellRoot.wifiConnected) return shellRoot.icon("network-disconnect-symbolic");
-                            let levels = ["none", "weak", "ok", "good", "excellent"];
-                            let level = levels[shellRoot.wifiSignalLevel] || "none";
-                            return shellRoot.icon("network-wireless-signal-" + level + "-symbolic");
-                        }
-                        sourceSize: Qt.size(24, 24)
-                        visible: false
-                    }
-                    ColorOverlay {
-                        anchors.fill: wifiIconMorph
-                        source: wifiIconMorph
-                        color: "white"
-                    }
-                }
-
-                // Battery
-                Row {
-                    spacing: 6
-                    anchors.verticalCenter: parent.verticalCenter
-                    Item {
-                        width: 20; height: 20
-                        anchors.verticalCenter: parent.verticalCenter
-                        Image {
-                            id: battIconMorph
-                            anchors.fill: parent
-                            source: {
-                                let isCharging = qs.batteryStatus === "Charging"
-                                let pct = qs.batteryPct
-                                if (pct < 0) return shellRoot.icon("battery-missing-symbolic")
-                                let level = Math.max(0, Math.min(100, Math.round(pct / 10) * 10))
-                                let sLevel = (level < 100 ? (level < 10 ? "00" : "0") : "") + level
-                                let name = "battery-" + sLevel
-                                if (isCharging) name += "-charging"
-                                name += "-symbolic"
-                                return shellRoot.icon(name)
+                        // WiFi
+                        Item {
+                            width: (shellRoot.wifiEnabled && shellRoot.wifiConnected) ? 20 : 0
+                            height: 20
+                            visible: width > 0
+                            anchors.verticalCenter: parent.verticalCenter
+                            Image {
+                                id: wifiIconMorph
+                                anchors.fill: parent
+                                source: {
+                                    if (!shellRoot.wifiEnabled) return shellRoot.icon("network-wireless-offline-symbolic");
+                                    if (!shellRoot.wifiConnected) return shellRoot.icon("network-disconnect-symbolic");
+                                    let levels = ["none", "weak", "ok", "good", "excellent"];
+                                    let level = levels[shellRoot.wifiSignalLevel] || "none";
+                                    return shellRoot.icon("network-wireless-signal-" + level + "-symbolic");
+                                }
+                                sourceSize: Qt.size(24, 24)
+                                visible: false
                             }
-                            sourceSize: Qt.size(24, 24)
-                            visible: false
+                            ColorOverlay {
+                                anchors.fill: wifiIconMorph
+                                source: wifiIconMorph
+                                color: "white"
+                            }
                         }
-                        ColorOverlay {
-                            anchors.fill: battIconMorph
-                            source: battIconMorph
+
+                        // Battery
+                        Row {
+                            spacing: 6
+                            anchors.verticalCenter: parent.verticalCenter
+                            Item {
+                                width: 20; height: 20
+                                anchors.verticalCenter: parent.verticalCenter
+                                Image {
+                                    id: battIconMorph
+                                    anchors.fill: parent
+                                    source: {
+                                        let isCharging = qs.batteryStatus === "Charging"
+                                        let pct = qs.batteryPct
+                                        if (pct < 0) return shellRoot.icon("battery-missing-symbolic")
+                                        let level = Math.max(0, Math.min(100, Math.round(pct / 10) * 10))
+                                        let sLevel = (level < 100 ? (level < 10 ? "00" : "0") : "") + level
+                                        let name = "battery-" + sLevel
+                                        if (isCharging) name += "-charging"
+                                        name += "-symbolic"
+                                        return shellRoot.icon(name)
+                                    }
+                                    sourceSize: Qt.size(24, 24)
+                                    visible: false
+                                }
+                                ColorOverlay {
+                                    anchors.fill: battIconMorph
+                                    source: battIconMorph
+                                    color: "white"
+                                }
+                            }
+                            Text {
+                                text: qs.batteryPct >= 0 ? qs.batteryPct + "%" : "—"
+                                color: "white"
+                                font.pixelSize: 15
+                                font.bold: true
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+                    }
+
+                    // Edit Button
+                    Rectangle {
+                        width: 60; height: 28; radius: 14
+                        color: controlPanel.editMode ? Qt.rgba(0.2, 0.5, 1.0, 1.0) : Qt.rgba(1, 1, 1, 0.1)
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.left: parent.left
+                        
+                        Text {
+                            anchors.centerIn: parent
+                            text: controlPanel.editMode ? "Done" : "Edit"
                             color: "white"
+                            font.pixelSize: 12
+                            font.bold: true
                         }
-                    }
-                    Text {
-                        text: qs.batteryPct >= 0 ? qs.batteryPct + "%" : "—"
-                        color: "white"
-                        font.pixelSize: 15
-                        font.bold: true
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                    }
-                }
-
-                // Edit Button
-                Rectangle {
-                    width: 60; height: 28; radius: 14
-                    color: controlPanel.editMode ? Qt.rgba(0.2, 0.5, 1.0, 1.0) : Qt.rgba(1, 1, 1, 0.1)
-                    anchors.verticalCenter: parent.verticalCenter
-                    
-                    Text {
-                        anchors.centerIn: parent
-                        text: controlPanel.editMode ? "Done" : "Edit"
-                        color: "white"
-                        font.pixelSize: 12
-                        font.bold: true
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: {
-                            if (controlPanel.editMode) {
-                                controlPanel.saveLayout()
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                if (controlPanel.editMode) {
+                                    controlPanel.saveLayout()
+                                }
+                                controlPanel.editMode = !controlPanel.editMode
                             }
-                            controlPanel.editMode = !controlPanel.editMode
                         }
                     }
                 }
-                }
-            }
-
             // Toggles Model (populated from JSON at startup)
             ListModel {
                 id: togglesModel
@@ -761,12 +769,12 @@ PanelWindow {
                             property real savedWidth: 0
                             property real savedHeight: 0
 
-                            // Collapse this slot when dragging so other items reflow
-                            Layout.columnSpan: isDragging ? 1 : model.colSpan
-                            Layout.rowSpan: isDragging ? 1 : model.rowSpan
-                            Layout.fillWidth: !isDragging
-                            Layout.preferredWidth: 0
-                            Layout.preferredHeight: isDragging ? 0 : (model.rowSpan * ((400 - 48 - 48) / 4)) + ((model.rowSpan - 1) * 16)
+                            // Keep the layout slot full size so it acts as a placeholder
+                            Layout.columnSpan: model.colSpan
+                            Layout.rowSpan: model.rowSpan
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: (model.rowSpan * ((400 - 48 - 48) / 4)) + ((model.rowSpan - 1) * 16)
+
 
                             Behavior on x { enabled: !widgetOverlay.dragActive; NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
                             Behavior on y { enabled: !widgetOverlay.dragActive; NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
@@ -796,10 +804,21 @@ PanelWindow {
                                 property bool isCircle: model.colSpan === 1 && model.rowSpan === 1
                                 width: isCircle ? Math.min(parent.width, parent.height) : parent.width
                                 height: isCircle ? width : parent.height
-                                anchors.centerIn: parent
+                                x: (parent.width - width) / 2
+                                y: (parent.height - height) / 2
                                 radius: (model.colSpan >= 2 && model.rowSpan >= 2) ? 24 : Math.min(width, height) / 2
                                 color: Qt.rgba(0.15, 0.15, 0.2, 0.8)
                                 clip: true
+
+                                property bool isItemPressed: {
+                                    if (controlPanel.editMode) return false;
+                                    if (widgetLoader.item && widgetLoader.item.isSimpleToggle) return simpleToggleMouse.pressed;
+                                    if (widgetLoader.item && "isPressed" in widgetLoader.item) return widgetLoader.item.isPressed;
+                                    return complexHoldArea.pressed;
+                                }
+
+                                scale: widgetOverlay.dragActive ? 1.05 : (isItemPressed ? 0.95 : 1.0)
+                                Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 
                                 layer.enabled: true
                                 layer.effect: OpacityMask {
@@ -807,6 +826,16 @@ PanelWindow {
                                         width: widgetBg.width
                                         height: widgetBg.height
                                         radius: widgetBg.radius
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: complexHoldArea
+                                    anchors.fill: parent
+                                    enabled: !controlPanel.editMode && widgetLoader.item !== null && widgetLoader.item.hasExpandedView === true && widgetLoader.item.isSimpleToggle !== true
+                                    pressAndHoldInterval: 300
+                                    onPressAndHold: {
+                                        controlPanel.openExpandedView(widgetBg, widgetLoader.item)
                                     }
                                 }
 
@@ -827,14 +856,19 @@ PanelWindow {
                                     radius: widgetBg.radius
                                     color: {
                                         if (!widgetLoader.item || !widgetLoader.item.isSimpleToggle) return "transparent"
+                                        if (model.colSpan === 2 && model.rowSpan === 2) return "transparent"
                                         let w = widgetLoader.item
                                         return w.isActive ? (w.activeColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)) : "transparent"
                                     }
                                     Behavior on color { ColorAnimation { duration: 200 } }
 
+                                    // ── Layout for non-2x2 toggles (1x1 circles, 2x1 pills) ──
                                     GridLayout {
-                                        anchors.centerIn: parent
-                                        width: model.colSpan > model.rowSpan ? parent.width - 32 : implicitWidth
+                                        visible: !(model.colSpan === 2 && model.rowSpan === 2)
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        x: model.colSpan > model.rowSpan ? (parent.height / 2 - 16) : 8
+                                        width: model.colSpan > model.rowSpan ? (parent.width - x - 16) : (parent.width - 16)
+
                                         columns: model.colSpan > model.rowSpan ? 2 : 1
                                         rowSpacing: 8
                                         columnSpacing: 12
@@ -847,23 +881,89 @@ PanelWindow {
                                             source: (widgetLoader.item && widgetLoader.item.iconSource) || ""
                                         }
 
-                                        Text {
+                                        ColumnLayout {
                                             visible: model.colSpan > 1
-                                            text: (widgetLoader.item && widgetLoader.item.titleText) || ""
-                                            color: "white"
-                                            font.pixelSize: 14
-                                            font.bold: true
                                             Layout.alignment: model.colSpan > model.rowSpan ? Qt.AlignVCenter | Qt.AlignLeft : Qt.AlignHCenter
                                             Layout.fillWidth: model.colSpan > model.rowSpan
-                                            verticalAlignment: Text.AlignVCenter
-                                            horizontalAlignment: model.colSpan > model.rowSpan ? Text.AlignLeft : Text.AlignHCenter
-                                            elide: Text.ElideRight
+                                            spacing: 0
+
+                                            Text {
+                                                text: (widgetLoader.item && widgetLoader.item.titleText) || ""
+                                                color: "white"
+                                                font.pixelSize: 14
+                                                font.bold: true
+                                                Layout.fillWidth: true
+                                                horizontalAlignment: model.colSpan > model.rowSpan ? Text.AlignLeft : Text.AlignHCenter
+                                                elide: Text.ElideRight
+                                            }
+
+                                            Text {
+                                                text: (widgetLoader.item && widgetLoader.item.subtitleText) || ""
+                                                visible: text !== ""
+                                                color: Qt.rgba(1, 1, 1, 0.6)
+                                                font.pixelSize: 12
+                                                Layout.fillWidth: true
+                                                horizontalAlignment: model.colSpan > model.rowSpan ? Text.AlignLeft : Text.AlignHCenter
+                                                elide: Text.ElideRight
+                                            }
+                                        }
+                                    }
+
+                                    // ── Layout for 2x2 toggles ──
+                                    Item {
+                                        anchors.fill: parent
+                                        visible: model.colSpan === 2 && model.rowSpan === 2
+
+                                        Rectangle {
+                                            width: 48; height: 48; radius: 24
+                                            anchors.top: parent.top; anchors.topMargin: 16
+                                            anchors.left: parent.left; anchors.leftMargin: 16
+                                            color: {
+                                                if (!widgetLoader.item || !widgetLoader.item.isSimpleToggle) return Qt.rgba(1, 1, 1, 0.1)
+                                                let w = widgetLoader.item
+                                                return w.isActive ? (w.activeColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)) : Qt.rgba(1, 1, 1, 0.1)
+                                            }
+                                            Behavior on color { ColorAnimation { duration: 200 } }
+
+                                            Image {
+                                                anchors.centerIn: parent
+                                                width: 24; height: 24
+                                                sourceSize: Qt.size(24, 24)
+                                                source: (widgetLoader.item && widgetLoader.item.iconSource) || ""
+                                            }
+                                        }
+
+                                        ColumnLayout {
+                                            anchors.bottom: parent.bottom; anchors.bottomMargin: 16
+                                            anchors.left: parent.left; anchors.leftMargin: 16
+                                            anchors.right: parent.right; anchors.rightMargin: 16
+                                            spacing: 0
+
+                                            Text {
+                                                text: (widgetLoader.item && widgetLoader.item.titleText) || ""
+                                                color: "white"
+                                                font.pixelSize: 14
+                                                font.bold: true
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
+                                            }
+
+                                            Text {
+                                                text: (widgetLoader.item && widgetLoader.item.subtitleText) || ""
+                                                visible: text !== ""
+                                                color: Qt.rgba(1, 1, 1, 0.6)
+                                                font.pixelSize: 12
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
+                                            }
                                         }
                                     }
 
                                     MouseArea {
+                                        id: simpleToggleMouse
                                         anchors.fill: parent
                                         enabled: !controlPanel.editMode
+                                        pressAndHoldInterval: 300
                                         onClicked: {
                                             if (widgetLoader.item && widgetLoader.item.toggled)
                                                 widgetLoader.item.toggled()
@@ -884,6 +984,7 @@ PanelWindow {
                                     widgetSource: model.source || ""
                                     currentColSpan: model.colSpan
                                     currentRowSpan: model.rowSpan
+                                    availableSizes: widgetLoader.item ? widgetLoader.item.availableSizes : undefined
 
                                     Drag.source: delegateItem
 
@@ -892,9 +993,9 @@ PanelWindow {
                                         delegateItem.savedWidth = widgetBg.width
                                         delegateItem.savedHeight = widgetBg.height
 
-                                        // Reparent to grid so it floats freely above collapsed slot
-                                        let pos = widgetBg.mapToItem(toggleGrid, 0, 0)
-                                        widgetBg.parent = toggleGrid
+                                        // Reparent to flickable to escape GridLayout management
+                                        let pos = widgetBg.mapToItem(toggleFlickable.contentItem, 0, 0)
+                                        widgetBg.parent = toggleFlickable.contentItem
                                         widgetBg.x = pos.x
                                         widgetBg.y = pos.y
                                         widgetBg.width = delegateItem.savedWidth
@@ -902,7 +1003,6 @@ PanelWindow {
 
                                         controlPanel.dragIndex = delegateItem.itemIndex
                                         widgetBg.z = 100
-                                        widgetBg.scale = 1.05
                                     }
                                     onDragFinished: {
                                         controlPanel.dragIndex = -1
@@ -910,11 +1010,10 @@ PanelWindow {
                                         // Reparent back to delegate and restore bindings
                                         widgetBg.parent = delegateItem
                                         widgetBg.z = 0
-                                        widgetBg.x = 0
-                                        widgetBg.y = 0
-                                        widgetBg.scale = 1.0
-                                        widgetBg.width = Qt.binding(function() { return delegateItem.width })
-                                        widgetBg.height = Qt.binding(function() { return delegateItem.height })
+                                        widgetBg.x = Qt.binding(() => (delegateItem.width - widgetBg.width) / 2)
+                                        widgetBg.y = Qt.binding(() => (delegateItem.height - widgetBg.height) / 2)
+                                        widgetBg.width = Qt.binding(() => widgetBg.isCircle ? Math.min(delegateItem.width, delegateItem.height) : delegateItem.width)
+                                        widgetBg.height = Qt.binding(() => widgetBg.isCircle ? widgetBg.width : delegateItem.height)
                                     }
                                     onRemoved: {
                                         togglesModel.remove(index)
@@ -1120,13 +1219,20 @@ PanelWindow {
                     isExpanded = true
                     opacity = 1.0
 
-                    // Target: centered card (use widget's preferred height if provided)
-                    let targetW = expandedOverlay.width
-                    let targetH = (widgetItem && widgetItem.expandedHeight) ? widgetItem.expandedHeight : 420
-                    expandedCard.width = targetW
-                    expandedCard.height = targetH
-                    expandedCard.x = 0
-                    expandedCard.y = (expandedOverlay.height - targetH) / 2
+                    expandedLoader.sourceComponent = widgetItem.expandedComponent
+
+                    // Use bindings so that if implicitHeight changes after loading, the card resizes dynamically
+                    expandedCard.width = Qt.binding(function() { return expandedOverlay.width })
+                    expandedCard.height = Qt.binding(function() {
+                        let contentH = expandedLoader.item && expandedLoader.item.implicitHeight > 0 
+                                          ? expandedLoader.item.implicitHeight 
+                                          : 0;
+                        return contentH > 0 
+                                  ? contentH + 48 // 24 margins top/bottom
+                                  : ((widgetItem && widgetItem.expandedHeight) ? widgetItem.expandedHeight : 420);
+                    })
+                    expandedCard.x = Qt.binding(function() { return 0 })
+                    expandedCard.y = Qt.binding(function() { return (expandedOverlay.height - expandedCard.height) / 2 })
                     expandedCard.radius = 36
                 }
 
@@ -1148,20 +1254,22 @@ PanelWindow {
 
                 Rectangle {
                     id: expandedCard
+                    property bool animationsEnabled: true
                     color: Qt.rgba(0.15, 0.15, 0.2, 0.95)
                     clip: true
                     
-                    Behavior on x { NumberAnimation { duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
-                    Behavior on y { NumberAnimation { duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
-                    Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
-                    Behavior on height { NumberAnimation { duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
-                    Behavior on radius { NumberAnimation { duration: 300; easing.type: Easing.OutBack } }
+                    Behavior on x { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
+                    Behavior on y { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
+                    Behavior on width { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
+                    Behavior on height { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
+                    Behavior on radius { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 300; easing.type: Easing.OutBack } }
 
                     // Only show loader content when fully expanded to avoid layout jumping during morph
                     Loader {
                         id: expandedLoader
                         anchors.fill: parent
                         anchors.margins: 24
+                        focus: true
                         opacity: expandedOverlay.isExpanded ? 1.0 : 0.0
                         Behavior on opacity { NumberAnimation { duration: 200 } }
                     }

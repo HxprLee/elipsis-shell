@@ -4,7 +4,8 @@ import QtQuick
 
 Item {
     property bool isSimpleToggle: true
-    property string titleText: {
+    property string titleText: "Power Profile"
+    property string subtitleText: {
         if (shellRoot.powerProfile === "power-saver") return "Power Saver";
         if (shellRoot.powerProfile === "performance") return "Performance";
         return "Balanced";

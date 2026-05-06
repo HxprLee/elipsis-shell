@@ -53,14 +53,17 @@ ColumnLayout {
     // ── Optional: extra content before the switch (e.g. refresh button) ──
     property alias trailingContent: trailingSlot.data
 
-    RowLayout {
+    Item {
         Layout.fillWidth: true
-        spacing: 16
+        height: Math.max(iconBadge.height, titles.implicitHeight, switchItem.height, trailingSlot.implicitHeight)
 
         // Icon badge
         Rectangle {
+            id: iconBadge
             width: 48; height: 48; radius: 24
             color: header.isActive ? header.activeColor : Qt.rgba(1, 1, 1, 0.1)
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
             Behavior on color { ColorAnimation { duration: 200 } }
             Image {
                 anchors.centerIn: parent
@@ -71,19 +74,28 @@ ColumnLayout {
 
         // Title + subtitle
         ColumnLayout {
-            Layout.fillWidth: true
+            id: titles
+            anchors.left: iconBadge.right
+            anchors.leftMargin: 16
+            anchors.right: trailingSlot.visible ? trailingSlot.left : (header.showSwitch ? switchItem.left : parent.right)
+            anchors.rightMargin: 16
+            anchors.verticalCenter: parent.verticalCenter
             spacing: 2
             Text {
                 text: header.title
                 color: "white"
                 font.pixelSize: 20
                 font.bold: true
+                elide: Text.ElideRight
+                Layout.fillWidth: true
             }
             Text {
                 text: header.subtitle
                 color: Qt.rgba(1, 1, 1, 0.6)
                 font.pixelSize: 14
                 visible: text !== ""
+                elide: Text.ElideRight
+                Layout.fillWidth: true
             }
         }
 
@@ -93,14 +105,19 @@ ColumnLayout {
             visible: children.length > 0
             implicitWidth: childrenRect.width
             implicitHeight: childrenRect.height
-            Layout.alignment: Qt.AlignVCenter
+            anchors.right: header.showSwitch ? switchItem.left : parent.right
+            anchors.rightMargin: header.showSwitch ? 16 : 0
+            anchors.verticalCenter: parent.verticalCenter
         }
 
         // Material 3 Switch
         Item {
+            id: switchItem
             visible: header.showSwitch
-            width: 52; height: 32
-            Layout.alignment: Qt.AlignVCenter
+            width: header.showSwitch ? 52 : 0
+            height: 32
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
 
             Rectangle {
                 anchors.fill: parent
@@ -108,6 +125,7 @@ ColumnLayout {
                 color: header.isActive ? header.activeColor : "transparent"
                 border.width: header.isActive ? 0 : 2
                 border.color: Qt.rgba(1, 1, 1, 0.4)
+                visible: header.showSwitch
                 Behavior on color { ColorAnimation { duration: 200 } }
                 Behavior on border.width { NumberAnimation { duration: 200 } }
             }
@@ -119,6 +137,7 @@ ColumnLayout {
                 color: header.isActive ? "white" : Qt.rgba(1, 1, 1, 0.6)
                 y: (parent.height - height) / 2
                 x: header.isActive ? (parent.width - width - 4) : 4
+                visible: header.showSwitch
                 Behavior on x { NumberAnimation { duration: 250; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
                 Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
                 Behavior on color { ColorAnimation { duration: 200 } }
@@ -130,6 +149,7 @@ ColumnLayout {
                 id: m3Area
                 anchors.fill: parent
                 anchors.margins: -4
+                enabled: header.showSwitch
                 onClicked: header.switchToggled()
             }
         }

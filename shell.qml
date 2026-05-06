@@ -451,8 +451,101 @@ ShellRoot {
         return 0;
     }
 
-    property bool bluetoothEnabled: (Bluetooth.adapter && Bluetooth.adapter.powered) ?? false
-    property bool bluetoothConnected: (Bluetooth.devices && Bluetooth.devices.values) ? Bluetooth.devices.values.length > 0 : false
+    property bool bluetoothEnabledManual: false
+    property bool bluetoothEnabled: {
+        if (bluetoothEnabledManual) return true;
+        if (Bluetooth.adapter) return !!Bluetooth.adapter.powered;
+        if (Bluetooth.adapters && Bluetooth.adapters.values && Bluetooth.adapters.values.length > 0) {
+            return !!Bluetooth.adapters.values[0].powered;
+        }
+        return false;
+    }
+
+    Timer {
+        interval: 2500; running: true; repeat: true
+        triggeredOnStart: true
+        onTriggered: btStatusProc.running = true
+    }
+
+    Process {
+        id: btStatusProc
+        command: ["sh", "-c", "bluetoothctl show | grep -q 'Powered: yes'"]
+        running: false
+        onExited: (code) => {
+            shellRoot.bluetoothEnabledManual = (code === 0);
+        }
+    }
+    property bool bluetoothConnected: {
+        if (!Bluetooth.devices) return false;
+        const devices = Bluetooth.devices.values;
+        for (let i = 0; i < devices.length; i++) {
+            if (devices[i].connected) return true;
+        }
+        return false;
+    }
+
+    property string bluetoothDeviceName: {
+        if (!Bluetooth.devices) return "";
+        const devices = Bluetooth.devices.values;
+        for (let i = 0; i < devices.length; i++) {
+            if (devices[i].connected) return devices[i].name || devices[i].alias || "Connected";
+        }
+        return "";
+    }
+
+    property bool bluetoothScanningManual: btScanProc.running
+    function startBluetoothDiscovery() {
+        if (Bluetooth.adapter) {
+            Bluetooth.adapter.discovering = true;
+        } else if (Bluetooth.adapters && Bluetooth.adapters.values && Bluetooth.adapters.values.length > 0) {
+            Bluetooth.adapters.values[0].discovering = true;
+        }
+        
+        // Fallback for systems where native discovery trigger fails
+        if (!btScanProc.running) {
+            btScanProc.running = true;
+        }
+    }
+
+    Process {
+        id: btScanProc
+        command: ["sh", "-c", "bluetoothctl --timeout 15 scan on"]
+        running: false
+    }
+
+    function startWifiScan() {
+        if (Networking.wifi) {
+            Networking.wifi.scan();
+        }
+        
+        // Fallback for systems where native scan trigger fails
+        if (!wifiScanProc.running) {
+            wifiScanProc.running = true;
+        }
+    }
+
+    Process {
+        id: wifiScanProc
+        command: ["nmcli", "device", "wifi", "rescan"]
+        running: false
+    }
+
+    function toggleBluetooth() {
+        if (btToggleProc.running) return;
+        let cmd = "bluetoothctl power " + (shellRoot.bluetoothEnabled ? "off" : "on")
+        console.log("Bluetooth Toggle Command:", cmd)
+        btToggleProc.command = ["sh", "-c", cmd]
+        btToggleProc.running = true
+    }
+
+    function toggleWifi() {
+        if (wifiToggleProc.running) return;
+        wifiToggleProc.command = ["sh", "-c", "nmcli radio wifi " + (shellRoot.wifiEnabled ? "off" : "on")]
+        wifiToggleProc.running = true
+    }
+
+    Process { id: btToggleProc; running: false }
+    Process { id: wifiToggleProc; running: false }
 
     // ── Battery via sysfs ──
     property int batteryPct: -1
@@ -553,9 +646,12 @@ ShellRoot {
         
         if (table[name]) return table[name];
         
-        // Dynamic lookup for granular battery icons
         if (name.startsWith("battery-")) {
             return "file:///usr/share/icons/breeze-dark/status/24/" + name + ".svg";
+        }
+        
+        if (name.startsWith("media-")) {
+            return "file:///usr/share/icons/breeze-dark/actions/24/" + name + ".svg";
         }
         
         return "";

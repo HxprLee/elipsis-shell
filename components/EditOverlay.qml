@@ -14,6 +14,7 @@ Item {
     required property string widgetSource // model.source ("toggles/MediaWidget.qml" etc)
     required property int currentColSpan  // model.colSpan
     required property int currentRowSpan  // model.rowSpan
+    property var availableSizes: undefined // Array of {colSpan, rowSpan}
 
     // ── Signals ──
     signal resized(int newColSpan, int newRowSpan)
@@ -46,6 +47,7 @@ Item {
         drag.target: dragActive ? editOverlay.parent : null
         drag.axis: Drag.XAndYAxis
         property bool dragActive: false
+        pressAndHoldInterval: 300
 
         onPressAndHold: {
             dragActive = true
@@ -85,12 +87,16 @@ Item {
         }
     }
 
-    // ── Drag Resize handle (bottom-right) ──
+    // ── Click-to-Cycle Resize button (bottom-right) ──
     Item {
+        id: resizeHandleItem
         width: 32; height: 32
         anchors.bottom: parent.bottom
         anchors.right: parent.right
         z: 10
+        
+        scale: resizeArea.pressed ? 0.85 : 1.0
+        Behavior on scale { NumberAnimation { duration: 100 } }
 
         // Visual curve for resize handle
         Canvas {
@@ -109,49 +115,62 @@ Item {
         }
 
         MouseArea {
+            id: resizeArea
             anchors.fill: parent
             anchors.margins: -8
 
-            property real startX: 0
-            property real startY: 0
-            property int startColSpan: 1
-            property int startRowSpan: 1
+            onClicked: {
+                let currentCs = editOverlay.currentColSpan
+                let currentRs = editOverlay.currentRowSpan
+                let newCs = currentCs
+                let newRs = currentRs
 
-            onPressed: (mouse) => {
-                startX = mouse.x
-                startY = mouse.y
-                startColSpan = editOverlay.currentColSpan
-                startRowSpan = editOverlay.currentRowSpan
-            }
+                if (editOverlay.availableSizes && Array.isArray(editOverlay.availableSizes) && editOverlay.availableSizes.length > 0) {
+                    // Find current index
+                    let idx = -1;
+                    for (let i = 0; i < editOverlay.availableSizes.length; i++) {
+                        let size = editOverlay.availableSizes[i];
+                        if (size.colSpan === currentCs && size.rowSpan === currentRs) {
+                            idx = i;
+                            break;
+                        }
+                    }
+                    
+                    // Cycle to next size, wrapping around
+                    let nextIdx = (idx + 1) % editOverlay.availableSizes.length;
+                    let nextSize = editOverlay.availableSizes[nextIdx];
+                    newCs = nextSize.colSpan;
+                    newRs = nextSize.rowSpan;
+                } else {
+                    // Fallback cycle logic
+                    let isSlider = widgetSource.indexOf("Slider") !== -1
+                    let isMedia = widgetSource.indexOf("Media") !== -1
 
-            onPositionChanged: (mouse) => {
-                let dx = mouse.x - startX
-                let dy = mouse.y - startY
-                
-                // toggleGrid properties:
-                // fixed width: 400 - 48 = 352
-                // columnSpacing: 16
-                // cellWidth: (352 - 3*16) / 4 = 76
-                // step = 76 + 16 = 92
-                let stepX = 92
-                let stepY = 92 // same for height
-
-                let newCs = Math.max(1, Math.min(4, startColSpan + Math.round(dx / stepX)))
-                let newRs = Math.max(1, Math.min(4, startRowSpan + Math.round(dy / stepY)))
-
-                // Enforce specific logic for some widgets to match iOS constraints
-                let isSlider = widgetSource.indexOf("Slider") !== -1
-                let isMedia = widgetSource.indexOf("Media") !== -1
-
-                if (isSlider) {
-                    newRs = 1 // Sliders always 1 row tall
-                    newCs = Math.max(2, newCs) // at least 2 wide
-                } else if (isMedia) {
-                    newCs = Math.max(2, newCs)
-                    newRs = Math.max(2, newRs)
+                    if (isSlider) {
+                        // Sliders: 2x1 -> 4x1 -> 2x1
+                        if (currentCs === 2) newCs = 4;
+                        else newCs = 2;
+                        newRs = 1;
+                    } else if (isMedia) {
+                        // Media: 2x2 -> 4x2 -> 2x2
+                        if (currentCs === 2) newCs = 4;
+                        else newCs = 2;
+                        newRs = 2;
+                    } else {
+                        // Default: 1x1 -> 2x1 -> 2x2 -> 1x2 -> 1x1
+                        if (currentCs === 1 && currentRs === 1) {
+                            newCs = 2; newRs = 1;
+                        } else if (currentCs === 2 && currentRs === 1) {
+                            newCs = 2; newRs = 2;
+                        } else if (currentCs === 2 && currentRs === 2) {
+                            newCs = 1; newRs = 2;
+                        } else {
+                            newCs = 1; newRs = 1;
+                        }
+                    }
                 }
 
-                if (newCs !== editOverlay.currentColSpan || newRs !== editOverlay.currentRowSpan) {
+                if (newCs !== currentCs || newRs !== currentRs) {
                     editOverlay.resized(newCs, newRs)
                 }
             }

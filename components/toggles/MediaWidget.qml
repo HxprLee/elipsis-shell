@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import Qt5Compat.GraphicalEffects
 import Quickshell.Services.Mpris
 
 // MediaWidget.qml — MPRIS media player with album art, playback controls,
@@ -11,45 +12,55 @@ Item {
     property var activePlayer: Mpris.players.values.length > 0 ? Mpris.players.values[0] : null
     property string titleText: "Media Control"
 
+    property var availableSizes: [
+        { colSpan: 2, rowSpan: 2 },
+        { colSpan: 4, rowSpan: 2 }
+    ]
+
+    property bool is4x2: modelData ? modelData.colSpan === 4 : false
+
+    // Helper functions
+    function formatTime(seconds) {
+        if (!seconds || seconds < 0) return "0:00"
+        let mins = Math.floor(seconds / 60)
+        let secs = Math.floor(seconds % 60)
+        return mins + ":" + (secs < 10 ? "0" : "") + secs
+    }
+
+    // Position tracker — emit positionChanged every second for reactive updates
+    Timer {
+        running: activePlayer && activePlayer.isPlaying && (is4x2 || expandedOverlay.isExpanded)
+        interval: 1000
+        repeat: true
+        onTriggered: if (activePlayer) activePlayer.positionChanged()
+    }
+
     // ── Expanded view support ──
     property bool hasExpandedView: true
-    property int expandedHeight: 520
+    property int expandedHeight: 580
     property Component expandedComponent: Component {
         Item {
             id: expandedRoot
             property var player: root.activePlayer
-
-            // Helper functions
-            function formatTime(seconds) {
-                if (!seconds || seconds < 0) return "0:00"
-                let mins = Math.floor(seconds / 60)
-                let secs = Math.floor(seconds % 60)
-                return mins + ":" + (secs < 10 ? "0" : "") + secs
-            }
-
-            // Position tracker — emit positionChanged every second for reactive updates
-            Timer {
-                running: expandedRoot.player && expandedRoot.player.isPlaying && expandedOverlay.isExpanded
-                interval: 1000
-                repeat: true
-                onTriggered: if (expandedRoot.player) expandedRoot.player.positionChanged()
-            }
+            implicitHeight: layout.implicitHeight
 
             ColumnLayout {
-                anchors.fill: parent
+                id: layout
+                anchors.left: parent.left
+                anchors.right: parent.right
                 spacing: 0
 
                 // ── Large Album Art (iOS style) ──
                 Item {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(parent.width - 32, 240)
+                    Layout.preferredHeight: width
                     Layout.alignment: Qt.AlignHCenter
                     Layout.bottomMargin: 20
 
                     Rectangle {
                         id: artCard
                         anchors.centerIn: parent
-                        width: Math.min(parent.width, 240)
+                        width: parent.width
                         height: width
                         radius: 16
                         color: Qt.rgba(1, 1, 1, 0.05)
@@ -157,7 +168,7 @@ Item {
                         Layout.fillWidth: true
                         Text {
                             text: expandedRoot.player && expandedRoot.player.positionSupported
-                                  ? expandedRoot.formatTime(expandedRoot.player.position) : "0:00"
+                                  ? root.formatTime(expandedRoot.player.position) : "0:00"
                             color: Qt.rgba(1, 1, 1, 0.45)
                             font.pixelSize: 12
                             font.weight: Font.Medium
@@ -165,7 +176,7 @@ Item {
                         Item { Layout.fillWidth: true }
                         Text {
                             text: expandedRoot.player && expandedRoot.player.lengthSupported
-                                  ? "-" + expandedRoot.formatTime(expandedRoot.player.length - expandedRoot.player.position) : "-0:00"
+                                  ? "-" + root.formatTime(expandedRoot.player.length - expandedRoot.player.position) : "-0:00"
                             color: Qt.rgba(1, 1, 1, 0.45)
                             font.pixelSize: 12
                             font.weight: Font.Medium
@@ -190,9 +201,16 @@ Item {
                         scale: prevArea.pressed ? 0.85 : 1.0
                         Behavior on scale { NumberAnimation { duration: 100 } }
                         Image {
+                            id: expandedPrevIcon
                             anchors.centerIn: parent
                             source: shellRoot.icon("media-skip-backward-symbolic")
                             sourceSize: Qt.size(28, 28)
+                            visible: false
+                        }
+                        ColorOverlay {
+                            anchors.fill: expandedPrevIcon
+                            source: expandedPrevIcon
+                            color: "white"
                         }
                         MouseArea {
                             id: prevArea
@@ -204,21 +222,27 @@ Item {
 
                     Item { Layout.preferredWidth: 32 }
 
-                    // Play/Pause (large circular button)
-                    Rectangle {
-                        width: 64; height: 64; radius: 32
-                        color: "white"
+                    // Play/Pause
+                    Item {
+                        width: 64; height: 64
                         opacity: expandedRoot.player && (expandedRoot.player.canTogglePlaying ?? false) ? 1.0 : 0.3
 
                         Image {
+                            id: expandedPlayIcon
                             anchors.centerIn: parent
                             source: shellRoot.icon(
                                 expandedRoot.player && expandedRoot.player.isPlaying
                                     ? "media-playback-pause-symbolic"
                                     : "media-playback-start-symbolic"
                             )
-                            sourceSize: Qt.size(32, 32)
-                            // Invert color for white button
+                            sourceSize: Qt.size(48, 48)
+                            visible: false
+                        }
+                        
+                        ColorOverlay {
+                            anchors.fill: expandedPlayIcon
+                            source: expandedPlayIcon
+                            color: "white"
                         }
 
                         scale: playArea.pressed ? 0.9 : 1.0
@@ -239,9 +263,16 @@ Item {
                         width: 48; height: 48
                         opacity: expandedRoot.player && (expandedRoot.player.canGoNext ?? false) ? 1.0 : 0.3
                         Image {
+                            id: expandedNextIcon
                             anchors.centerIn: parent
                             source: shellRoot.icon("media-skip-forward-symbolic")
                             sourceSize: Qt.size(28, 28)
+                            visible: false
+                        }
+                        ColorOverlay {
+                            anchors.fill: expandedNextIcon
+                            source: expandedNextIcon
+                            color: "white"
                         }
                         scale: nextArea.pressed ? 0.85 : 1.0
                         Behavior on scale { NumberAnimation { duration: 100 } }
@@ -350,10 +381,18 @@ Item {
 
     // ── Compact widget view (shown in the grid) ──
     Image {
+        id: compactBgImg
         anchors.fill: parent
         source: activePlayer && activePlayer.trackArtUrl ? activePlayer.trackArtUrl : ""
         fillMode: Image.PreserveAspectCrop
-        visible: source !== ""
+        visible: false // Hidden, used as source for blur
+    }
+
+    FastBlur {
+        anchors.fill: parent
+        source: compactBgImg
+        radius: 64
+        visible: compactBgImg.status === Image.Ready
     }
 
     // Fallback when no art
@@ -361,71 +400,337 @@ Item {
         anchors.centerIn: parent
         visible: !activePlayer || !activePlayer.trackArtUrl
         source: shellRoot.icon("multimedia-audio-player-symbolic")
-        sourceSize: Qt.size(32, 32)
-        opacity: 0.4
+        sourceSize: Qt.size(64, 64)
+        opacity: 0.15
     }
 
     // Dark overlay for readability
     Rectangle {
         anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, 0.4)
+        color: Qt.rgba(0, 0, 0, 0.5)
     }
 
+    // ── 2x2 Compact Layout ──
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 16
-        spacing: 4
+        visible: !root.is4x2
+        spacing: 0
 
-        Text {
-            text: activePlayer ? (activePlayer.trackTitle || "Unknown Title") : "No Media"
-            color: "white"
-            font.pixelSize: 16
-            font.bold: true
-            elide: Text.ElideRight
-            Layout.fillWidth: true
-            horizontalAlignment: Text.AlignHCenter
-        }
-
-        Text {
-            text: activePlayer ? (activePlayer.trackArtist || "Unknown Artist") : ""
-            color: Qt.rgba(1, 1, 1, 0.7)
-            font.pixelSize: 13
-            elide: Text.ElideRight
-            Layout.fillWidth: true
-            horizontalAlignment: Text.AlignHCenter
-            visible: activePlayer !== null
-        }
-
-        Item { Layout.fillHeight: true }
-
+        // Header: Art + Text
         RowLayout {
             Layout.fillWidth: true
-            Layout.alignment: Qt.AlignHCenter
-            spacing: 16
+            spacing: 12
 
-            Image {
-                source: shellRoot.icon("media-skip-backward-symbolic")
-                sourceSize: Qt.size(24, 24)
+            // Thumbnail Art
+            Rectangle {
+                width: 48; height: 48; radius: 10
+                color: Qt.rgba(1, 1, 1, 0.1)
+                clip: true
+
+                Image {
+                    anchors.fill: parent
+                    source: compactBgImg.source
+                    fillMode: Image.PreserveAspectCrop
+                    visible: source !== ""
+                }
+                
+                Image {
+                    anchors.centerIn: parent
+                    visible: parent.children[0].status !== Image.Ready
+                    source: shellRoot.icon("multimedia-audio-player-symbolic")
+                    sourceSize: Qt.size(24, 24)
+                    opacity: 0.4
+                }
+            }
+
+            // Info
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 2
+
+                Text {
+                    text: activePlayer ? (activePlayer.trackTitle || "Unknown Title") : "No Media"
+                    color: "white"
+                    font.pixelSize: 15
+                    font.bold: true
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+
+                Text {
+                    text: activePlayer ? (activePlayer.trackArtist || "Unknown Artist") : ""
+                    color: Qt.rgba(1, 1, 1, 0.7)
+                    font.pixelSize: 13
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                    visible: activePlayer !== null
+                }
+            }
+        }
+
+        Item { Layout.fillHeight: true } // spacer
+
+        // Transport Controls
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
+            spacing: 24
+
+            Item {
                 Layout.preferredWidth: 24; Layout.preferredHeight: 24
-                opacity: activePlayer && (activePlayer.canGoPrevious ?? false) ? 1.0 : 0.3
+                opacity: activePlayer && (activePlayer.canGoPrevious ?? false) ? 1.0 : 0.4
+                Image {
+                    id: skipBackIcon2x2
+                    anchors.fill: parent
+                    source: shellRoot.icon("media-skip-backward-symbolic")
+                    sourceSize: Qt.size(24, 24)
+                    visible: false
+                }
+                ColorOverlay {
+                    anchors.fill: skipBackIcon2x2
+                    source: skipBackIcon2x2
+                    color: "white"
+                }
                 MouseArea { anchors.fill: parent; enabled: !controlPanel.editMode && !!activePlayer && (activePlayer.canGoPrevious ?? false); onClicked: activePlayer.previous() }
             }
             Rectangle {
                 width: 44; height: 44; radius: 22
-                color: Qt.rgba(1, 1, 1, 0.2)
+                color: "white" // iOS 18 style solid white for primary action
+                opacity: activePlayer && (activePlayer.canTogglePlaying ?? false) ? 1.0 : 0.4
                 Image {
+                    id: playIcon2x2
                     anchors.centerIn: parent
                     source: shellRoot.icon(activePlayer && activePlayer.isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic")
                     sourceSize: Qt.size(24, 24)
+                    visible: false
                 }
-                MouseArea { anchors.fill: parent; enabled: !controlPanel.editMode && !!activePlayer; onClicked: activePlayer.togglePlaying() }
+                ColorOverlay {
+                    anchors.fill: playIcon2x2
+                    source: playIcon2x2
+                    color: "black"
+                }
+                scale: playArea2x2.pressed ? 0.9 : 1.0
+                Behavior on scale { NumberAnimation { duration: 100 } }
+                MouseArea { id: playArea2x2; anchors.fill: parent; enabled: !controlPanel.editMode && !!activePlayer && (activePlayer.canTogglePlaying ?? false); onClicked: activePlayer.togglePlaying() }
             }
-            Image {
-                source: shellRoot.icon("media-skip-forward-symbolic")
-                sourceSize: Qt.size(24, 24)
+            Item {
                 Layout.preferredWidth: 24; Layout.preferredHeight: 24
-                opacity: activePlayer && (activePlayer.canGoNext ?? false) ? 1.0 : 0.3
+                opacity: activePlayer && (activePlayer.canGoNext ?? false) ? 1.0 : 0.4
+                Image {
+                    id: skipFwdIcon2x2
+                    anchors.fill: parent
+                    source: shellRoot.icon("media-skip-forward-symbolic")
+                    sourceSize: Qt.size(24, 24)
+                    visible: false
+                }
+                ColorOverlay {
+                    anchors.fill: skipFwdIcon2x2
+                    source: skipFwdIcon2x2
+                    color: "white"
+                }
                 MouseArea { anchors.fill: parent; enabled: !controlPanel.editMode && !!activePlayer && (activePlayer.canGoNext ?? false); onClicked: activePlayer.next() }
+            }
+        }
+    }
+
+    // ── 4x2 iOS 18 Style Layout ──
+    RowLayout {
+        anchors.fill: parent
+        anchors.margins: 14 // slightly tighter margins to maximize art size
+        visible: root.is4x2
+        spacing: 16
+
+        // Left: Large Album Art
+        Rectangle {
+            Layout.fillHeight: true
+            Layout.preferredWidth: height
+            radius: 12
+            color: Qt.rgba(1, 1, 1, 0.1)
+            clip: true
+
+            Image {
+                anchors.fill: parent
+                source: compactBgImg.source
+                fillMode: Image.PreserveAspectCrop
+                visible: source !== ""
+            }
+            
+            Image {
+                anchors.centerIn: parent
+                visible: parent.children[0].status !== Image.Ready
+                source: shellRoot.icon("multimedia-audio-player-symbolic")
+                sourceSize: Qt.size(32, 32)
+                opacity: 0.4
+            }
+        }
+
+        // Right: Content
+        ColumnLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            spacing: 0
+
+            // Top row: Text
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Text {
+                        text: activePlayer ? (activePlayer.trackTitle || "Unknown Title") : "No Media"
+                        color: "white"
+                        font.pixelSize: 16
+                        font.bold: true
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                    Text {
+                        text: activePlayer ? (activePlayer.trackArtist || "Unknown Artist") : ""
+                        color: Qt.rgba(1, 1, 1, 0.7)
+                        font.pixelSize: 14
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                        visible: activePlayer !== null
+                    }
+                }
+            }
+
+            Item { Layout.fillHeight: true } // Spacer
+
+            // Middle row: Transport Controls
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 0
+
+                Item { Layout.fillWidth: true } // Push left
+
+                RowLayout {
+                    spacing: 24
+
+                    Item {
+                        Layout.preferredWidth: 24; Layout.preferredHeight: 24
+                        opacity: activePlayer && (activePlayer.canGoPrevious ?? false) ? 1.0 : 0.4
+                        scale: skipBackArea.pressed ? 0.8 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 100 } }
+                        Image {
+                            id: skipBackIcon4x2
+                            anchors.fill: parent
+                            source: shellRoot.icon("media-skip-backward-symbolic")
+                            sourceSize: Qt.size(24, 24)
+                            visible: false
+                        }
+                        ColorOverlay {
+                            anchors.fill: skipBackIcon4x2
+                            source: skipBackIcon4x2
+                            color: "white"
+                        }
+                        MouseArea { id: skipBackArea; anchors.fill: parent; anchors.margins: -8; enabled: !controlPanel.editMode && !!activePlayer && (activePlayer.canGoPrevious ?? false); onClicked: activePlayer.previous() }
+                    }
+
+                    Item {
+                        Layout.preferredWidth: 32; Layout.preferredHeight: 32
+                        opacity: activePlayer && (activePlayer.canTogglePlaying ?? false) ? 1.0 : 0.4
+                        scale: playArea4x2.pressed ? 0.8 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 100 } }
+                        Image {
+                            id: playIcon4x2
+                            anchors.fill: parent
+                            source: shellRoot.icon(activePlayer && activePlayer.isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic")
+                            sourceSize: Qt.size(32, 32)
+                            visible: false
+                        }
+                        ColorOverlay {
+                            anchors.fill: playIcon4x2
+                            source: playIcon4x2
+                            color: "white"
+                        }
+                        MouseArea { id: playArea4x2; anchors.fill: parent; anchors.margins: -12; enabled: !controlPanel.editMode && !!activePlayer && (activePlayer.canTogglePlaying ?? false); onClicked: activePlayer.togglePlaying() }
+                    }
+
+                    Item {
+                        Layout.preferredWidth: 24; Layout.preferredHeight: 24
+                        opacity: activePlayer && (activePlayer.canGoNext ?? false) ? 1.0 : 0.4
+                        scale: skipFwdArea.pressed ? 0.8 : 1.0
+                        Behavior on scale { NumberAnimation { duration: 100 } }
+                        Image {
+                            id: skipFwdIcon4x2
+                            anchors.fill: parent
+                            source: shellRoot.icon("media-skip-forward-symbolic")
+                            sourceSize: Qt.size(24, 24)
+                            visible: false
+                        }
+                        ColorOverlay {
+                            anchors.fill: skipFwdIcon4x2
+                            source: skipFwdIcon4x2
+                            color: "white"
+                        }
+                        MouseArea { id: skipFwdArea; anchors.fill: parent; anchors.margins: -8; enabled: !controlPanel.editMode && !!activePlayer && (activePlayer.canGoNext ?? false); onClicked: activePlayer.next() }
+                    }
+                }
+
+                Item { Layout.fillWidth: true } // Push right
+            }
+
+            Item { Layout.fillHeight: true } // Spacer
+
+            // Bottom row: Progress Bar
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+                visible: activePlayer !== null
+
+                Item {
+                    Layout.fillWidth: true
+                    height: 4
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 2
+                        color: Qt.rgba(1, 1, 1, 0.15)
+                    }
+
+                    Rectangle {
+                        width: {
+                            if (!activePlayer || !activePlayer.lengthSupported || activePlayer.length <= 0) return 0
+                            return Math.min(1.0, activePlayer.position / activePlayer.length) * parent.width
+                        }
+                        height: parent.height
+                        radius: 2
+                        color: "white"
+                        Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                    }
+
+                    // Scrubber interaction
+                    MouseArea {
+                        anchors.fill: parent
+                        anchors.margins: -6
+                        enabled: activePlayer && (activePlayer.canSeek ?? false)
+                        onClicked: function(mouse) {
+                            if (activePlayer && activePlayer.lengthSupported) {
+                                let ratio = Math.max(0, Math.min(1.0, mouse.x / parent.width))
+                                activePlayer.position = ratio * activePlayer.length
+                            }
+                        }
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        text: activePlayer && activePlayer.positionSupported ? root.formatTime(activePlayer.position) : "0:00"
+                        color: Qt.rgba(1, 1, 1, 0.6)
+                        font.pixelSize: 11
+                    }
+                    Item { Layout.fillWidth: true }
+                    Text {
+                        text: activePlayer && activePlayer.lengthSupported ? "-" + root.formatTime(activePlayer.length - activePlayer.position) : "-0:00"
+                        color: Qt.rgba(1, 1, 1, 0.6)
+                        font.pixelSize: 11
+                    }
+                }
             }
         }
     }

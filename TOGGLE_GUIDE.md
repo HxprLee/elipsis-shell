@@ -205,7 +205,7 @@ A drop-in header that gives your expanded view a consistent look: icon badge, ti
 | `iconSource`      | `string` | `""`     | Yes      | Icon for the 48px circular badge         |
 | `isActive`        | `bool`   | `false`  | Yes      | Controls active/inactive colors          |
 | `activeColor`     | `color`  | blue     | No       | Accent color for badge & switch track    |
-| `showSwitch`      | `bool`   | `false`  | No       | Shows the M3 toggle switch               |
+| `showSwitch`      | `bool`   | `false`  | No       | Shows the toggle switch               |
 | `trailingContent` | `Item`   | —        | No       | Slot for extra buttons before the switch |
 
 ### Signals
@@ -377,6 +377,33 @@ Or use **Edit Mode** (tap "Edit" in the Control Center header) → tap the **+**
 | `4 × 2`             | Full-width card     | Custom widget (e.g. media)       |
 
 Users can cycle sizes in Edit Mode by tapping the toggle.
+
+### Restricting Sizes (`availableSizes`)
+
+By default, the shell allows users to cycle through generic widget sizes in Edit Mode by tapping the corner resize handle. To take control of which sizes your toggle supports, export the `availableSizes` property as an array of objects. The shell will cycle exactly through these sizes when the resize button is tapped:
+
+```qml
+property var availableSizes: [
+    { colSpan: 2, rowSpan: 2 }, // 2x2 Square
+    { colSpan: 4, rowSpan: 2 }  // 4x2 Full width
+]
+```
+
+### Responsive Layouts
+
+You can create complex toggles that adapt their layout based on the user's chosen size by reading `modelData.colSpan` and `modelData.rowSpan`.
+
+For example, using a `GridLayout` to switch between a stacked layout and a side-by-side layout depending on width:
+
+```qml
+GridLayout {
+    anchors.fill: parent
+    // If width is 4 columns, use 2 columns internally; otherwise use 1 column.
+    columns: (modelData && modelData.colSpan === 4) ? 2 : 1
+    
+    // ...
+}
+```
 
 ---
 

@@ -30,7 +30,7 @@ PanelWindow {
 
     Timer {
         id: switcherHoldTimer
-        interval: 250
+        interval: 80
         onTriggered: {
             if (touchArea.pressed && internal.isSwipe) {
                 shellRoot.switcherOpen = true
@@ -466,6 +466,7 @@ PanelWindow {
                             id: dragArea
                             anchors.fill: parent
                             acceptedButtons: Qt.LeftButton | Qt.RightButton
+                            pressAndHoldInterval: 300
                             
                             property bool dragActive: false
                             property real dragStartX: 0
