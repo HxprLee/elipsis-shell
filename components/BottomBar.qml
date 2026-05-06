@@ -225,22 +225,15 @@ PanelWindow {
             })
         }
         
-        menuContent.model = menuModel
+        globalMenu.model = menuModel
         
         globalMenu.x = pos.x + (item.width - 200) / 2
         globalMenu.y = pos.y - globalMenu.height - 12
         globalMenu.open()
     }
 
-    Popup {
+    AppContextMenu {
         id: globalMenu
-        padding: 0
-        background: null
-        
-        AppContextMenu {
-            id: menuContent
-            onClosed: globalMenu.close()
-        }
     }
 
     Rectangle {
@@ -345,8 +338,10 @@ PanelWindow {
                 }
 
                 remove: Transition {
-                    NumberAnimation { property: "scale"; to: 0; duration: 300 }
-                    NumberAnimation { property: "opacity"; to: 0; duration: 300 }
+                    ParallelAnimation {
+                        NumberAnimation { property: "scale"; to: 0; duration: 300; easing.type: Easing.InBack }
+                        NumberAnimation { property: "opacity"; to: 0; duration: 300 }
+                    }
                 }
 
                 addDisplaced: Transition {
@@ -424,8 +419,11 @@ PanelWindow {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 width: 4; height: 4; radius: 2
                                 color: "white"
-                                visible: model.isRunning
-                                opacity: 0.8
+                                visible: opacity > 0
+                                opacity: model.isRunning ? 0.8 : 0.0
+                                Behavior on opacity { NumberAnimation { duration: 300 } }
+                                scale: model.isRunning ? 1.0 : 0.0
+                                Behavior on scale { NumberAnimation { duration: 300; easing.type: Easing.OutBack } }
                             }
 
                             Text {

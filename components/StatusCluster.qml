@@ -69,6 +69,27 @@ Row {
         }
     }
 
+    // 3.5 Power Profile
+    Item {
+        width: shellRoot.powerProfile !== "" ? 20 : 0
+        height: 20
+        visible: width > 0
+        anchors.verticalCenter: parent.verticalCenter
+        Image {
+            id: profileIcon
+            anchors.fill: parent
+            source: shellRoot.icon("power-profile-" + shellRoot.powerProfile)
+            sourceSize: Qt.size(24, 24)
+            visible: false
+        }
+        ColorOverlay {
+            anchors.fill: profileIcon
+            source: profileIcon
+            color: cluster.color
+            Behavior on color { ColorAnimation { duration: 400 } }
+        }
+    }
+
     // 4. Battery
     Row {
         spacing: 6

@@ -7,6 +7,7 @@ import Quickshell.Services.Pipewire
 import Quickshell.Io
 import Quickshell.Networking
 import Quickshell.Bluetooth
+import Quickshell.Services.Mpris
 import Quickshell.Wayland
 import QtQuick
 import "components"
@@ -421,8 +422,8 @@ ShellRoot {
         return null;
     }
 
-    property bool wifiEnabled: Networking.wifiEnabled
-    property bool wifiConnected: wifiDevice && wifiDevice.connected
+    property bool wifiEnabled: Networking.wifiEnabled ?? false
+    property bool wifiConnected: wifiDevice && (wifiDevice.connected ?? false)
     property string wifiSsid: {
         if (!wifiDevice || !wifiDevice.networks) return "";
         const networks = wifiDevice.networks.values;
@@ -450,8 +451,8 @@ ShellRoot {
         return 0;
     }
 
-    property bool bluetoothEnabled: Bluetooth.adapter && Bluetooth.adapter.powered
-    property bool bluetoothConnected: Bluetooth.devices.values.length > 0
+    property bool bluetoothEnabled: (Bluetooth.adapter && Bluetooth.adapter.powered) ?? false
+    property bool bluetoothConnected: (Bluetooth.devices && Bluetooth.devices.values) ? Bluetooth.devices.values.length > 0 : false
 
     // ── Battery via sysfs ──
     property int batteryPct: -1
@@ -483,6 +484,42 @@ ShellRoot {
         }
     }
 
+    // ── Power Profiles ──
+    property string powerProfile: "balanced"
+
+    Process {
+        id: getPowerProfileProc
+        command: ["busctl", "get-property", "net.hadess.PowerProfiles", "/net/hadess/PowerProfiles", "net.hadess.PowerProfiles", "ActiveProfile"]
+        running: false
+        stdout: SplitParser { 
+            onRead: data => { 
+                // data looks like: s "performance"
+                let parts = data.trim().split('"');
+                if (parts.length >= 2) {
+                    shellRoot.powerProfile = parts[1];
+                }
+            } 
+        }
+    }
+
+    Timer {
+        interval: 5000
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: {
+            getPowerProfileProc.running = true;
+        }
+    }
+
+    Process { id: setPowerProfileProc; running: false }
+
+    function setPowerProfile(profile) {
+        shellRoot.powerProfile = profile; // optimistic update
+        setPowerProfileProc.command = ["busctl", "set-property", "net.hadess.PowerProfiles", "/net/hadess/PowerProfiles", "net.hadess.PowerProfiles", "ActiveProfile", "s", profile];
+        setPowerProfileProc.running = true;
+    }
+
     // ── Icon helper (direct lookup for breeze-dark) ──
     function icon(name) {
         let table = {
@@ -491,7 +528,7 @@ ShellRoot {
             "network-wireless-signal-ok-symbolic":        "file:///usr/share/icons/breeze-dark/status/24/network-wireless-signal-ok-symbolic.svg",
             "network-wireless-signal-weak-symbolic":      "file:///usr/share/icons/breeze-dark/status/24/network-wireless-signal-weak-symbolic.svg",
             "network-wireless-signal-none-symbolic":      "file:///usr/share/icons/breeze-dark/status/24/network-wireless-signal-none-symbolic.svg",
-            "network-wireless-offline-symbolic":          "file:///usr/share/icons/breeze-dark/status/24/network-wireless-offline-symbolic.svg",
+            "network-wireless-offline-symbolic":          "file:///usr/share/icons/breeze-dark/actions/24/network-disconnect-symbolic.svg",
             "network-disconnect-symbolic":                "file:///usr/share/icons/breeze-dark/actions/24/network-disconnect-symbolic.svg",
             "network-wireless-symbolic":                  "file:///usr/share/icons/breeze-dark/devices/24/network-wireless-symbolic.svg",
             "bluetooth-active-symbolic":           "file:///usr/share/icons/breeze-dark/preferences/24/preferences-system-bluetooth-activated-symbolic.svg",
@@ -509,6 +546,9 @@ ShellRoot {
             "battery-missing-symbolic":            "file:///usr/share/icons/breeze-dark/status/24/battery-missing-symbolic.svg",
             "window-close-symbolic":               "file:///usr/share/icons/breeze-dark/actions/24/window-close-symbolic.svg",
             "view-app-grid-symbolic":              "file:///usr/share/icons/breeze-dark/actions/24/view-grid-symbolic.svg",
+            "power-profile-power-saver":           "file:///usr/share/icons/breeze-dark/status/22/battery-profile-powersave-symbolic.svg",
+            "power-profile-balanced":              "file:///usr/share/icons/breeze-dark/status/22/battery-profile-balanced-symbolic.svg",
+            "power-profile-performance":           "file:///usr/share/icons/breeze-dark/status/22/battery-profile-performance-symbolic.svg",
         };
         
         if (table[name]) return table[name];

@@ -3,8 +3,8 @@ import Quickshell.Io
 import Quickshell.Services.Pipewire
 import Quickshell.Services.SystemTray
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
+import Qt.labs.folderlistmodel
 import Qt5Compat.GraphicalEffects
 
 PanelWindow {
@@ -246,7 +246,7 @@ PanelWindow {
             anchors.left: parent.left
             anchors.leftMargin: 24
             width: 440
-            height: 600
+            height: 800
             radius: 28
             color: "transparent"
             transformOrigin: Item.TopLeft
@@ -333,7 +333,7 @@ PanelWindow {
                 opacity: progress // Non-morphing content fades in
                 anchors.top: notifHeader.bottom
                 anchors.topMargin: 12
-                anchors.bottom: parent.bottom
+                height: Math.min(parent.height - y - 10, contentHeight || 0)
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.leftMargin: 10
@@ -434,32 +434,161 @@ PanelWindow {
         // ============================================
         // RIGHT: CONTROL CENTER (original design)
         // ============================================
-        Rectangle {
+        Item {
             id: controlPanel
             anchors.right: parent.right
             anchors.rightMargin: 24
             width: 400
-            height: 460
-            radius: 28
-            color: "transparent"
-            transformOrigin: Item.TopRight
-            scale: panelContainer.bloomScale
+            height: 800
+            property bool editMode: false
+            property int dragIndex: -1
 
-            // ── Status Icons Morph ──
-            Row {
-                id: morphStatusIcons
-                anchors.top: parent.top
-                anchors.topMargin: 12 + (12 * (1 - progress)) // Transition from status bar top
-                anchors.right: parent.right
-                anchors.rightMargin: 24 + (16 - 24) * (1 - progress) // Transition from status bar right
-                spacing: 12
-                opacity: progress
+            property var defaultLayout: [
+                { source: "toggles/WifiToggle.qml",       colSpan: 2, rowSpan: 1 },
+                { source: "toggles/BluetoothToggle.qml",  colSpan: 2, rowSpan: 1 },
+                { source: "toggles/PowerProfileToggle.qml", colSpan: 2, rowSpan: 1 },
+                { source: "toggles/MediaWidget.qml",      colSpan: 2, rowSpan: 2 },
+                { source: "toggles/BrightnessSlider.qml", colSpan: 2, rowSpan: 1 },
+                { source: "toggles/VolumeSlider.qml",     colSpan: 2, rowSpan: 1 },
+                { source: "toggles/SettingsToggle.qml",   colSpan: 1, rowSpan: 1 },
+                { source: "toggles/LockToggle.qml",       colSpan: 1, rowSpan: 1 },
+                { source: "toggles/PowerToggle.qml",      colSpan: 1, rowSpan: 1 },
+                { source: "toggles/DndToggle.qml",        colSpan: 1, rowSpan: 1 }
+            ]
 
-                // 1. Tray Icons
-                Row {
-                    spacing: 8
-                    anchors.verticalCenter: parent.verticalCenter
-                    Repeater {
+            Component.onCompleted: loadLayoutProc.running = true
+
+            property bool ignoreNextChange: false
+
+            Process {
+                id: fileWatcherProc
+                command: [
+                    "python3", "-c",
+                    "import time, os, sys; p=sys.argv[1]; lm=os.stat(p).st_mtime if os.path.exists(p) else 0;\nwhile True:\n time.sleep(1)\n try: m=os.stat(p).st_mtime\n except: m=0\n if m!=lm:\n  print('changed', flush=True); lm=m",
+                    Qt.resolvedUrl("../config/control_center_layout.json").toString().replace("file://", "")
+                ]
+                running: true
+                stdout: SplitParser {
+                    onRead: data => {
+                        if (data.trim() === "changed") {
+                            if (controlPanel.ignoreNextChange) {
+                                controlPanel.ignoreNextChange = false;
+                            } else {
+                                loadLayoutProc.running = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            Process {
+                id: loadLayoutProc
+                command: ["cat", Qt.resolvedUrl("../config/control_center_layout.json").toString().replace("file://", "")]
+                running: false
+                stdout: StdioCollector {
+                    onStreamFinished: {
+                        try {
+                            let items = JSON.parse(text)
+                            if (Array.isArray(items) && items.length > 0) {
+                                controlPanel.applyLayout(items)
+                            } else {
+                                controlPanel.applyLayout(controlPanel.defaultLayout)
+                            }
+                        } catch(e) {
+                            console.warn("Layout load error, using defaults:", e)
+                            controlPanel.applyLayout(controlPanel.defaultLayout)
+                        }
+                    }
+                }
+            }
+
+            Process {
+                id: saveLayoutProc
+                running: false
+            }
+
+            function applyLayout(items) {
+                togglesModel.clear()
+                for (let i = 0; i < items.length; i++) {
+                    togglesModel.append(items[i])
+                }
+            }
+
+            function openExpandedView(sourceRect, widgetItem) {
+                let pos = sourceRect.mapToItem(controlPanel, 0, 0)
+                expandedOverlay.sourceItem = sourceRect
+                expandedOverlay.widgetItem = widgetItem
+                expandedOverlay.startX = pos.x
+                expandedOverlay.startY = pos.y
+                expandedOverlay.startWidth = sourceRect.width
+                expandedOverlay.startHeight = sourceRect.height
+                
+                // Set initial morph position
+                expandedCard.x = expandedOverlay.startX
+                expandedCard.y = expandedOverlay.startY
+                expandedCard.width = expandedOverlay.startWidth
+                expandedCard.height = expandedOverlay.startHeight
+                
+                expandedLoader.sourceComponent = widgetItem.expandedComponent
+                expandedOverlay.open()
+            }
+
+            function closeExpandedView() {
+                expandedOverlay.close()
+            }
+
+            function saveLayout() {
+                let items = []
+                for (let i = 0; i < togglesModel.count; i++) {
+                    let item = togglesModel.get(i)
+                    items.push({
+                        source: item.source,
+                        colSpan: item.colSpan,
+                        rowSpan: item.rowSpan
+                    })
+                }
+                let path = Qt.resolvedUrl("../config/control_center_layout.json").toString().replace("file://", "")
+                controlPanel.ignoreNextChange = true
+                saveLayoutProc.command = ["sh", "-c", "echo \"$1\" > \"$2\"", "sh", JSON.stringify(items, null, 2), path]
+                saveLayoutProc.running = true
+            }
+
+            function resetLayout() {
+                applyLayout(defaultLayout)
+                saveLayout()
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                radius: 28
+                color: "transparent"
+                transformOrigin: Item.TopRight
+                scale: panelContainer.bloomScale
+
+                // ── Edit Mode Header ──
+                Item {
+                    id: controlHeader
+                    anchors.top: parent.top
+                    anchors.topMargin: 12 + (12 * (1 - progress))
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 24
+                    anchors.rightMargin: 24 + (16 - 24) * (1 - progress)
+                    height: 32
+                    opacity: progress
+
+                    // ── Status Icons Morph ──
+                    Row {
+                        id: morphStatusIcons
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.right: parent.right
+                        spacing: 12
+
+                        // 1. Tray Icons
+                        Row {
+                            spacing: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            Repeater {
                         model: SystemTray.items
                         delegate: Item {
                             width: 20; height: 20
@@ -477,11 +606,10 @@ PanelWindow {
                             }
                         }
                     }
-                }
 
-                // Replicate Status Icons from StatusBar.qml
-                // Bluetooth
-                Item {
+                    // Replicate Status Icons from StatusBar.qml
+                    // Bluetooth
+                    Item {
                     width: (shellRoot.bluetoothEnabled && shellRoot.bluetoothConnected) ? 20 : 0
                     height: 20
                     visible: width > 0
@@ -563,165 +691,484 @@ PanelWindow {
                         font.bold: true
                         anchors.verticalCenter: parent.verticalCenter
                     }
+                    }
+                }
+
+                // Edit Button
+                Rectangle {
+                    width: 60; height: 28; radius: 14
+                    color: controlPanel.editMode ? Qt.rgba(0.2, 0.5, 1.0, 1.0) : Qt.rgba(1, 1, 1, 0.1)
+                    anchors.verticalCenter: parent.verticalCenter
+                    
+                    Text {
+                        anchors.centerIn: parent
+                        text: controlPanel.editMode ? "Done" : "Edit"
+                        color: "white"
+                        font.pixelSize: 12
+                        font.bold: true
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            if (controlPanel.editMode) {
+                                controlPanel.saveLayout()
+                            }
+                            controlPanel.editMode = !controlPanel.editMode
+                        }
+                    }
+                }
                 }
             }
 
-            // ── Quick toggles grid ──
-            GridLayout {
-                id: toggleGrid
+            // Toggles Model (populated from JSON at startup)
+            ListModel {
+                id: togglesModel
+            }
+
+            // ── Customizable Quick toggles grid ──
+            Flickable {
+                id: toggleFlickable
+                anchors.top: controlHeader.bottom
+                anchors.topMargin: 16
+                height: Math.min(parent.height - y - 24, contentHeight || 0)
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: 24
+                anchors.rightMargin: 24
+                contentHeight: flickableContent.implicitHeight
+                clip: true
                 opacity: progress // Non-morphing content fades in
-                anchors.top: morphStatusIcons.bottom
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.topMargin: 12 // Reduced from 24 to fit icons above
-                columns: 4
-                rowSpacing: 24
-                columnSpacing: 24
+                interactive: controlPanel.dragIndex === -1 // Allow scrolling even in edit mode, unless dragging
 
-                // WiFi
-                Column {
-                    Layout.alignment: Qt.AlignTop | Qt.AlignHCenter
-                    Rectangle {
-                        width: 64; height: 64; radius: 32
-                        color: qs.wifiEnabled ? Qt.rgba(0.2, 0.5, 1.0, 1.0) : Qt.rgba(0.15, 0.15, 0.2, 0.8)
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        Behavior on color { ColorAnimation { duration: 200 } }
-                        Image {
-                            anchors.centerIn: parent
-                            width: 24; height: 24
-                            sourceSize: Qt.size(24, 24)
-                            source: shellRoot.icon(qs.wifiEnabled ? "network-wireless-symbolic" : "network-wireless-offline-symbolic")
+                ColumnLayout {
+                    id: flickableContent
+                    width: parent.width
+                    spacing: 24
+
+                    GridLayout {
+                        id: toggleGrid
+                        Layout.fillWidth: true
+                        columns: 4
+                        rowSpacing: 16
+                        columnSpacing: 16
+
+                        Repeater {
+                        model: togglesModel
+                        delegate: Item {
+                            id: delegateItem
+                            property int itemIndex: index
+                            property bool isDragging: controlPanel.dragIndex === index
+                            property real savedWidth: 0
+                            property real savedHeight: 0
+
+                            // Collapse this slot when dragging so other items reflow
+                            Layout.columnSpan: isDragging ? 1 : model.colSpan
+                            Layout.rowSpan: isDragging ? 1 : model.rowSpan
+                            Layout.fillWidth: !isDragging
+                            Layout.preferredWidth: 0
+                            Layout.preferredHeight: isDragging ? 0 : (model.rowSpan * ((400 - 48 - 48) / 4)) + ((model.rowSpan - 1) * 16)
+
+                            Behavior on x { enabled: !widgetOverlay.dragActive; NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+                            Behavior on y { enabled: !widgetOverlay.dragActive; NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+                            Behavior on Layout.preferredHeight { NumberAnimation { duration: 200 } }
+
+                            Timer {
+                                id: moveThrottle
+                                interval: 150
+                            }
+
+                            DropArea {
+                                anchors.fill: parent
+                                keys: ["toggle"]
+                                enabled: controlPanel.editMode && !delegateItem.isDragging
+                                onEntered: (drag) => {
+                                    if (!moveThrottle.running && drag.source.itemIndex !== delegateItem.itemIndex) {
+                                        let targetIdx = delegateItem.itemIndex
+                                        togglesModel.move(drag.source.itemIndex, targetIdx, 1)
+                                        controlPanel.dragIndex = targetIdx
+                                        moveThrottle.start()
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                id: widgetBg
+                                property bool isCircle: model.colSpan === 1 && model.rowSpan === 1
+                                width: isCircle ? Math.min(parent.width, parent.height) : parent.width
+                                height: isCircle ? width : parent.height
+                                anchors.centerIn: parent
+                                radius: (model.colSpan >= 2 && model.rowSpan >= 2) ? 24 : Math.min(width, height) / 2
+                                color: Qt.rgba(0.15, 0.15, 0.2, 0.8)
+                                clip: true
+
+                                layer.enabled: true
+                                layer.effect: OpacityMask {
+                                    maskSource: Rectangle {
+                                        width: widgetBg.width
+                                        height: widgetBg.height
+                                        radius: widgetBg.radius
+                                    }
+                                }
+
+                                Loader {
+                                    id: widgetLoader
+                                    anchors.fill: parent
+                                    property var modelData: model
+                                    source: model.source || ""
+                                }
+
+                                // ── Shell-provided toggle chrome for simple toggles ──
+                                // If the loaded widget has `isSimpleToggle: true`, the shell
+                                // handles all styling (active bg, icon, label, click).
+                                Rectangle {
+                                    id: toggleChrome
+                                    anchors.fill: parent
+                                    visible: widgetLoader.item && widgetLoader.item.isSimpleToggle === true
+                                    radius: widgetBg.radius
+                                    color: {
+                                        if (!widgetLoader.item || !widgetLoader.item.isSimpleToggle) return "transparent"
+                                        let w = widgetLoader.item
+                                        return w.isActive ? (w.activeColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)) : "transparent"
+                                    }
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+
+                                    GridLayout {
+                                        anchors.centerIn: parent
+                                        width: model.colSpan > model.rowSpan ? parent.width - 32 : implicitWidth
+                                        columns: model.colSpan > model.rowSpan ? 2 : 1
+                                        rowSpacing: 8
+                                        columnSpacing: 12
+
+                                        Image {
+                                            Layout.alignment: Qt.AlignCenter
+                                            width: (model.colSpan === 1 && model.rowSpan === 1) ? 24 : 32
+                                            height: width
+                                            sourceSize: Qt.size(width, width)
+                                            source: (widgetLoader.item && widgetLoader.item.iconSource) || ""
+                                        }
+
+                                        Text {
+                                            visible: model.colSpan > 1
+                                            text: (widgetLoader.item && widgetLoader.item.titleText) || ""
+                                            color: "white"
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            Layout.alignment: model.colSpan > model.rowSpan ? Qt.AlignVCenter | Qt.AlignLeft : Qt.AlignHCenter
+                                            Layout.fillWidth: model.colSpan > model.rowSpan
+                                            verticalAlignment: Text.AlignVCenter
+                                            horizontalAlignment: model.colSpan > model.rowSpan ? Text.AlignLeft : Text.AlignHCenter
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        enabled: !controlPanel.editMode
+                                        onClicked: {
+                                            if (widgetLoader.item && widgetLoader.item.toggled)
+                                                widgetLoader.item.toggled()
+                                        }
+                                        onPressAndHold: {
+                                            if (widgetLoader.item && widgetLoader.item.hasExpandedView) {
+                                                controlPanel.openExpandedView(widgetBg, widgetLoader.item)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                EditOverlay {
+                                    id: widgetOverlay
+                                    anchors.fill: parent
+                                    editMode: controlPanel.editMode
+                                    itemIndex: delegateItem.itemIndex
+                                    widgetSource: model.source || ""
+                                    currentColSpan: model.colSpan
+                                    currentRowSpan: model.rowSpan
+
+                                    Drag.source: delegateItem
+
+                                    onDragStarted: {
+                                        // Save dimensions before the slot collapses
+                                        delegateItem.savedWidth = widgetBg.width
+                                        delegateItem.savedHeight = widgetBg.height
+
+                                        // Reparent to grid so it floats freely above collapsed slot
+                                        let pos = widgetBg.mapToItem(toggleGrid, 0, 0)
+                                        widgetBg.parent = toggleGrid
+                                        widgetBg.x = pos.x
+                                        widgetBg.y = pos.y
+                                        widgetBg.width = delegateItem.savedWidth
+                                        widgetBg.height = delegateItem.savedHeight
+
+                                        controlPanel.dragIndex = delegateItem.itemIndex
+                                        widgetBg.z = 100
+                                        widgetBg.scale = 1.05
+                                    }
+                                    onDragFinished: {
+                                        controlPanel.dragIndex = -1
+
+                                        // Reparent back to delegate and restore bindings
+                                        widgetBg.parent = delegateItem
+                                        widgetBg.z = 0
+                                        widgetBg.x = 0
+                                        widgetBg.y = 0
+                                        widgetBg.scale = 1.0
+                                        widgetBg.width = Qt.binding(function() { return delegateItem.width })
+                                        widgetBg.height = Qt.binding(function() { return delegateItem.height })
+                                    }
+                                    onRemoved: {
+                                        togglesModel.remove(index)
+                                    }
+                                    onResized: (newColSpan, newRowSpan) => {
+                                        togglesModel.setProperty(index, "colSpan", newColSpan)
+                                        togglesModel.setProperty(index, "rowSpan", newRowSpan)
+                                    }
+                                }
+                            }
                         }
-                        MouseArea { anchors.fill: parent; onClicked: qs.toggleWifi() }
-                    }
-                }
+                    } // closes Repeater
+                    } // closes GridLayout
 
-                // Bluetooth
-                Column {
-                    Layout.alignment: Qt.AlignTop | Qt.AlignHCenter
+                    // ── Add a Control Button (iOS 18 style) ──
                     Rectangle {
-                        width: 64; height: 64; radius: 32
-                        color: qs.bluetoothEnabled ? Qt.rgba(0.2, 0.5, 1.0, 1.0) : Qt.rgba(0.15, 0.15, 0.2, 0.8)
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        Behavior on color { ColorAnimation { duration: 200 } }
-                        Image {
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.bottomMargin: 48
+                        width: 160; height: 36; radius: 18
+                        color: Qt.rgba(0.15, 0.15, 0.2, 0.8)
+                        border.color: Qt.rgba(1, 1, 1, 0.1)
+                        border.width: 1
+                        visible: controlPanel.editMode
+
+                        Row {
                             anchors.centerIn: parent
-                            width: 24; height: 24
-                            sourceSize: Qt.size(24, 24)
-                            source: shellRoot.icon(qs.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
+                            spacing: 8
+                            Rectangle {
+                                width: 16; height: 16; radius: 8
+                                color: "transparent"
+                                border.color: "white"
+                                border.width: 1
+                                anchors.verticalCenter: parent.verticalCenter
+                                Rectangle {
+                                    width: 8; height: 2; radius: 1
+                                    color: "white"
+                                    anchors.centerIn: parent
+                                }
+                                Rectangle {
+                                    width: 2; height: 8; radius: 1
+                                    color: "white"
+                                    anchors.centerIn: parent
+                                }
+                            }
+                            Text {
+                                text: "Add a Control"
+                                color: "white"
+                                font.pixelSize: 14
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
                         }
-                        MouseArea { anchors.fill: parent; onClicked: qs.toggleBluetooth() }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                addControlPopup.open()
+                            }
+                        }
                     }
                 }
+            }
+        } // closes background Rectangle
 
-                // Settings
-                Column {
-                    Layout.alignment: Qt.AlignTop | Qt.AlignHCenter
-                    Rectangle {
-                        width: 64; height: 64; radius: 32
-                        color: Qt.rgba(0.15, 0.15, 0.2, 0.8)
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        Image { anchors.centerIn: parent; width: 24; height: 24; sourceSize: Qt.size(24, 24); source: shellRoot.icon("preferences-system-symbolic") }
+        // ── Add Control Popup ──
+            FolderListModel {
+                id: togglesFolderModel
+                folder: Qt.resolvedUrl("toggles")
+                nameFilters: ["*Toggle.qml", "*Slider.qml", "*Widget.qml"]
+                showDirs: false
+            }
+
+            Rectangle {
+                id: addControlPopup
+                anchors.fill: parent
+                radius: 28
+                color: Qt.rgba(0.1, 0.1, 0.15, 0.95)
+                visible: opacity > 0
+                opacity: 0
+                z: 100
+                scale: opacity > 0.5 ? 1.0 : 0.9
+
+                Behavior on opacity { NumberAnimation { duration: 200 } }
+                Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.OutBack } }
+
+                function open() { opacity = 1.0 }
+                function close() { opacity = 0.0 }
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 24
+                    spacing: 16
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text {
+                            text: "Add a Control"
+                            color: "white"
+                            font.pixelSize: 20
+                            font.bold: true
+                            Layout.fillWidth: true
+                        }
+                        Rectangle {
+                            width: 32; height: 32; radius: 16
+                            color: Qt.rgba(1, 1, 1, 0.1)
+                            Image {
+                                anchors.centerIn: parent
+                                width: 16; height: 16
+                                sourceSize: Qt.size(24, 24)
+                                source: shellRoot.icon("window-close-symbolic")
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: addControlPopup.close()
+                            }
+                        }
                     }
-                }
 
-                // Lock
-                Column {
-                    Layout.alignment: Qt.AlignTop | Qt.AlignHCenter
-                    Rectangle {
-                        width: 64; height: 64; radius: 32
-                        color: Qt.rgba(0.15, 0.15, 0.2, 0.8)
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        Image { anchors.centerIn: parent; width: 24; height: 24; sourceSize: Qt.size(24, 24); source: shellRoot.icon("system-lock-screen-symbolic") }
-                        MouseArea { anchors.fill: parent; onClicked: { shellRoot.lock(); shellRoot.panelOpen = false; } }
-                    }
-                }
+                    ListView {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        clip: true
+                        spacing: 8
+                        model: togglesFolderModel
+                        delegate: Rectangle {
+                            width: ListView.view.width
+                            height: 56
+                            radius: 16
+                            color: addArea.containsMouse ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
+                            
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 12
+                                spacing: 12
 
-                // Power
-                Column {
-                    Layout.alignment: Qt.AlignTop | Qt.AlignHCenter
-                    Rectangle {
-                        width: 64; height: 64; radius: 32
-                        color: Qt.rgba(0.15, 0.15, 0.2, 0.8)
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        Image { anchors.centerIn: parent; width: 24; height: 24; sourceSize: Qt.size(24, 24); source: shellRoot.icon("system-shutdown-symbolic") }
+                                Loader {
+                                    id: previewLoader
+                                    source: Qt.resolvedUrl("toggles/" + model.fileName)
+                                    asynchronous: true
+                                    visible: false // We just want its properties
+                                }
+
+                                Rectangle {
+                                    width: 32; height: 32; radius: 16
+                                    color: Qt.rgba(0.2, 0.5, 1.0, 1.0)
+                                    Image {
+                                        anchors.centerIn: parent
+                                        source: (previewLoader.item && previewLoader.item.iconSource) ? previewLoader.item.iconSource : (shellRoot.icon("list-add-symbolic") || "")
+                                        sourceSize: Qt.size(16, 16)
+                                    }
+                                }
+
+                                Text {
+                                    text: (previewLoader.item && previewLoader.item.titleText) ? previewLoader.item.titleText : model.fileName.replace(".qml", "")
+                                    color: "white"
+                                    font.pixelSize: 16
+                                    Layout.fillWidth: true
+                                }
+                            }
+
+                            MouseArea {
+                                id: addArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: {
+                                    let sourcePath = "toggles/" + model.fileName
+                                    // Default spans
+                                    let cSpan = 1
+                                    let rSpan = 1
+                                    if (sourcePath.indexOf("Slider") !== -1) { cSpan = 2; rSpan = 1; }
+                                    if (sourcePath.indexOf("Media") !== -1) { cSpan = 2; rSpan = 2; }
+                                    if (sourcePath.indexOf("Wifi") !== -1 || sourcePath.indexOf("Bluetooth") !== -1 || sourcePath.indexOf("PowerProfile") !== -1) { cSpan = 2; rSpan = 1; }
+
+                                    togglesModel.append({ source: sourcePath, colSpan: cSpan, rowSpan: rSpan })
+                                    addControlPopup.close()
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            // ── Sliders ──
-            Column {
-                opacity: progress // Non-morphing content fades in
-                anchors.bottom: parent.bottom
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.bottomMargin: 24
-                width: toggleGrid.width
-                spacing: 16
 
-                // Brightness
-                Slider {
-                    id: brightnessSlider
-                    width: parent.width; height: 48
-                    from: 0; to: 100
-                    value: qs.brightnessValue
-                    onMoved: qs.setBrightness(value)
+            // ── Expanded View Overlay ──
+            Item {
+                id: expandedOverlay
+                anchors.fill: parent
+                visible: opacity > 0
+                opacity: 0
+                z: 200
 
-                    background: Rectangle {
-                        x: brightnessSlider.leftPadding
-                        y: brightnessSlider.topPadding + brightnessSlider.availableHeight / 2 - height / 2
-                        implicitWidth: parent.width; implicitHeight: 48
-                        width: brightnessSlider.availableWidth; height: implicitHeight; radius: 24
-                        color: Qt.rgba(0.2, 0.2, 0.25, 0.8)
-                        Rectangle {
-                            width: brightnessSlider.visualPosition * (parent.width - height) + height
-                            height: parent.height; color: Qt.rgba(0.2, 0.5, 1.0, 1.0); radius: 24
-                        }
-                    }
-                    handle: Rectangle {
-                        x: brightnessSlider.leftPadding + brightnessSlider.visualPosition * (brightnessSlider.availableWidth - width)
-                        y: brightnessSlider.topPadding + brightnessSlider.availableHeight / 2 - height / 2
-                        implicitWidth: 48; implicitHeight: 48; radius: 24; color: "white"
-                        Image {
-                            anchors.centerIn: parent
-                            width: 22; height: 22
-                            sourceSize: Qt.size(24, 24)
-                            source: shellRoot.icon("display-brightness-symbolic")
-                        }
-                    }
+                property var sourceItem: null
+                property var widgetItem: null
+                property real startX: 0
+                property real startY: 0
+                property real startWidth: 0
+                property real startHeight: 0
+                property bool isExpanded: false
+
+                Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.OutExpo } }
+
+
+                function open() {
+                    isExpanded = true
+                    opacity = 1.0
+
+                    // Target: centered card (use widget's preferred height if provided)
+                    let targetW = expandedOverlay.width
+                    let targetH = (widgetItem && widgetItem.expandedHeight) ? widgetItem.expandedHeight : 420
+                    expandedCard.width = targetW
+                    expandedCard.height = targetH
+                    expandedCard.x = 0
+                    expandedCard.y = (expandedOverlay.height - targetH) / 2
+                    expandedCard.radius = 36
                 }
 
-                // Volume
-                Slider {
-                    id: volumeSlider
-                    width: parent.width; height: 48
-                    from: 0; to: 100
-                    value: qs.audioNode ? qs.audioNode.volume * 100 : 50
-                    onMoved: { if (qs.audioNode) qs.audioNode.volume = value / 100.0 }
+                function close() {
+                    isExpanded = false
+                    opacity = 0.0
+                    // Morph back to original slot
+                    expandedCard.x = startX
+                    expandedCard.y = startY
+                    expandedCard.width = startWidth
+                    expandedCard.height = startHeight
+                    expandedCard.radius = (startWidth === startHeight) ? startWidth / 2 : 24
+                }
 
-                    background: Rectangle {
-                        x: volumeSlider.leftPadding
-                        y: volumeSlider.topPadding + volumeSlider.availableHeight / 2 - height / 2
-                        implicitWidth: parent.width; implicitHeight: 48
-                        width: volumeSlider.availableWidth; height: implicitHeight; radius: 24
-                        color: Qt.rgba(0.2, 0.2, 0.25, 0.8)
-                        Rectangle {
-                            width: volumeSlider.visualPosition * (parent.width - height) + height
-                            height: parent.height; color: Qt.rgba(0.2, 0.5, 1.0, 1.0); radius: 24
-                        }
-                    }
-                    handle: Rectangle {
-                        x: volumeSlider.leftPadding + volumeSlider.visualPosition * (volumeSlider.availableWidth - width)
-                        y: volumeSlider.topPadding + volumeSlider.availableHeight / 2 - height / 2
-                        implicitWidth: 48; implicitHeight: 48; radius: 24; color: "white"
-                        Image {
-                            anchors.centerIn: parent
-                            width: 22; height: 22
-                            sourceSize: Qt.size(24, 24)
-                            source: shellRoot.icon(qs.audioNode && qs.audioNode.muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
-                        }
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: expandedOverlay.close()
+                }
+
+                Rectangle {
+                    id: expandedCard
+                    color: Qt.rgba(0.15, 0.15, 0.2, 0.95)
+                    clip: true
+                    
+                    Behavior on x { NumberAnimation { duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
+                    Behavior on y { NumberAnimation { duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
+                    Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
+                    Behavior on height { NumberAnimation { duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
+                    Behavior on radius { NumberAnimation { duration: 300; easing.type: Easing.OutBack } }
+
+                    // Only show loader content when fully expanded to avoid layout jumping during morph
+                    Loader {
+                        id: expandedLoader
+                        anchors.fill: parent
+                        anchors.margins: 24
+                        opacity: expandedOverlay.isExpanded ? 1.0 : 0.0
+                        Behavior on opacity { NumberAnimation { duration: 200 } }
                     }
                 }
             }
-        }
+        } // closes controlPanel
+
 
         // Hide after close animation
         Timer {

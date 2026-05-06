@@ -46,14 +46,16 @@ PanelWindow {
 
     property color contentColor: "white"
 
-    Timer {
-        interval: 3000 // Sample every 3s to balance performance
-        running: true
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: {
-            statusBar.currentTime = Qt.formatDateTime(new Date(), "HH:mm")
+Timer {
+    interval: 3000 // Sample every 3s to balance performance
+    running: true
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: {
+        statusBar.currentTime = Qt.formatDateTime(new Date(), "HH:mm")
 
+        /*
+        if (statusBar.screen && screencopy.hasContent) {
             screencopy.captureFrame();
             sampleArea.scheduleUpdate();
             sampleArea.grabToImage(result => {
@@ -62,20 +64,11 @@ PanelWindow {
                 quantizer.source = "file://" + path + "?t=" + Date.now();
             }, Qt.size(32, 10)); // Downsample for faster quantization
         }
+        */
     }
+}
 
-    Connections {
-        target: quantizer
-        function onColorChanged() {
-            let c = quantizer.color;
-            if (c) {
-                let lum = (c.r * 0.299 + c.g * 0.587 + c.b * 0.114);
-                statusBar.contentColor = lum < 0.55 ? "white" : "#1a1a1a";
-            }
-        }
-    }
-
-    // ── Left: time + workspaces ──
+// ── Left: time + workspaces ──
     Row {
         id: leftContent
         opacity: Math.max(0, 1.0 - (shellRoot.panelDragOffset / 40.0))

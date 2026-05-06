@@ -88,6 +88,42 @@ PanelWindow {
         }
     }
 
+    function openMenu(item, app) {
+        let pos = item.mapToItem(root.contentItem, 0, 0)
+        
+        let menuModel = []
+        let isPinned = shellRoot.pinnedApps.includes(app.id.toLowerCase())
+        
+        // Pin/Unpin item
+        menuModel.push({
+            text: isPinned ? "Unpin from Dock" : "Add to Dock",
+            icon: shellRoot.icon(isPinned ? "window-close-symbolic" : "view-app-grid-symbolic"), // Placeholders
+            action: () => {
+                shellRoot.togglePin(app.id)
+                globalMenu.close()
+            }
+        })
+        
+        globalMenu.model = menuModel
+        
+        // Position menu above or below icon depending on screen space
+        globalMenu.x = Math.max(10, Math.min(root.width - 220, pos.x + (item.width - 200) / 2))
+        
+        if (pos.y > root.height / 2) {
+            // Place above
+            globalMenu.y = pos.y - 100 // Estimate height
+        } else {
+            // Place below
+            globalMenu.y = pos.y + item.height + 12
+        }
+        
+        globalMenu.open()
+    }
+
+    AppContextMenu {
+        id: globalMenu
+    }
+
     // --- Content Container ---
     Item {
         id: content
@@ -336,10 +372,18 @@ PanelWindow {
                             id: appMouse
                             anchors.fill: parent
                             hoverEnabled: true
-                            onClicked: {
-                                entry.execute()
-                                shellRoot.appDrawerOpen = false
-                                searchField.text = ""
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                            onClicked: (mouse) => {
+                                if (mouse.button === Qt.RightButton) {
+                                    root.openMenu(appMouse, entry)
+                                } else {
+                                    entry.execute()
+                                    shellRoot.appDrawerOpen = false
+                                    searchField.text = ""
+                                }
+                            }
+                            onPressAndHold: {
+                                root.openMenu(appMouse, entry)
                             }
                         }
                     }
