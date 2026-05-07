@@ -11,12 +11,12 @@
   },
   {
     "source": "toggles/BrightnessSlider.qml",
-    "colSpan": 2,
+    "colSpan": 4,
     "rowSpan": 1
   },
   {
     "source": "toggles/VolumeSlider.qml",
-    "colSpan": 2,
+    "colSpan": 4,
     "rowSpan": 1
   },
   {

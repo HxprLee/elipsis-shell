@@ -290,7 +290,7 @@ PanelWindow {
             opacity: 0
             scale: 0.8
 
-            // Vicinae Menu Toggle
+            // Elipsis Menu Toggle
             Button {
                 id: menuBtn
                 width: 64; height: 64

@@ -124,6 +124,7 @@ PanelWindow {
             panelContainer.opacity = 1.0
             bgDim.opacity = 1.0
         } else {
+            if (expandedOverlay.isExpanded) controlPanel.closeExpandedView()
             panelContainer.y = 10
             panelContainer.bloomScale = 0.85
             panelContainer.opacity = 0.0
@@ -132,11 +133,34 @@ PanelWindow {
     }
 
     // ── Background dim ──
-    Rectangle {
+    Item {
         id: bgDim
         anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, 0.3)
         opacity: 0
+        
+        Image {
+            id: bgBlur
+            anchors.fill: parent
+            source: shellRoot.blurredWallpaperPath
+            cache: false
+            fillMode: Image.PreserveAspectCrop
+            
+            Connections {
+                target: shellRoot
+                function onBlurVersionChanged() {
+                    let s = bgBlur.source
+                    bgBlur.source = ""
+                    bgBlur.source = s
+                }
+            }
+            visible: shellRoot.usePrecomputedBlur
+        }
+        
+        Rectangle {
+            anchors.fill: parent
+            color: Qt.rgba(0, 0, 0, 0.3)
+        }
+
         Behavior on opacity {
             id: bgOpacityBehavior
             NumberAnimation { duration: 300; easing.type: Easing.OutExpo }
@@ -169,7 +193,12 @@ PanelWindow {
                     shellRoot.panelDragOffset = 0
                     isDragging = false
                 } else {
-                    shellRoot.panelOpen = false
+                    // If expanded view is open, close it instead of the whole panel
+                    if (expandedOverlay.isExpanded) {
+                        controlPanel.closeExpandedView()
+                    } else {
+                        shellRoot.panelOpen = false
+                    }
                 }
             }
         }
@@ -242,7 +271,7 @@ PanelWindow {
             anchors.left: parent.left
             anchors.leftMargin: 24
             width: 440
-            height: 800
+            height: 830
             radius: 28
             color: "transparent"
             transformOrigin: Item.TopLeft
@@ -435,7 +464,7 @@ PanelWindow {
             anchors.right: parent.right
             anchors.rightMargin: 24
             width: 400
-            height: 800
+            height: 830
             property bool editMode: false
             property int dragIndex: -1
 
@@ -844,6 +873,16 @@ PanelWindow {
                                     anchors.fill: parent
                                     property var modelData: model
                                     source: model.source || ""
+                                    onLoaded: {
+                                        // Connect expandRequested signal for widgets that handle their own hold detection
+                                        if (item && item.expandRequested) {
+                                            item.expandRequested.connect(function() {
+                                                if (!controlPanel.editMode && item.hasExpandedView) {
+                                                    controlPanel.openExpandedView(widgetBg, item)
+                                                }
+                                            })
+                                        }
+                                    }
                                 }
 
                                 // ── Shell-provided toggle chrome for simple toggles ──

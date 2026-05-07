@@ -29,30 +29,11 @@ PanelWindow {
     }
 
     property int viewMode: 0 // 0: Windows, 1: Workspaces
-    property string wallpaperPath: ""
-    
     signal forceResetDrag()
-
-    Process {
-        id: wallpaperQuery
-        command: ["awww", "query"]
-        stdout: SplitParser {
-            onRead: (line) => {
-                let match = line.match(/image: (.*)/);
-                if (match) {
-                    root.wallpaperPath = "file://" + match[1].trim();
-                }
-            }
-        }
-    }
-
     Connections {
         target: shellRoot
         function onSwitcherOpenChanged() {
-            if (shellRoot.switcherOpen) {
-                wallpaperQuery.running = false;
-                wallpaperQuery.running = true;
-            }
+            // Background blur is managed globally by shellRoot
         }
     }
 
@@ -66,12 +47,38 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     aboveWindows: true
 
-    // --- Background Dim ---
+    Image {
+        id: bgBlur
+        anchors.fill: parent
+        source: shellRoot.blurredWallpaperPath
+        cache: false
+        fillMode: Image.PreserveAspectCrop
+        
+        Connections {
+            target: shellRoot
+            function onBlurVersionChanged() {
+                let s = bgBlur.source
+                bgBlur.source = ""
+                bgBlur.source = s
+            }
+        }
+        
+        visible: shellRoot.usePrecomputedBlur
+        opacity: root.visible ? 1.0 : 0.0
+        Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
+        
+        Rectangle {
+            anchors.fill: parent
+            color: Qt.rgba(0, 0, 0, 0.4)
+        }
+    }
+
+    // --- Background Dim (Fallback) ---
     Rectangle {
         id: bg
         anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, 0.4)
-        opacity: root.visible ? 1.0 : 0.0
+        color: Qt.rgba(0, 0, 0, 0.6)
+        opacity: root.visible && !shellRoot.usePrecomputedBlur ? 1.0 : 0.0
 
         Behavior on opacity {
             NumberAnimation { duration: 400; easing.type: Easing.OutCubic }
@@ -169,7 +176,7 @@ PanelWindow {
                         Image {
                             id: rowWallpaperImg
                             anchors.fill: parent
-                            source: root.wallpaperPath
+                            source: shellRoot.wallpaperPath ? "file://" + shellRoot.wallpaperPath : ""
                             fillMode: Image.PreserveAspectCrop
                             visible: false
                         }
@@ -805,7 +812,7 @@ PanelWindow {
                                 Image {
                                     id: wallpaperImg
                                     anchors.fill: parent
-                                    source: root.wallpaperPath
+                                    source: shellRoot.wallpaperPath ? "file://" + shellRoot.wallpaperPath : ""
                                     fillMode: Image.PreserveAspectCrop
                                     visible: false
                                 }

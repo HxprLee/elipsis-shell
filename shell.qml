@@ -90,7 +90,7 @@ ShellRoot {
 
     // ── Pipewire tracking ──
     PwObjectTracker {
-        objects: [Pipewire.defaultAudioSink]
+        objects: [Pipewire.defaultAudioSink, Pipewire.defaultAudioSource]
     }
 
     // ── App Data & Database ──
@@ -341,6 +341,7 @@ ShellRoot {
     property real panelDragOffset: 0.0
     property bool switcherOpen: false
     property bool appDrawerOpen: false
+    property bool powerMenuOpen: false
 
     // ── Window tracking ──
     property bool hasWindowsOnCurrentWs: {
@@ -657,6 +658,75 @@ ShellRoot {
         return "";
     }
 
+    // ── Wallpaper & Blur ──
+    property string wallpaperPath: ""
+    property int blurVersion: 0
+    property string blurredWallpaperPath: "file:///tmp/elipsis_blur.png"
+    property bool usePrecomputedBlur: true
+
+    Process {
+        id: wallpaperQuery
+        command: ["awww", "query"]
+        running: true
+        stdout: SplitParser {
+            onRead: (line) => {
+                let match = line.match(/image: (.*)/);
+                if (match) {
+                    let path = match[1].trim();
+                    if (shellRoot.wallpaperPath !== path) {
+                        shellRoot.wallpaperPath = path;
+                        if (shellRoot.usePrecomputedBlur) blurGenerator.startBlur();
+                    }
+                }
+            }
+        }
+    }
+
+    Timer {
+        interval: 2000 // Poll wallpaper every 2s for snappier response
+        running: true
+        repeat: true
+        onTriggered: if (!wallpaperQuery.running) wallpaperQuery.running = true
+    }
+
+    Process {
+        id: blurGenerator
+        function startBlur() {
+            if (shellRoot.wallpaperPath === "") return;
+            // High-speed optimization: 
+            // 1. Use -sample for ultra-fast downscaling (5%)
+            // 2. Use -blur with small radius on tiny image
+            // 3. Use -resize for smooth upscaling back to 100%
+            command = ["magick", shellRoot.wallpaperPath, "-sample", "5%", "-blur", "0x2", "-resize", "2000%", "/tmp/elipsis_blur.png"];
+            running = true;
+        }
+        onExited: (code) => {
+            if (code === 0) shellRoot.blurVersion++;
+        }
+    }
+
+    IpcHandler {
+        target: "appearance"
+        function setPrecomputedBlur(enabled: string) {
+            let isEnabled = (enabled === "true" || enabled === "1" || enabled === true);
+            shellRoot.usePrecomputedBlur = isEnabled;
+            if (isEnabled && shellRoot.wallpaperPath !== "") blurGenerator.startBlur();
+        }
+    }
+
+    IpcHandler {
+        target: "power"
+        function show() {
+            shellRoot.powerMenuOpen = true;
+        }
+        function hide() {
+            shellRoot.powerMenuOpen = false;
+        }
+        function toggle() {
+            shellRoot.powerMenuOpen = !shellRoot.powerMenuOpen;
+        }
+    }
+
     // ── UI Components ──
     BottomBar {}
     StatusBar {
@@ -671,4 +741,5 @@ ShellRoot {
     TaskManager {}
     AppDrawer {}
     VolumeOSD {}
+    PowerMenu {}
 }
