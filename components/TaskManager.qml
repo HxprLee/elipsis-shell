@@ -11,6 +11,8 @@ PanelWindow {
     id: root
     visible: shellRoot.switcherOpen
     color: "transparent"
+    
+    property real monitorRatio: Quickshell.screens.length > 0 ? Quickshell.screens[0].width / Quickshell.screens[0].height : 1.778
 
     IpcHandler {
         target: "task_manager"
@@ -152,8 +154,8 @@ PanelWindow {
                 model: (Hyprland.workspaces && Hyprland.workspaces.values) ? Hyprland.workspaces.values : []
                 delegate: DropArea {
                     id: dropArea
-                    width: 180
-                    height: 110
+                    height: (200 / root.monitorRatio) - 20
+                    width: height * root.monitorRatio
                     keys: ["window-address", "text/plain", "text"]
                     
                     property var workspace: modelData
@@ -699,9 +701,8 @@ PanelWindow {
             anchors.bottomMargin: 100
             visible: root.viewMode === 1
             
-            property real monitorRatio: Quickshell.screens.length > 0 ? Quickshell.screens[0].width / Quickshell.screens[0].height : 1.77
             cellWidth: 440
-            cellHeight: (cellWidth - 80) / monitorRatio + 100
+            cellHeight: (cellWidth - 40) / root.monitorRatio + 88
             
             layoutDirection: Qt.RightToLeft
             flow: GridView.FlowTopToBottom

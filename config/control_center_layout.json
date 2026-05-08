@@ -2,12 +2,12 @@
   {
     "source": "toggles/WifiToggle.qml",
     "colSpan": 2,
-    "rowSpan": 2
+    "rowSpan": 1
   },
   {
     "source": "toggles/BluetoothToggle.qml",
     "colSpan": 2,
-    "rowSpan": 2
+    "rowSpan": 1
   },
   {
     "source": "toggles/BrightnessSlider.qml",

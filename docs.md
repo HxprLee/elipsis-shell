@@ -50,7 +50,7 @@ Defined in [`shell.qml`](shell.qml)
 
 | Function             | Arguments          | Description                                          |
 | -------------------- | ------------------ | ---------------------------------------------------- |
-| `setPrecomputedBlur` | `enabled` (string) | Enable/disable pre-computed wallpaper blur. Accepts `"true"`, `"1"`, `"false"`, `"0"`. |
+| `setPrecomputedBlur` | `enabled` (string) | Enable/disable static wallpaper blur. Accepts `"true"`, `"1"`, `"false"`, `"0"`. |
 
 ```bash
 qs-ipc appearance setPrecomputedBlur true
@@ -73,4 +73,22 @@ Defined in [`shell.qml`](shell.qml)
 qs-ipc power show
 qs-ipc power hide
 qs-ipc power toggle
+```
+
+---
+
+## `quicksettings` — Quick Settings Panel
+
+Defined in [`shell.qml`](shell.qml)
+
+| Function | Arguments | Description                    |
+| -------- | --------- | ------------------------------ |
+| `show`   | —         | Open the quick settings panel  |
+| `hide`   | —         | Close the quick settings panel |
+| `toggle` | —         | Toggle the quick settings panel|
+
+```bash
+qs-ipc quicksettings show
+qs-ipc quicksettings hide
+qs-ipc quicksettings toggle
 ```

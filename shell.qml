@@ -61,7 +61,8 @@ ShellRoot {
                 appIcon: notification.appIcon ?? "",
                 summary: notification.summary,
                 body: notification.body,
-                timeout: notification.expireTimeout
+                timeout: notification.expireTimeout,
+                timestamp: Date.now()
             };
             console.log("Notification received: ", item.summary);
             let copy = notificationList.slice();
@@ -82,6 +83,9 @@ ShellRoot {
 
         function dismiss(nid) {
             notificationList = notificationList.filter(n => n.id !== nid);
+        }
+        function dismissByApp(appName) {
+            notificationList = notificationList.filter(n => n.appName !== appName);
         }
         function clearAll() {
             notificationList = [];
@@ -724,6 +728,19 @@ ShellRoot {
         }
         function toggle() {
             shellRoot.powerMenuOpen = !shellRoot.powerMenuOpen;
+        }
+    }
+
+    IpcHandler {
+        target: "quicksettings"
+        function show() {
+            shellRoot.panelOpen = true;
+        }
+        function hide() {
+            shellRoot.panelOpen = false;
+        }
+        function toggle() {
+            shellRoot.panelOpen = !shellRoot.panelOpen;
         }
     }
 

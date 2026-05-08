@@ -74,7 +74,7 @@ Item {
 
                             Repeater {
                                 id: pairedRepeater
-                                model: Bluetooth.devices ? Bluetooth.devices.values.filter(d => d.paired) : []
+                                model: Bluetooth.devices ? Bluetooth.devices.values.filter(d => d.paired && d.name && d.name !== "" && !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(d.name)) : []
                                 delegate: deviceDelegateComponent
                             }
                         }
@@ -148,7 +148,7 @@ Item {
 
                             Repeater {
                                 id: availableRepeater
-                                model: Bluetooth.devices ? Bluetooth.devices.values.filter(d => !d.paired) : []
+                                model: Bluetooth.devices ? Bluetooth.devices.values.filter(d => !d.paired && d.name && d.name !== "" && !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(d.name)) : []
                                 delegate: deviceDelegateComponent
                             }
 

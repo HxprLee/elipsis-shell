@@ -74,22 +74,22 @@ PanelWindow {
 
         Rectangle {
             id: pill
-            width: 400
-            height: Math.max(72, textCol.implicitHeight + 36)
+            width: 460
+            height: Math.max(70, textCol.implicitHeight + (appNameText.visible ? 44 : 28))
             anchors.horizontalCenter: parent.horizontalCenter
-            radius: 28
-            color: Qt.rgba(0.1, 0.1, 0.15, 0.95)
-            border.color: Qt.rgba(1, 1, 1, 0.1)
+            radius: 16
+            color: Qt.rgba(0.15, 0.15, 0.2, 0.98)
+            border.color: Qt.rgba(1, 1, 1, 0.12)
             border.width: 1
 
             property real xOffset: 0
             property real yOffset: 0
             x: (parent.width - width) / 2 + xOffset
-            y: (popupWindow.isActive ? 10 : -height - 50) + yOffset
+            y: (popupWindow.isActive ? 20 : -height - 50) + yOffset
 
             Behavior on y {
                 enabled: !swipeArea.isDragging
-                NumberAnimation { duration: 500; easing.type: Easing.OutBack; easing.overshoot: 1.2 }
+                NumberAnimation { duration: 450; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
             }
             Behavior on x {
                 enabled: !swipeArea.isDragging
@@ -98,25 +98,28 @@ PanelWindow {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.margins: 16
-                spacing: 16
+                anchors.margins: 14
+                spacing: 12
 
+                // Icon badge
                 Rectangle {
-                    width: 44; height: 44; radius: 12
+                    width: 40; height: 40; radius: 8
                     color: Qt.rgba(1, 1, 1, 0.1)
                     Layout.alignment: Qt.AlignTop
+                    visible: popupWindow.appIcon !== "" || popupWindow.appName !== ""
+
                     Text {
                         anchors.centerIn: parent
                         text: popupWindow.appName !== "" ? popupWindow.appName.charAt(0).toUpperCase() : "!"
                         color: "white"
-                        font.pixelSize: 20
+                        font.pixelSize: 18
                         font.bold: true
                         visible: popupWindow.appIcon === ""
                     }
                     Image {
                         anchors.centerIn: parent
-                        width: 32; height: 32
-                        source: popupWindow.appIcon !== "" && popupWindow.appIcon.startsWith("/") ? "file://" + popupWindow.appIcon : ""
+                        width: 28; height: 28
+                        source: popupWindow.appIcon !== "" ? (popupWindow.appIcon.startsWith("/") ? "file://" + popupWindow.appIcon : popupWindow.appIcon) : ""
                         fillMode: Image.PreserveAspectFit
                         visible: source !== ""
                     }
@@ -126,13 +129,24 @@ PanelWindow {
                     id: textCol
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignTop
-                    spacing: 4
+                    spacing: 2
+
+                    Text {
+                        id: appNameText
+                        text: popupWindow.appName
+                        color: Qt.rgba(1, 1, 1, 0.4)
+                        font.pixelSize: 11
+                        font.bold: true
+                        font.capitalization: Font.AllUppercase
+                        visible: text !== ""
+                        Layout.fillWidth: true
+                    }
 
                     Text {
                         id: summaryText
                         text: popupWindow.summary
                         color: "white"
-                        font.pixelSize: 15
+                        font.pixelSize: 14
                         font.bold: true
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
@@ -140,7 +154,7 @@ PanelWindow {
                     Text {
                         id: bodyText
                         text: popupWindow.body
-                        color: Qt.rgba(1, 1, 1, 0.7)
+                        color: Qt.rgba(1, 1, 1, 0.6)
                         font.pixelSize: 13
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true

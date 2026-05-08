@@ -4,6 +4,7 @@ import Quickshell.Wayland
 import Quickshell.Services.Pipewire
 import Quickshell.Services.SystemTray
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import Qt.labs.folderlistmodel
 import Qt5Compat.GraphicalEffects
@@ -352,10 +353,66 @@ PanelWindow {
                 }
             }
 
-            // Notification List
-            ListView {
-                id: notifListView
-                opacity: progress // Non-morphing content fades in
+            // ── Grouped Notification List ──
+
+            // Timestamp refresh trigger
+            property int timeRefresh: 0
+            Timer {
+                interval: 30000; running: true; repeat: true
+                onTriggered: notifPanel.timeRefresh++
+            }
+
+            function relativeTime(ts) {
+                // Use timeRefresh to force re-evaluation
+                void notifPanel.timeRefresh;
+                if (!ts) return "";
+                let diff = Math.floor((Date.now() - ts) / 1000);
+                if (diff < 30) return "Just now";
+                if (diff < 60) return diff + "s ago";
+                if (diff < 3600) return Math.floor(diff / 60) + "m ago";
+                if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
+                return Math.floor(diff / 86400) + "d ago";
+            }
+
+            // Build grouped model: array of { appName, appIcon, notifications: [...] }
+            property var groupedNotifications: {
+                // Depend on timeRefresh so timestamps re-evaluate
+                void notifPanel.timeRefresh;
+                let list = notificationServer.notificationList;
+                let groups = {};
+                let order = [];
+                for (let i = 0; i < list.length; i++) {
+                    let n = list[i];
+                    if (!groups[n.appName]) {
+                        groups[n.appName] = { appName: n.appName, appIcon: n.appIcon, notifications: [], latestTs: n.timestamp || 0 };
+                        order.push(n.appName);
+                    }
+                    groups[n.appName].notifications.push(n);
+                    if ((n.timestamp || 0) > groups[n.appName].latestTs) {
+                        groups[n.appName].latestTs = n.timestamp || 0;
+                    }
+                    // Keep the most recent icon
+                    if (n.appIcon && n.appIcon !== "") groups[n.appName].appIcon = n.appIcon;
+                }
+                // Sort groups by most recent notification
+                order.sort(function(a, b) { return groups[b].latestTs - groups[a].latestTs; });
+                let result = [];
+                for (let j = 0; j < order.length; j++) result.push(groups[order[j]]);
+                return result;
+            }
+
+            // Track which app groups are expanded
+            property var expandedApps: ({})
+
+            function toggleAppExpanded(appName) {
+                let copy = Object.assign({}, expandedApps);
+                copy[appName] = !copy[appName];
+                expandedApps = copy;
+            }
+
+            Flickable {
+                id: notifFlickable
+                opacity: progress
                 anchors.top: notifHeader.bottom
                 anchors.topMargin: 12
                 height: Math.min(parent.height - y - 10, contentHeight || 0)
@@ -364,94 +421,451 @@ PanelWindow {
                 anchors.leftMargin: 10
                 anchors.rightMargin: 10
                 clip: true
-                spacing: 10
+                contentHeight: notifGroupCol.implicitHeight
+                ScrollBar.vertical: ScrollBar { }
 
-                model: notificationServer.notificationList
+                ColumnLayout {
+                    id: notifGroupCol
+                    width: notifFlickable.width
+                    spacing: 12
 
-                    delegate: Rectangle {
-                        width: notifListView.width
-                        height: Math.max(80, notifTextCol.implicitHeight + 36)
-                        radius: 16
-                        color: Qt.rgba(0.15, 0.15, 0.2, 0.7)
+                    Repeater {
+                        model: notifPanel.groupedNotifications
 
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 14
-                            spacing: 14
+                        delegate: ColumnLayout {
+                            id: groupDelegate
+                            Layout.fillWidth: true
+                            spacing: 4
 
-                            // App icon
-                            Rectangle {
-                                width: 44; height: 44; radius: 8
-                                color: Qt.rgba(1, 1, 1, 0.1)
-                                Layout.alignment: Qt.AlignTop
+                            property var group: modelData
+                            property bool isExpanded: !!(notifPanel.expandedApps[group.appName])
+                            property int stackCount: Math.min(group.notifications.length, 3) // Max 3 visible stack layers
 
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: modelData.appName.charAt(0).toUpperCase()
-                                    color: "white"
-                                    font.pixelSize: 20
-                                    font.bold: true
-                                    visible: modelData.appIcon === ""
-                                }
+                            // ════════════════════════════════
+                            // COLLAPSED: Stacked Card View
+                            // ════════════════════════════════
+                            Item {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: stackedTopCard.height
+                                visible: !groupDelegate.isExpanded && group.notifications.length > 1
 
-                                Image {
-                                    anchors.centerIn: parent
-                                    width: 32; height: 32
-                                    source: modelData.appIcon !== "" && modelData.appIcon.startsWith("/") ? "file://" + modelData.appIcon : ""
-                                    fillMode: Image.PreserveAspectFit
-                                    visible: source !== ""
+                                // Top card (latest notification)
+                                Rectangle {
+                                    id: stackedTopCard
+                                    width: parent.width
+                                    height: Math.max(70, stackedCardContent.implicitHeight + 28)
+                                    radius: 16
+                                    color: stackedCardMouse.containsMouse ? Qt.rgba(0.18, 0.18, 0.24, 0.85) : Qt.rgba(0.15, 0.15, 0.2, 0.7)
+                                    Behavior on color { ColorAnimation { duration: 150 } }
+                                    z: 10
+
+                                    property var notif: group.notifications[0]
+
+                                    ColumnLayout {
+                                        id: stackedCardContent
+                                        anchors.fill: parent
+                                        anchors.margins: 14
+                                        spacing: 6
+
+                                        // First row: App icon + App name + first title preview + count + timestamp
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 10
+
+                                            // App icon — only if provided
+                                            Rectangle {
+                                                width: 28; height: 28; radius: 6
+                                                color: Qt.rgba(1, 1, 1, 0.1)
+                                                visible: stackedTopCard.notif.appIcon !== ""
+
+                                                Image {
+                                                    anchors.centerIn: parent
+                                                    width: 20; height: 20
+                                                    source: (stackedTopCard.notif.appIcon !== "" && stackedTopCard.notif.appIcon.startsWith("/")) ? "file://" + stackedTopCard.notif.appIcon : (stackedTopCard.notif.appIcon || "")
+                                                    fillMode: Image.PreserveAspectFit
+                                                }
+                                            }
+
+                                            Text {
+                                                text: stackedTopCard.notif.appName || ""
+                                                color: Qt.rgba(1, 1, 1, 0.7)
+                                                font.pixelSize: 13
+                                                font.bold: true
+                                            }
+
+                                            Text {
+                                                text: stackedTopCard.notif.summary || ""
+                                                color: Qt.rgba(1, 1, 1, 0.5)
+                                                font.pixelSize: 13
+                                                elide: Text.ElideRight
+                                                Layout.fillWidth: true
+                                            }
+
+                                            Text {
+                                                text: notifPanel.relativeTime(stackedTopCard.notif.timestamp)
+                                                color: Qt.rgba(1, 1, 1, 0.3)
+                                                font.pixelSize: 11
+                                            }
+
+                                            // Count badge
+                                            Rectangle {
+                                                visible: group.notifications.length > 1
+                                                width: stackCountText.implicitWidth + 10
+                                                height: 16
+                                                radius: 8
+                                                color: Qt.rgba(1, 1, 1, 0.15)
+
+                                                Text {
+                                                    id: stackCountText
+                                                    anchors.centerIn: parent
+                                                    text: group.notifications.length
+                                                    color: Qt.rgba(1, 1, 1, 0.6)
+                                                    font.pixelSize: 10
+                                                    font.bold: true
+                                                }
+                                            }
+                                        }
+
+                                        // Remaining notifications as compact inline rows
+                                        Repeater {
+                                            model: Math.min(group.notifications.length - 1, 3) // Show up to 3 more inline
+
+                                            delegate: RowLayout {
+                                                Layout.fillWidth: true
+                                                Layout.leftMargin: stackedTopCard.notif.appIcon !== "" ? 38 : 0 // Align with text after icon
+                                                spacing: 6
+
+                                                Text {
+                                                    text: group.notifications[index + 1].summary || ""
+                                                    color: Qt.rgba(1, 1, 1, 0.7)
+                                                    font.pixelSize: 13
+                                                    font.bold: true
+                                                    elide: Text.ElideRight
+                                                    Layout.maximumWidth: parent.width * 0.4
+                                                }
+
+                                                Text {
+                                                    text: group.notifications[index + 1].body || ""
+                                                    color: Qt.rgba(1, 1, 1, 0.4)
+                                                    font.pixelSize: 13
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                    visible: text !== ""
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: stackedCardMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            if (group.notifications.length > 1) {
+                                                notifPanel.toggleAppExpanded(group.appName)
+                                            }
+                                        }
+                                    }
+
+                                    // Swipe gesture on stacked card
+                                    MouseArea {
+                                        id: stackedSwipeMouse
+                                        anchors.fill: parent
+                                        property real startX: 0
+                                        property bool isSwiping: false
+                                        z: 1
+
+                                        onPressed: (mouse) => {
+                                            startX = mouse.x;
+                                            isSwiping = false;
+                                        }
+                                        onPositionChanged: (mouse) => {
+                                            let dx = mouse.x - startX;
+                                            if (Math.abs(dx) > 10) {
+                                                isSwiping = true;
+                                                stackedTopCard.x = dx;
+                                            }
+                                        }
+                                        onReleased: {
+                                            if (isSwiping && Math.abs(stackedTopCard.x) > 80) {
+                                                if (group.notifications.length === 1) {
+                                                    notificationServer.dismiss(stackedTopCard.notif.id);
+                                                } else {
+                                                    notificationServer.dismissByApp(group.appName);
+                                                }
+                                            } else if (!isSwiping) {
+                                                if (group.notifications.length > 1) {
+                                                    notifPanel.toggleAppExpanded(group.appName);
+                                                }
+                                            }
+                                            stackedTopCard.x = 0;
+                                        }
+
+                                        Behavior on x { NumberAnimation { duration: 0 } }
+                                    }
+                                    Behavior on x { NumberAnimation { duration: stackedSwipeMouse.pressed ? 0 : 250; easing.type: Easing.OutCubic } }
                                 }
                             }
 
-                            ColumnLayout {
-                                id: notifTextCol
-                                Layout.fillWidth: true
-                                Layout.alignment: Qt.AlignTop
-                                spacing: 4
+                            // ════════════════════════════════
+                            // EXPANDED: Individual Cards
+                            // ════════════════════════════════
 
-                            RowLayout {
+                            // Group header (only visible when expanded and multi-notification)
+                            Item {
                                 Layout.fillWidth: true
-                                Text {
-                                    text: modelData.summary
-                                    color: "white"
-                                    font.pixelSize: 14
-                                    font.bold: true
-                                    wrapMode: Text.WordWrap
-                                    Layout.fillWidth: true
-                                }
+                                Layout.preferredHeight: 36
+                                visible: groupDelegate.isExpanded && group.notifications.length > 1
 
-                                Image {
-                                    width: 16; height: 16
-                                    sourceSize: Qt.size(24, 24)
-                                    source: shellRoot.icon("window-close-symbolic")
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        anchors.margins: -6
-                                        onClicked: notificationServer.dismiss(modelData.id)
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 8
+                                    anchors.rightMargin: 8
+                                    spacing: 8
+
+                                    Text {
+                                        text: group.appName || "Unknown"
+                                        color: Qt.rgba(1, 1, 1, 0.5)
+                                        font.pixelSize: 13
+                                        font.bold: true
+                                        Layout.fillWidth: true
+                                    }
+
+                                    // Collapse button (chevron up icon)
+                                    Rectangle {
+                                        width: 32; height: 32; radius: 16
+                                        color: collapseHeaderMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.08)
+                                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                                        Image {
+                                            anchors.centerIn: parent
+                                            width: 16; height: 16
+                                            sourceSize: Qt.size(16, 16)
+                                            source: shellRoot.icon("go-up-symbolic")
+                                            opacity: collapseHeaderMouse.containsMouse ? 1.0 : 0.6
+                                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                                        }
+
+                                        MouseArea {
+                                            id: collapseHeaderMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: notifPanel.toggleAppExpanded(group.appName)
+                                        }
+                                    }
+
+                                    // Clear group button (trash icon)
+                                    Rectangle {
+                                        width: 32; height: 32; radius: 16
+                                        color: groupClearMouse.containsMouse ? Qt.rgba(1, 0.3, 0.3, 0.25) : Qt.rgba(1, 1, 1, 0.08)
+                                        Behavior on color { ColorAnimation { duration: 150 } }
+
+                                        Image {
+                                            anchors.centerIn: parent
+                                            width: 16; height: 16
+                                            sourceSize: Qt.size(16, 16)
+                                            source: shellRoot.icon("edit-clear-all-symbolic")
+                                            opacity: groupClearMouse.containsMouse ? 1.0 : 0.5
+                                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                                        }
+
+                                        MouseArea {
+                                            id: groupClearMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: notificationServer.dismissByApp(group.appName)
+                                        }
                                     }
                                 }
                             }
 
-                            Text {
-                                id: notifBodyText
-                                text: modelData.body
-                                color: Qt.rgba(1, 1, 1, 0.7)
-                                font.pixelSize: 13
-                                wrapMode: Text.WordWrap
-                                Layout.fillWidth: true
-                                visible: text !== ""
+                            // Expanded individual cards
+                            Repeater {
+                                model: (groupDelegate.isExpanded || group.notifications.length === 1) ? group.notifications.length : 0
+
+                                delegate: Item {
+                                    id: swipeContainer
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: notifCard.height
+                                    clip: true
+
+                                    property var notif: group.notifications[index]
+                                    property real swipeX: 0
+                                    property bool dismissed: false
+
+                                    // Dismiss background
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: 16
+                                        color: Qt.rgba(0.9, 0.3, 0.2, 0.6)
+                                        visible: Math.abs(swipeContainer.swipeX) > 5
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "Dismiss"
+                                            color: "white"
+                                            font.pixelSize: 13
+                                            font.bold: true
+                                            opacity: Math.min(1, Math.abs(swipeContainer.swipeX) / 80)
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        id: notifCard
+                                        width: swipeContainer.width
+                                        x: swipeContainer.swipeX
+                                        height: Math.max(70, cardContent.implicitHeight + 28)
+                                        radius: 16
+                                        color: cardMouse.containsMouse ? Qt.rgba(0.18, 0.18, 0.24, 0.85) : Qt.rgba(0.15, 0.15, 0.2, 0.7)
+                                        Behavior on color { ColorAnimation { duration: 150 } }
+                                        opacity: swipeContainer.dismissed ? 0 : 1
+                                        Behavior on opacity { NumberAnimation { duration: 200 } }
+
+                                        Behavior on x { NumberAnimation { duration: swipeMouse.pressed ? 0 : 250; easing.type: Easing.OutCubic } }
+
+                                        RowLayout {
+                                            id: cardContent
+                                            anchors.fill: parent
+                                            anchors.margins: 14
+                                            spacing: 12
+
+                                            // App icon — only if provided
+                                            Rectangle {
+                                                width: 40; height: 40; radius: 8
+                                                color: Qt.rgba(1, 1, 1, 0.1)
+                                                Layout.alignment: Qt.AlignTop
+                                                visible: notif.appIcon !== ""
+
+                                                Image {
+                                                    anchors.centerIn: parent
+                                                    width: 28; height: 28
+                                                    source: (notif.appIcon !== "" && notif.appIcon.startsWith("/")) ? "file://" + notif.appIcon : (notif.appIcon || "")
+                                                    fillMode: Image.PreserveAspectFit
+                                                }
+                                            }
+
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                Layout.alignment: Qt.AlignTop
+                                                spacing: 3
+
+                                                // Title + timestamp + close button row
+                                                RowLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 8
+
+                                                    Text {
+                                                        text: notif.summary || ""
+                                                        color: "white"
+                                                        font.pixelSize: 14
+                                                        font.bold: true
+                                                        wrapMode: Text.WordWrap
+                                                        Layout.fillWidth: true
+                                                    }
+
+                                                    Text {
+                                                        text: notifPanel.relativeTime(notif.timestamp)
+                                                        color: Qt.rgba(1, 1, 1, 0.3)
+                                                        font.pixelSize: 11
+                                                    }
+
+                                                    // Close button — hover only
+                                                    Item {
+                                                        width: 20; height: 20
+                                                        opacity: cardMouse.containsMouse ? 1.0 : 0.0
+                                                        Behavior on opacity { NumberAnimation { duration: 150 } }
+
+                                                        Image {
+                                                            anchors.centerIn: parent
+                                                            width: 14; height: 14
+                                                            sourceSize: Qt.size(16, 16)
+                                                            source: shellRoot.icon("window-close-symbolic")
+                                                            opacity: closeBtnMouse.containsMouse ? 1.0 : 0.6
+                                                        }
+
+                                                        MouseArea {
+                                                            id: closeBtnMouse
+                                                            anchors.fill: parent
+                                                            anchors.margins: -6
+                                                            hoverEnabled: true
+                                                            onClicked: notificationServer.dismiss(notif.id)
+                                                        }
+                                                    }
+                                                }
+
+                                                // Body
+                                                Text {
+                                                    text: notif.body || ""
+                                                    color: Qt.rgba(1, 1, 1, 0.65)
+                                                    font.pixelSize: 13
+                                                    wrapMode: Text.WordWrap
+                                                    Layout.fillWidth: true
+                                                    visible: text !== ""
+                                                    maximumLineCount: 3
+                                                    elide: Text.ElideRight
+                                                }
+                                            }
+                                        }
+
+                                        // Hover detection
+                                        MouseArea {
+                                            id: cardMouse
+                                            anchors.fill: parent
+                                            z: -1
+                                            hoverEnabled: true
+                                        }
+                                    }
+
+                                    // Swipe gesture
+                                    MouseArea {
+                                        id: swipeMouse
+                                        anchors.fill: parent
+                                        property real startX: 0
+                                        property bool isSwiping: false
+
+                                        onPressed: (mouse) => {
+                                            startX = mouse.x;
+                                            isSwiping = false;
+                                        }
+                                        onPositionChanged: (mouse) => {
+                                            let dx = mouse.x - startX;
+                                            if (Math.abs(dx) > 10) {
+                                                isSwiping = true;
+                                                swipeContainer.swipeX = dx;
+                                            }
+                                        }
+                                        onReleased: {
+                                            if (Math.abs(swipeContainer.swipeX) > 80) {
+                                                swipeContainer.swipeX = (swipeContainer.swipeX > 0 ? swipeContainer.width : -swipeContainer.width);
+                                                swipeContainer.dismissed = true;
+                                                dismissTimer.start();
+                                            } else {
+                                                swipeContainer.swipeX = 0;
+                                            }
+                                        }
+
+                                        Timer {
+                                            id: dismissTimer
+                                            interval: 250
+                                            onTriggered: notificationServer.dismiss(swipeContainer.notif.id)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
-                }
 
-                // Empty state
-                Text {
-                    anchors.centerIn: parent
-                    text: "No new notifications"
-                    color: Qt.rgba(1, 1, 1, 0.4)
-                    font.pixelSize: 16
-                    visible: notifListView.count === 0
+                    // Empty state
+                    Text {
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.topMargin: 60
+                        text: "No new notifications"
+                        color: Qt.rgba(1, 1, 1, 0.4)
+                        font.pixelSize: 16
+                        visible: notificationServer.notificationList.length === 0
+                    }
                 }
             }
         }
@@ -1260,19 +1674,26 @@ PanelWindow {
 
                     expandedLoader.sourceComponent = widgetItem.expandedComponent
 
-                    // Use bindings so that if implicitHeight changes after loading, the card resizes dynamically
-                    expandedCard.width = Qt.binding(function() { return expandedOverlay.width })
-                    expandedCard.height = Qt.binding(function() {
-                        let contentH = expandedLoader.item && expandedLoader.item.implicitHeight > 0 
-                                          ? expandedLoader.item.implicitHeight 
-                                          : 0;
-                        return contentH > 0 
-                                  ? contentH + 48 // 24 margins top/bottom
-                                  : ((widgetItem && widgetItem.expandedHeight) ? widgetItem.expandedHeight : 420);
-                    })
-                    expandedCard.x = Qt.binding(function() { return 0 })
-                    expandedCard.y = Qt.binding(function() { return (expandedOverlay.height - expandedCard.height) / 2 })
-                    expandedCard.radius = 36
+                    // Calculate target dimensions
+                    let targetW = expandedOverlay.width;
+                    let targetH = 420; // fallback
+                    if (expandedLoader.item && expandedLoader.item.implicitHeight > 0) {
+                        targetH = expandedLoader.item.implicitHeight + 48;
+                    } else if (widgetItem.expandedHeight > 0) {
+                        targetH = widgetItem.expandedHeight;
+                    }
+                    
+                    let targetX = 0;
+                    let targetY = (expandedOverlay.height - targetH) / 2;
+
+                    // Set values directly to trigger parallel behaviors. 
+                    // We avoid bindings here because y = (parent.h - height)/2 would cause 
+                    // y to "chase" height as it animates, breaking parallelism.
+                    expandedCard.x = targetX;
+                    expandedCard.y = targetY;
+                    expandedCard.width = targetW;
+                    expandedCard.height = targetH;
+                    expandedCard.radius = 32;
                 }
 
                 function close() {
@@ -1297,11 +1718,11 @@ PanelWindow {
                     color: Qt.rgba(0.15, 0.15, 0.2, 0.95)
                     clip: true
                     
-                    Behavior on x { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
-                    Behavior on y { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
-                    Behavior on width { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
-                    Behavior on height { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 300; easing.type: Easing.OutBack; easing.overshoot: 1.1 } }
-                    Behavior on radius { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 300; easing.type: Easing.OutBack } }
+                    Behavior on x { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 400; easing.type: Easing.OutExpo } }
+                    Behavior on y { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 400; easing.type: Easing.OutExpo } }
+                    Behavior on width { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 400; easing.type: Easing.OutExpo } }
+                    Behavior on height { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 400; easing.type: Easing.OutExpo } }
+                    Behavior on radius { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 400; easing.type: Easing.OutExpo } }
 
                     // Only show loader content when fully expanded to avoid layout jumping during morph
                     Loader {
@@ -1309,6 +1730,7 @@ PanelWindow {
                         anchors.fill: parent
                         anchors.margins: 24
                         focus: true
+                        asynchronous: true
                         opacity: expandedOverlay.isExpanded ? 1.0 : 0.0
                         Behavior on opacity { NumberAnimation { duration: 200 } }
                     }

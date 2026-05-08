@@ -74,14 +74,35 @@ PanelWindow {
     aboveWindows: true
 
     // --- Background with Sharp Premium Blur ---
-    Rectangle {
-        id: bg
+    Item {
+        id: bgContainer
         anchors.fill: parent
-        color: Qt.rgba(0.02, 0.02, 0.05, 0.45)
-        
         opacity: root.visible ? 1.0 : 0.0
         Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
 
+        Image {
+            id: bgBlur
+            anchors.fill: parent
+            source: shellRoot.blurredWallpaperPath
+            cache: false
+            fillMode: Image.PreserveAspectCrop
+            
+            Connections {
+                target: shellRoot
+                function onBlurVersionChanged() {
+                    let s = bgBlur.source
+                    bgBlur.source = ""
+                    bgBlur.source = s
+                }
+            }
+            visible: shellRoot.usePrecomputedBlur
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: Qt.rgba(0.02, 0.02, 0.05, 0.6)
+        }
+        
         MouseArea {
             anchors.fill: parent
             onClicked: shellRoot.appDrawerOpen = false
