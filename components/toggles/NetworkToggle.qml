@@ -5,15 +5,14 @@ import Qt5Compat.GraphicalEffects
 import Quickshell.Networking
 import ".."
 
-// WifiToggle.qml — WiFi toggle (data-only, styled by the shell).
-
 Item {
     id: root
     property bool isSimpleToggle: true
-    property string titleText: "Wi-Fi"
-    property string subtitleText: qs.wifiEnabled ? (shellRoot.wifiSsid || "Connected") : "Off"
-    property string iconSource: shellRoot.icon(qs.wifiEnabled ? "network-wireless-symbolic" : "network-wireless-offline-symbolic")
-    property bool isActive: qs.wifiEnabled
+    property bool isWired: shellRoot.ethernetConnected
+    property string titleText: isWired ? "Ethernet" : (shellRoot.wifiSsid !== "" ? shellRoot.wifiSsid : "Networks")
+    property string subtitleText: isWired ? "Connected" : (shellRoot.wifiSsid !== "" ? "Connected" : (qs.wifiEnabled ? "Not Connected" : "Off"))
+    property string iconSource: shellRoot.icon(isWired ? "network-wired-symbolic" : (qs.wifiEnabled ? "network-wireless-symbolic" : "network-wireless-offline-symbolic"))
+    property bool isActive: qs.wifiEnabled || isWired
     property color activeColor: Qt.rgba(0.2, 0.5, 1.0, 1.0)
     
     // Expanded view support
@@ -42,8 +41,8 @@ Item {
                 // Header
                 ExpandedHeader {
                     Layout.fillWidth: true
-                    title: "Wi-Fi"
-                    subtitle: root.isActive ? (shellRoot.wifiSsid || "Connected") : "Off"
+                    title: "Networks"
+                    subtitle: root.subtitleText
                     iconSource: root.iconSource
                     isActive: root.isActive
                     activeColor: root.activeColor
@@ -116,6 +115,76 @@ Item {
                         property var allNetworks: shellRoot.wifiDevice ? shellRoot.wifiDevice.networks.values : []
                         property var knownNetworks: allNetworks.filter(n => n.known)
                         property var unknownNetworks: allNetworks.filter(n => !n.known)
+
+                        // --- Wired Section ---
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            visible: shellRoot.ethernetConnected
+
+                            Text {
+                                text: "Ethernet"
+                                color: Qt.rgba(1, 1, 1, 0.4)
+                                font.pixelSize: 12
+                                font.bold: true
+                                Layout.leftMargin: 4
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                height: 40
+                                radius: 12
+                                color: ethHoverArea.containsMouse ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
+
+                                MouseArea {
+                                    id: ethHoverArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onClicked: {
+                                        if (shellRoot.ethernetConnected) {
+                                            shellRoot.disconnectEthernet();
+                                        } else {
+                                            shellRoot.connectEthernet();
+                                        }
+                                    }
+                                }
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    Layout.preferredHeight: 40
+                                    anchors.leftMargin: 12
+                                    anchors.rightMargin: 12
+                                    spacing: 10
+
+                                    Image {
+                                        sourceSize: Qt.size(20, 20)
+                                        source: shellRoot.icon(shellRoot.ethernetConnected ? "network-wired-symbolic" : "network-wired-offline-symbolic")
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        Text {
+                                            text: shellRoot.activeEthernetName !== "" ? shellRoot.activeEthernetName : (shellRoot.ethernetIface !== "" ? shellRoot.ethernetIface : "Wired Connection")
+                                            color: "white"
+                                            font.pixelSize: 15
+                                            font.weight: Font.Medium
+                                        }
+                                        Text {
+                                            text: shellRoot.ethernetConnected ? "Connected" : "Disconnected"
+                                            color: shellRoot.ethernetConnected ? root.activeColor : Qt.rgba(1, 1, 1, 0.6)
+                                            font.pixelSize: 12
+                                        }
+                                    }
+
+                                    Image {
+                                        visible: shellRoot.ethernetConnected
+                                        sourceSize: Qt.size(16, 16)
+                                        source: shellRoot.icon("object-select-symbolic")
+                                    }
+                                }
+                            }
+                        }
 
                         // --- Saved Networks Section ---
                         ColumnLayout {

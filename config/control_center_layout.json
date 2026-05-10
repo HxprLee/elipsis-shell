@@ -1,13 +1,13 @@
 [
   {
-    "source": "toggles/WifiToggle.qml",
+    "source": "toggles/NetworkToggle.qml",
     "colSpan": 2,
-    "rowSpan": 1
+    "rowSpan": 2
   },
   {
     "source": "toggles/BluetoothToggle.qml",
     "colSpan": 2,
-    "rowSpan": 1
+    "rowSpan": 2
   },
   {
     "source": "toggles/BrightnessSlider.qml",

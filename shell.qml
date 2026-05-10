@@ -428,15 +428,81 @@ ShellRoot {
     }
 
     property bool wifiEnabled: Networking.wifiEnabled ?? false
-    property bool wifiConnected: wifiDevice && (wifiDevice.connected ?? false)
-    property string wifiSsid: {
-        if (!wifiDevice || !wifiDevice.networks) return "";
-        const networks = wifiDevice.networks.values;
-        for (let i = 0; i < networks.length; i++) {
-            if (networks[i].connected) return networks[i].name;
+
+    property var ethernetDevice: {
+        const devices = Networking.devices.values;
+        for (let i = 0; i < devices.length; i++) {
+            if (devices[i].type === DeviceType.Ethernet) return devices[i];
         }
-        return "";
+        return null;
     }
+    property string wifiSsid: ""
+    property string activeEthernetName: ""
+    property string ethernetIface: ""
+    
+    Process {
+        id: netPollProc
+        command: ["sh", "-c", "wifi=$(nmcli -t -f TYPE,NAME con show --active | grep -E '802-11-wireless|wireless' | cut -d: -f2 | head -n1); eth=$(nmcli -t -f TYPE,NAME con show --active | grep -E '802-3-ethernet|ethernet|wired' | cut -d: -f2 | head -n1); eth_iface=$(nmcli -t -f DEVICE,TYPE device | grep -iE 'ethernet|wired' | cut -d: -f1 | head -n1); echo \"WIFI=$wifi|ETH=$eth|IFACE=$eth_iface\""]
+        running: true
+        stdout: SplitParser {
+            onRead: data => {
+                let text = data.trim();
+                if (text.startsWith("WIFI=")) {
+                    let parts = text.split("|ETH=");
+                    if (parts.length === 2) {
+                        shellRoot.wifiSsid = parts[0].substring(5);
+                        let subParts = parts[1].split("|IFACE=");
+                        if (subParts.length === 2) {
+                            shellRoot.activeEthernetName = subParts[0];
+                            shellRoot.ethernetIface = subParts[1];
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    Timer {
+        interval: 3000
+        running: true
+        repeat: true
+        onTriggered: netPollProc.running = true
+    }
+
+    Process {
+        id: connectWifiProc
+        running: false
+    }
+
+    function connectWifi(ssid, password) {
+        if (password && password !== "") {
+            connectWifiProc.command = ["nmcli", "device", "wifi", "connect", ssid, "password", password];
+        } else {
+            connectWifiProc.command = ["nmcli", "device", "wifi", "connect", ssid];
+        }
+        connectWifiProc.running = true;
+    }
+
+    Process {
+        id: ethToggleProc
+        running: false
+    }
+
+    function disconnectEthernet() {
+        if (activeEthernetName) {
+            ethToggleProc.command = ["nmcli", "connection", "down", activeEthernetName];
+            ethToggleProc.running = true;
+        }
+    }
+
+    function connectEthernet() {
+        if (ethernetIface !== "") {
+            ethToggleProc.command = ["nmcli", "device", "connect", ethernetIface];
+            ethToggleProc.running = true;
+        }
+    }
+
+    property bool ethernetConnected: activeEthernetName !== ""
     
     // Signal level from 0 to 4
     property int wifiSignalLevel: {
@@ -629,6 +695,8 @@ ShellRoot {
             "network-wireless-offline-symbolic":          "file:///usr/share/icons/breeze-dark/actions/24/network-disconnect-symbolic.svg",
             "network-disconnect-symbolic":                "file:///usr/share/icons/breeze-dark/actions/24/network-disconnect-symbolic.svg",
             "network-wireless-symbolic":                  "file:///usr/share/icons/breeze-dark/devices/24/network-wireless-symbolic.svg",
+            "network-wired-symbolic":                     "file:///usr/share/icons/breeze-dark/devices/24/network-wired-symbolic.svg",
+            "network-wired-offline-symbolic":             "file:///usr/share/icons/breeze-dark/actions/24/network-disconnect-symbolic.svg",
             "bluetooth-active-symbolic":           "file:///usr/share/icons/breeze-dark/preferences/24/preferences-system-bluetooth-activated-symbolic.svg",
             "bluetooth-disabled-symbolic":         "file:///usr/share/icons/breeze-dark/preferences/24/preferences-system-bluetooth-inactive-symbolic.svg",
             "preferences-system-symbolic":         "file:///usr/share/icons/breeze-dark/actions/24/preferences-system-symbolic.svg",
