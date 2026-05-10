@@ -3,7 +3,7 @@
 All IPC calls use the Quickshell IPC mechanism. Invoke them from the command line with:
 
 ```bash
-qs-ipc <target> <function> [args...]
+qs ipc call  <target> <function> [args...]
 ```
 
 ---
@@ -19,9 +19,9 @@ Defined in [`shell.qml`](shell.qml)
 | `unlock`   | —         | Unlock the session               |
 
 ```bash
-qs-ipc lock lock
-qs-ipc lock unlock
-qs-ipc lock toggle
+qs ipc call lock lock
+qs ipc call lock unlock
+qs ipc call lock toggle
 ```
 
 ---
@@ -37,9 +37,9 @@ Defined in [`components/TaskManager.qml`](components/TaskManager.qml)
 | `close`  | —         | Close the task switcher        |
 
 ```bash
-qs-ipc task_manager toggle
-qs-ipc task_manager open
-qs-ipc task_manager close
+qs ipc call task_manager toggle
+qs ipc call task_manager open
+qs ipc call task_manager close
 ```
 
 ---
@@ -53,8 +53,8 @@ Defined in [`shell.qml`](shell.qml)
 | `setPrecomputedBlur` | `enabled` (string) | Enable/disable static wallpaper blur. Accepts `"true"`, `"1"`, `"false"`, `"0"`. |
 
 ```bash
-qs-ipc appearance setPrecomputedBlur true
-qs-ipc appearance setPrecomputedBlur false
+qs ipc call appearance setPrecomputedBlur true
+qs ipc call appearance setPrecomputedBlur false
 ```
 
 ---
@@ -70,9 +70,9 @@ Defined in [`shell.qml`](shell.qml)
 | `toggle` | —         | Toggle the power menu          |
 
 ```bash
-qs-ipc power show
-qs-ipc power hide
-qs-ipc power toggle
+qs ipc call power show
+qs ipc call power hide
+qs ipc call power toggle
 ```
 
 ---
@@ -88,7 +88,7 @@ Defined in [`shell.qml`](shell.qml)
 | `toggle` | —         | Toggle the quick settings panel|
 
 ```bash
-qs-ipc quicksettings show
-qs-ipc quicksettings hide
-qs-ipc quicksettings toggle
+qs ipc call quicksettings show
+qs ipc call quicksettings hide
+qs ipc call quicksettings toggle
 ```
