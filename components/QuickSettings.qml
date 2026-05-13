@@ -882,6 +882,38 @@ PanelWindow {
             property bool editMode: false
             property int dragIndex: -1
 
+            // ── Drag Proxy (visual feedback during drag) ──
+            Rectangle {
+                id: dragProxy
+                visible: false
+                z: 200
+                radius: 24
+                color: Qt.rgba(0.2, 0.2, 0.28, 0.9)
+                border.color: Qt.rgba(1, 1, 1, 0.3)
+                border.width: 1
+                scale: 1.05
+                opacity: 0.9
+
+                property real grabOffsetX: 0
+                property real grabOffsetY: 0
+            }
+
+            // ── Drag Tracker (invisible item for DropArea hit detection) ──
+            Item {
+                id: dragTracker
+                width: 20; height: 20
+                visible: false
+                parent: toggleFlickable.contentItem
+                z: 300
+
+                Drag.active: controlPanel.dragIndex >= 0
+                Drag.keys: ["toggle"]
+                Drag.hotSpot.x: 10
+                Drag.hotSpot.y: 10
+
+                property Item sourceDelegate: null
+            }
+
             property var defaultLayout: [
                 { source: "toggles/WifiToggle.qml",       colSpan: 2, rowSpan: 1 },
                 { source: "toggles/BluetoothToggle.qml",  colSpan: 2, rowSpan: 1 },
@@ -892,7 +924,8 @@ PanelWindow {
                 { source: "toggles/SettingsToggle.qml",   colSpan: 1, rowSpan: 1 },
                 { source: "toggles/LockToggle.qml",       colSpan: 1, rowSpan: 1 },
                 { source: "toggles/PowerToggle.qml",      colSpan: 1, rowSpan: 1 },
-                { source: "toggles/DndToggle.qml",        colSpan: 1, rowSpan: 1 }
+                { source: "toggles/DndToggle.qml",        colSpan: 1, rowSpan: 1 },
+                { source: "toggles/CaffeineToggle.qml",   colSpan: 1, rowSpan: 1 }
             ]
 
             Component.onCompleted: loadLayoutProc.running = true
@@ -1080,28 +1113,30 @@ PanelWindow {
                             }
                         }
 
-                        // WiFi
+                        // Network
                         Item {
-                            width: (shellRoot.wifiEnabled && shellRoot.wifiConnected) ? 20 : 0
+                            width: shellRoot.networkConnected ? 20 : 0
                             height: 20
                             visible: width > 0
                             anchors.verticalCenter: parent.verticalCenter
                             Image {
-                                id: wifiIconMorph
+                                id: networkIconMorph
                                 anchors.fill: parent
                                 source: {
-                                    if (!shellRoot.wifiEnabled) return shellRoot.icon("network-wireless-offline-symbolic");
-                                    if (!shellRoot.wifiConnected) return shellRoot.icon("network-disconnect-symbolic");
+                                    if (shellRoot.networkType === "ethernet") {
+                                        return shellRoot.icon("network-wired-symbolic");
+                                    }
+
                                     let levels = ["none", "weak", "ok", "good", "excellent"];
-                                    let level = levels[shellRoot.wifiSignalLevel] || "none";
+                                    let level = levels[shellRoot.networkSignalLevel] || "none";
                                     return shellRoot.icon("network-wireless-signal-" + level + "-symbolic");
                                 }
                                 sourceSize: Qt.size(24, 24)
                                 visible: false
                             }
                             ColorOverlay {
-                                anchors.fill: wifiIconMorph
-                                source: wifiIconMorph
+                                anchors.fill: networkIconMorph
+                                source: networkIconMorph
                                 color: "white"
                             }
                         }
@@ -1209,8 +1244,6 @@ PanelWindow {
                             id: delegateItem
                             property int itemIndex: index
                             property bool isDragging: controlPanel.dragIndex === index
-                            property real savedWidth: 0
-                            property real savedHeight: 0
 
                             // Keep the layout slot full size so it acts as a placeholder
                             Layout.columnSpan: model.colSpan
@@ -1218,14 +1251,13 @@ PanelWindow {
                             Layout.fillWidth: true
                             Layout.preferredHeight: (model.rowSpan * ((400 - 48 - 48) / 4)) + ((model.rowSpan - 1) * 16)
 
-
-                            Behavior on x { enabled: !widgetOverlay.dragActive; NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
-                            Behavior on y { enabled: !widgetOverlay.dragActive; NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+                            Behavior on x { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+                            Behavior on y { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
                             Behavior on Layout.preferredHeight { NumberAnimation { duration: 200 } }
 
                             Timer {
                                 id: moveThrottle
-                                interval: 150
+                                interval: 200
                             }
 
                             DropArea {
@@ -1233,9 +1265,10 @@ PanelWindow {
                                 keys: ["toggle"]
                                 enabled: controlPanel.editMode && !delegateItem.isDragging
                                 onEntered: (drag) => {
-                                    if (!moveThrottle.running && drag.source.itemIndex !== delegateItem.itemIndex) {
+                                    if (!moveThrottle.running && dragTracker.sourceDelegate && dragTracker.sourceDelegate.itemIndex !== delegateItem.itemIndex) {
+                                        let fromIdx = dragTracker.sourceDelegate.itemIndex
                                         let targetIdx = delegateItem.itemIndex
-                                        togglesModel.move(drag.source.itemIndex, targetIdx, 1)
+                                        togglesModel.move(fromIdx, targetIdx, 1)
                                         controlPanel.dragIndex = targetIdx
                                         moveThrottle.start()
                                     }
@@ -1341,7 +1374,7 @@ PanelWindow {
                                             spacing: 0
 
                                             Text {
-                                                text: (widgetLoader.item && widgetLoader.item.titleText) || ""
+                                                text: (widgetLoader.item && (widgetLoader.item.titleText !== undefined ? widgetLoader.item.titleText : widgetLoader.item.toggleName)) || ""
                                                 color: "white"
                                                 font.pixelSize: 14
                                                 font.bold: true
@@ -1393,7 +1426,7 @@ PanelWindow {
                                             spacing: 0
 
                                             Text {
-                                                text: (widgetLoader.item && widgetLoader.item.titleText) || ""
+                                                text: (widgetLoader.item && (widgetLoader.item.titleText !== undefined ? widgetLoader.item.titleText : widgetLoader.item.toggleName)) || ""
                                                 color: "white"
                                                 font.pixelSize: 14
                                                 font.bold: true
@@ -1439,34 +1472,55 @@ PanelWindow {
                                     currentRowSpan: model.rowSpan
                                     availableSizes: widgetLoader.item ? widgetLoader.item.availableSizes : undefined
 
-                                    Drag.source: delegateItem
+                                    onDragStarted: (grabOffsetX, grabOffsetY) => {
+                                        // Position proxy at widgetBg's location in controlPanel coordinates
+                                        let pos = widgetBg.mapToItem(controlPanel, 0, 0)
+                                        dragProxy.x = pos.x
+                                        dragProxy.y = pos.y
+                                        dragProxy.width = widgetBg.width
+                                        dragProxy.height = widgetBg.height
+                                        dragProxy.radius = widgetBg.radius
+                                        dragProxy.grabOffsetX = grabOffsetX
+                                        dragProxy.grabOffsetY = grabOffsetY
+                                        dragProxy.visible = true
 
-                                    onDragStarted: {
-                                        // Save dimensions before the slot collapses
-                                        delegateItem.savedWidth = widgetBg.width
-                                        delegateItem.savedHeight = widgetBg.height
+                                        // Position tracker at widgetBg's center in flickable coordinates
+                                        let fPos = widgetBg.mapToItem(toggleFlickable.contentItem, widgetBg.width / 2, widgetBg.height / 2)
+                                        dragTracker.x = fPos.x - 10
+                                        dragTracker.y = fPos.y - 10
+                                        dragTracker.sourceDelegate = delegateItem
 
-                                        // Reparent to flickable to escape GridLayout management
-                                        let pos = widgetBg.mapToItem(toggleFlickable.contentItem, 0, 0)
-                                        widgetBg.parent = toggleFlickable.contentItem
-                                        widgetBg.x = pos.x
-                                        widgetBg.y = pos.y
-                                        widgetBg.width = delegateItem.savedWidth
-                                        widgetBg.height = delegateItem.savedHeight
-
+                                        // Ghost the original widget
+                                        widgetBg.opacity = 0.3
                                         controlPanel.dragIndex = delegateItem.itemIndex
-                                        widgetBg.z = 100
                                     }
+
+                                    onDragMoved: (globalX, globalY) => {
+                                        // Update proxy position in controlPanel coordinates
+                                        let cp = controlPanel.mapFromItem(null, globalX, globalY)
+                                        dragProxy.x = cp.x - dragProxy.grabOffsetX
+                                        dragProxy.y = cp.y - dragProxy.grabOffsetY
+
+                                        // Update invisible tracker in flickable coordinates
+                                        let fp = toggleFlickable.contentItem.mapFromItem(null, globalX, globalY)
+                                        dragTracker.x = fp.x - 10
+                                        dragTracker.y = fp.y - 10
+                                    }
+
                                     onDragFinished: {
+                                        // Hide proxy
+                                        dragProxy.visible = false
+
+                                        // Drop the tracker to trigger DropArea
+                                        dragTracker.Drag.drop()
+                                        dragTracker.sourceDelegate = null
+
+                                        // Unghost the widget
+                                        widgetBg.opacity = 1.0
                                         controlPanel.dragIndex = -1
 
-                                        // Reparent back to delegate and restore bindings
-                                        widgetBg.parent = delegateItem
-                                        widgetBg.z = 0
-                                        widgetBg.x = Qt.binding(() => (delegateItem.width - widgetBg.width) / 2)
-                                        widgetBg.y = Qt.binding(() => (delegateItem.height - widgetBg.height) / 2)
-                                        widgetBg.width = Qt.binding(() => widgetBg.isCircle ? Math.min(delegateItem.width, delegateItem.height) : delegateItem.width)
-                                        widgetBg.height = Qt.binding(() => widgetBg.isCircle ? widgetBg.width : delegateItem.height)
+                                        // Save layout after reorder
+                                        controlPanel.saveLayout()
                                     }
                                     onRemoved: {
                                         togglesModel.remove(index)
@@ -1534,7 +1588,7 @@ PanelWindow {
             FolderListModel {
                 id: togglesFolderModel
                 folder: Qt.resolvedUrl("toggles")
-                nameFilters: ["*Toggle.qml", "*Slider.qml", "*Widget.qml"]
+                nameFilters: ["*.qml"]
                 showDirs: false
             }
 
@@ -1554,11 +1608,22 @@ PanelWindow {
                 function open() { opacity = 1.0 }
                 function close() { opacity = 0.0 }
 
+                // Preview metrics — matches the real grid math
+                readonly property real realCellSize: 76  // (400 - 48 - 48) / 4
+                readonly property real realGridSpacing: 16
+                readonly property real pvScale: 1
+
+                function realW(cs) { return cs * realCellSize + (cs - 1) * realGridSpacing }
+                function realH(rs) { return rs * realCellSize + (rs - 1) * realGridSpacing }
+                function pvW(cs) { return realW(cs) * pvScale }
+                function pvH(rs) { return realH(rs) * pvScale }
+
                 ColumnLayout {
                     anchors.fill: parent
                     anchors.margins: 24
                     spacing: 16
 
+                    // ── Header ──
                     RowLayout {
                         Layout.fillWidth: true
                         Text {
@@ -1584,63 +1649,289 @@ PanelWindow {
                         }
                     }
 
-                    ListView {
+                    // ── Scrollable toggle sections ──
+                    Flickable {
+                        id: addControlFlickable
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
-                        spacing: 8
-                        model: togglesFolderModel
-                        delegate: Rectangle {
-                            width: ListView.view.width
-                            height: 56
-                            radius: 16
-                            color: addArea.containsMouse ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
-                            
-                            RowLayout {
-                                anchors.fill: parent
-                                anchors.margins: 12
-                                spacing: 12
+                        contentHeight: addSectionsColumn.implicitHeight
+                        ScrollBar.vertical: ScrollBar { }
 
-                                Loader {
-                                    id: previewLoader
-                                    source: Qt.resolvedUrl("toggles/" + model.fileName)
-                                    asynchronous: true
-                                    visible: false // We just want its properties
-                                }
+                        ColumnLayout {
+                            id: addSectionsColumn
+                            width: addControlFlickable.width
+                            spacing: 24
 
-                                Rectangle {
-                                    width: 32; height: 32; radius: 16
-                                    color: Qt.rgba(0.2, 0.5, 1.0, 1.0)
-                                    Image {
-                                        anchors.centerIn: parent
-                                        source: (previewLoader.item && previewLoader.item.iconSource) ? previewLoader.item.iconSource : (shellRoot.icon("list-add-symbolic") || "")
-                                        sourceSize: Qt.size(16, 16)
-                                    }
-                                }
+                            Repeater {
+                                model: togglesFolderModel
 
-                                Text {
-                                    text: (previewLoader.item && previewLoader.item.titleText) ? previewLoader.item.titleText : model.fileName.replace(".qml", "")
-                                    color: "white"
-                                    font.pixelSize: 16
+                                delegate: ColumnLayout {
+                                    id: toggleSection
                                     Layout.fillWidth: true
-                                }
-                            }
+                                    spacing: 10
 
-                            MouseArea {
-                                id: addArea
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                onClicked: {
-                                    let sourcePath = "toggles/" + model.fileName
-                                    // Default spans
-                                    let cSpan = 1
-                                    let rSpan = 1
-                                    if (sourcePath.indexOf("Slider") !== -1) { cSpan = 2; rSpan = 1; }
-                                    if (sourcePath.indexOf("Media") !== -1) { cSpan = 2; rSpan = 2; }
-                                    if (sourcePath.indexOf("Wifi") !== -1 || sourcePath.indexOf("Bluetooth") !== -1 || sourcePath.indexOf("PowerProfile") !== -1) { cSpan = 2; rSpan = 1; }
+                                    // Hide this section until the inspector confirms isControlWidget
+                                    visible: !!(sectionInspector.item && sectionInspector.item.isControlWidget)
+                                    Layout.preferredHeight: visible ? implicitHeight : 0
 
-                                    togglesModel.append({ source: sourcePath, colSpan: cSpan, rowSpan: rSpan })
-                                    addControlPopup.close()
+                                    property string toggleSource: "toggles/" + model.fileName
+
+                                    // Inspector — loads once to read toggle properties
+                                    Loader {
+                                        id: sectionInspector
+                                        source: Qt.resolvedUrl(toggleSection.toggleSource)
+                                        asynchronous: true
+                                        visible: false
+                                        property var modelData: ({ colSpan: 2, rowSpan: 1 })
+                                    }
+
+                                    property bool isSimple: !!(sectionInspector.item && sectionInspector.item.isSimpleToggle)
+
+                                    property var sizes: {
+                                        if (!sectionInspector.item) return [{ colSpan: 1, rowSpan: 1 }];
+                                        let item = sectionInspector.item;
+                                        if (item.availableSizes && Array.isArray(item.availableSizes) && item.availableSizes.length > 0)
+                                            return item.availableSizes;
+                                        if (item.isSimpleToggle)
+                                            return [{ colSpan: 1, rowSpan: 1 }, { colSpan: 2, rowSpan: 1 }, { colSpan: 2, rowSpan: 2 }];
+                                        return [{ colSpan: 2, rowSpan: 1 }];
+                                    }
+
+                                    property string sectionName: {
+                                        if (sectionInspector.item)
+                                            return sectionInspector.item.toggleName || sectionInspector.item.titleText || model.fileName.replace(".qml", "");
+                                        return model.fileName.replace(".qml", "");
+                                    }
+
+                                    // ── Section header ──
+                                    Text {
+                                        text: toggleSection.sectionName
+                                        color: Qt.rgba(1, 1, 1, 0.5)
+                                        font.pixelSize: 13
+                                        font.bold: true
+                                        font.letterSpacing: 0.5
+                                        Layout.fillWidth: true
+                                    }
+
+                                    // ── Size previews in a horizontal flow ──
+                                    Flow {
+                                        Layout.fillWidth: true
+                                        spacing: 12
+
+                                        Repeater {
+                                            model: toggleSection.sizes
+
+                                            delegate: ColumnLayout {
+                                                spacing: 6
+
+                                                property int pColSpan: modelData.colSpan
+                                                property int pRowSpan: modelData.rowSpan
+                                                property real pW: addControlPopup.pvW(pColSpan)
+                                                property real pH: addControlPopup.pvH(pRowSpan)
+                                                property real rW: addControlPopup.realW(pColSpan)
+                                                property real rH: addControlPopup.realH(pRowSpan)
+                                                property real sc: addControlPopup.pvScale
+
+                                                // ── Preview cell ──
+                                                Item {
+                                                    Layout.preferredWidth: pW
+                                                    Layout.preferredHeight: pH
+                                                    clip: true
+
+                                                    // Scale wrapper — renders at real grid size, scaled down
+                                                    Item {
+                                                        width: rW
+                                                        height: rH
+                                                        scale: sc
+                                                        transformOrigin: Item.TopLeft
+
+                                                        Rectangle {
+                                                            id: pvBg
+                                                            anchors.fill: parent
+                                                            property bool isCircle: pColSpan === 1 && pRowSpan === 1
+                                                            radius: isCircle ? Math.min(width, height) / 2 : ((pColSpan >= 2 && pRowSpan >= 2) ? 24 : Math.min(width, height) / 2)
+                                                            color: Qt.rgba(0.15, 0.15, 0.2, 0.8)
+                                                            clip: true
+
+                                                            layer.enabled: true
+                                                            layer.effect: OpacityMask {
+                                                                maskSource: Rectangle {
+                                                                    width: pvBg.width
+                                                                    height: pvBg.height
+                                                                    radius: pvBg.radius
+                                                                }
+                                                            }
+
+                                                            // Toggle content loader
+                                                            Loader {
+                                                                id: pvLoader
+                                                                anchors.fill: parent
+                                                                property var modelData: ({ colSpan: pColSpan, rowSpan: pRowSpan })
+                                                                source: toggleSection.toggleSource
+                                                                asynchronous: true
+                                                            }
+
+                                                            // ── Shell chrome for simple toggles ──
+                                                            Rectangle {
+                                                                id: pvChrome
+                                                                anchors.fill: parent
+                                                                visible: pvLoader.item && pvLoader.item.isSimpleToggle === true
+                                                                radius: pvBg.radius
+                                                                color: {
+                                                                    if (!pvLoader.item || !pvLoader.item.isSimpleToggle) return "transparent";
+                                                                    if (pColSpan === 2 && pRowSpan === 2) return "transparent";
+                                                                    return pvLoader.item.isActive ? (pvLoader.item.activeColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)) : "transparent";
+                                                                }
+
+                                                                // ── Non-2x2 layout (1x1 circles, 2x1 pills) ──
+                                                                GridLayout {
+                                                                    visible: !(pColSpan === 2 && pRowSpan === 2)
+                                                                    anchors.verticalCenter: parent.verticalCenter
+                                                                    x: pColSpan > pRowSpan ? (parent.height / 2 - 16) : 8
+                                                                    width: pColSpan > pRowSpan ? (parent.width - x - 16) : (parent.width - 16)
+                                                                    columns: pColSpan > pRowSpan ? 2 : 1
+                                                                    rowSpacing: 8
+                                                                    columnSpacing: 12
+
+                                                                    Image {
+                                                                        Layout.alignment: Qt.AlignCenter
+                                                                        width: (pColSpan === 1 && pRowSpan === 1) ? 24 : 32
+                                                                        height: width
+                                                                        sourceSize: Qt.size(width, width)
+                                                                        source: (pvLoader.item && pvLoader.item.iconSource) || ""
+                                                                    }
+
+                                                                    ColumnLayout {
+                                                                        visible: pColSpan > 1
+                                                                        Layout.alignment: pColSpan > pRowSpan ? Qt.AlignVCenter | Qt.AlignLeft : Qt.AlignHCenter
+                                                                        Layout.fillWidth: pColSpan > pRowSpan
+                                                                        spacing: 0
+
+                                                                        Text {
+                                                                            text: (pvLoader.item && (pvLoader.item.titleText !== undefined ? pvLoader.item.titleText : pvLoader.item.toggleName)) || ""
+                                                                            color: "white"
+                                                                            font.pixelSize: 14
+                                                                            font.bold: true
+                                                                            Layout.fillWidth: true
+                                                                            horizontalAlignment: pColSpan > pRowSpan ? Text.AlignLeft : Text.AlignHCenter
+                                                                            elide: Text.ElideRight
+                                                                        }
+
+                                                                        Text {
+                                                                            text: (pvLoader.item && pvLoader.item.subtitleText) || ""
+                                                                            visible: text !== ""
+                                                                            color: Qt.rgba(1, 1, 1, 0.6)
+                                                                            font.pixelSize: 12
+                                                                            Layout.fillWidth: true
+                                                                            horizontalAlignment: pColSpan > pRowSpan ? Text.AlignLeft : Text.AlignHCenter
+                                                                            elide: Text.ElideRight
+                                                                        }
+                                                                    }
+                                                                }
+
+                                                                // ── 2x2 layout ──
+                                                                Item {
+                                                                    anchors.fill: parent
+                                                                    visible: pColSpan === 2 && pRowSpan === 2
+
+                                                                    Rectangle {
+                                                                        width: 48; height: 48; radius: 24
+                                                                        anchors.top: parent.top; anchors.topMargin: 16
+                                                                        anchors.left: parent.left; anchors.leftMargin: 16
+                                                                        color: {
+                                                                            if (!pvLoader.item || !pvLoader.item.isSimpleToggle) return Qt.rgba(1, 1, 1, 0.1);
+                                                                            return pvLoader.item.isActive ? (pvLoader.item.activeColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)) : Qt.rgba(1, 1, 1, 0.1);
+                                                                        }
+
+                                                                        Image {
+                                                                            anchors.centerIn: parent
+                                                                            width: 24; height: 24
+                                                                            sourceSize: Qt.size(24, 24)
+                                                                            source: (pvLoader.item && pvLoader.item.iconSource) || ""
+                                                                        }
+                                                                    }
+
+                                                                    ColumnLayout {
+                                                                        anchors.bottom: parent.bottom; anchors.bottomMargin: 16
+                                                                        anchors.left: parent.left; anchors.leftMargin: 16
+                                                                        anchors.right: parent.right; anchors.rightMargin: 16
+                                                                        spacing: 0
+
+                                                                        Text {
+                                                                            text: (pvLoader.item && (pvLoader.item.titleText !== undefined ? pvLoader.item.titleText : pvLoader.item.toggleName)) || ""
+                                                                            color: "white"
+                                                                            font.pixelSize: 14
+                                                                            font.bold: true
+                                                                            Layout.fillWidth: true
+                                                                            elide: Text.ElideRight
+                                                                        }
+
+                                                                        Text {
+                                                                            text: (pvLoader.item && pvLoader.item.subtitleText) || ""
+                                                                            visible: text !== ""
+                                                                            color: Qt.rgba(1, 1, 1, 0.6)
+                                                                            font.pixelSize: 12
+                                                                            Layout.fillWidth: true
+                                                                            elide: Text.ElideRight
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            // Block all interaction on preview
+                                                            MouseArea {
+                                                                anchors.fill: parent
+                                                                z: 100
+                                                            }
+                                                        }
+                                                    }
+
+                                                    // Clickable overlay — tapping adds at this size
+                                                    Rectangle {
+                                                        anchors.fill: parent
+                                                        radius: pvBg.radius * sc
+                                                        color: pvAddMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
+                                                        border.color: pvAddMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.2) : "transparent"
+                                                        border.width: 1
+                                                        Behavior on color { ColorAnimation { duration: 150 } }
+                                                        Behavior on border.color { ColorAnimation { duration: 150 } }
+
+                                                        MouseArea {
+                                                            id: pvAddMouse
+                                                            anchors.fill: parent
+                                                            hoverEnabled: true
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                togglesModel.append({
+                                                                    source: toggleSection.toggleSource,
+                                                                    colSpan: pColSpan,
+                                                                    rowSpan: pRowSpan
+                                                                })
+                                                                addControlPopup.close()
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                // Size label
+                                                Text {
+                                                    text: pColSpan + "×" + pRowSpan
+                                                    color: Qt.rgba(1, 1, 1, 0.3)
+                                                    font.pixelSize: 10
+                                                    Layout.alignment: Qt.AlignHCenter
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Divider between sections
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.topMargin: 4
+                                        height: 1
+                                        color: Qt.rgba(1, 1, 1, 0.06)
+                                    }
                                 }
                             }
                         }

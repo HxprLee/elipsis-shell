@@ -7,10 +7,15 @@ import ".."
 
 Item {
     id: root
+    property bool isControlWidget: true
     property bool isSimpleToggle: true
     property bool isWired: shellRoot.ethernetConnected
-    property string titleText: isWired ? "Ethernet" : (shellRoot.wifiSsid !== "" ? shellRoot.wifiSsid : "Networks")
-    property string subtitleText: isWired ? "Connected" : (shellRoot.wifiSsid !== "" ? "Connected" : (qs.wifiEnabled ? "Not Connected" : "Off"))
+
+    // Dynamic Title support
+    property string titleText: isWired ? "Ethernet" : (shellRoot.networkName !== "" ? shellRoot.networkName : "Networks")
+    property string toggleName: "Network"
+
+    property string subtitleText: isWired ? "Connected" : (shellRoot.networkName !== "" ? "Connected" : (qs.wifiEnabled ? "Not Connected" : "Off"))
     property string iconSource: shellRoot.icon(isWired ? "network-wired-symbolic" : (qs.wifiEnabled ? "network-wireless-symbolic" : "network-wireless-offline-symbolic"))
     property bool isActive: qs.wifiEnabled || isWired
     property color activeColor: Qt.rgba(0.2, 0.5, 1.0, 1.0)
@@ -41,11 +46,7 @@ Item {
                 // Header
                 ExpandedHeader {
                     Layout.fillWidth: true
-                    title: "Networks"
-                    subtitle: root.subtitleText
-                    iconSource: root.iconSource
-                    isActive: root.isActive
-                    activeColor: root.activeColor
+                    toggle: root
                     showSwitch: true
                     onSwitchToggled: root.toggled()
                 }
@@ -99,7 +100,7 @@ Item {
                             onTriggered: {
                                 networksLoader.active = true
                                 if (root.isActive) {
-                                    shellRoot.startWifiScan()
+                                    shellRoot.refreshNetwork()
                                 }
                             }
                         }
@@ -112,7 +113,14 @@ Item {
                         spacing: 12
                         
                         // Internal filtered models to avoid redundant expensive filtering
-                        property var allNetworks: shellRoot.wifiDevice ? shellRoot.wifiDevice.networks.values : []
+                        property var allNetworks: {
+                            let nets = shellRoot.wifiDevice ? shellRoot.wifiDevice.networks.values : [];
+                            return nets.slice().sort((a, b) => {
+                                if (a.connected) return -1;
+                                if (b.connected) return 1;
+                                return (b.signalStrength || 0) - (a.signalStrength || 0);
+                            });
+                        }
                         property var knownNetworks: allNetworks.filter(n => n.known)
                         property var unknownNetworks: allNetworks.filter(n => !n.known)
 
@@ -234,7 +242,7 @@ Item {
                                     width: refreshRow.implicitWidth
                                     height: 24
                                     
-                                    property bool isScanning: !!(shellRoot.wifiDevice && shellRoot.wifiDevice.scannerEnabled)
+                                    property bool isScanning: shellRoot.isScanningNetwork
 
                                     Row {
                                         id: refreshRow
@@ -265,7 +273,7 @@ Item {
                                         id: refreshMouse
                                         anchors.fill: parent
                                         hoverEnabled: true
-                                        onClicked: shellRoot.startWifiScan()
+                                        onClicked: shellRoot.refreshNetwork()
                                     }
                                 }
                             }

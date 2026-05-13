@@ -9,8 +9,9 @@ import ".."
 
 Item {
     id: root
+    property bool isControlWidget: true
     property bool isSimpleToggle: true
-    property string titleText: "Bluetooth"
+    property string toggleName: "Bluetooth"
     property string subtitleText: qs.bluetoothEnabled ? (shellRoot.bluetoothConnected ? shellRoot.bluetoothDeviceName : "On") : "Off"
     property string iconSource: shellRoot.icon(qs.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
     property bool isActive: qs.bluetoothEnabled
@@ -35,11 +36,7 @@ Item {
                 // Header
                 ExpandedHeader {
                     Layout.fillWidth: true
-                    title: "Bluetooth"
-                    subtitle: root.subtitleText
-                    iconSource: root.iconSource
-                    isActive: root.isActive
-                    activeColor: root.activeColor
+                    toggle: root
                     showSwitch: true
                     onSwitchToggled: root.toggled()
                 }

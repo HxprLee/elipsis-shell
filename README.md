@@ -29,7 +29,7 @@ To create custom toggle, create a new QML file in the `components/toggles/` dire
 // MyToggle.qml
 Item {
     property bool isSimpleToggle: true
-    property string titleText: "My Feature"
+    property string toggleName: "My Feature"
     property string iconSource: shellRoot.icon("my-icon-symbolic")
     property bool isActive: someSystemState
     property color activeColor: "#3498db"

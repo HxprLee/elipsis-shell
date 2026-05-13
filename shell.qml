@@ -428,6 +428,7 @@ ShellRoot {
     }
 
     property bool wifiEnabled: Networking.wifiEnabled ?? false
+    property bool wifiConnected: !!(wifiDevice && wifiDevice.connected)
 
     property var ethernetDevice: {
         const devices = Networking.devices.values;
@@ -436,28 +437,43 @@ ShellRoot {
         }
         return null;
     }
-    property string wifiSsid: ""
+    property string networkName: ""
     property string activeEthernetName: ""
     property string ethernetIface: ""
     
     Process {
         id: netPollProc
-        command: ["sh", "-c", "wifi=$(nmcli -t -f TYPE,NAME con show --active | grep -E '802-11-wireless|wireless' | cut -d: -f2 | head -n1); eth=$(nmcli -t -f TYPE,NAME con show --active | grep -E '802-3-ethernet|ethernet|wired' | cut -d: -f2 | head -n1); eth_iface=$(nmcli -t -f DEVICE,TYPE device | grep -iE 'ethernet|wired' | cut -d: -f1 | head -n1); echo \"WIFI=$wifi|ETH=$eth|IFACE=$eth_iface\""]
+        command: ["sh", "-c", "nmcli -t -f TYPE,NAME con show --active | grep -E '802-11-wireless|wireless|802-3-ethernet|ethernet|wired'; nmcli -t -f DEVICE,TYPE device | grep -iE 'ethernet|wired'"]
         running: true
-        stdout: SplitParser {
-            onRead: data => {
-                let text = data.trim();
-                if (text.startsWith("WIFI=")) {
-                    let parts = text.split("|ETH=");
-                    if (parts.length === 2) {
-                        shellRoot.wifiSsid = parts[0].substring(5);
-                        let subParts = parts[1].split("|IFACE=");
-                        if (subParts.length === 2) {
-                            shellRoot.activeEthernetName = subParts[0];
-                            shellRoot.ethernetIface = subParts[1];
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let lines = text.trim().split("\n");
+                let wifi = "";
+                let eth = "";
+                let iface = "";
+                
+                for (let line of lines) {
+                    let parts = line.split(":");
+                    if (parts.length < 2) continue;
+                    let type = parts[0].toLowerCase();
+                    let name = parts[1];
+                    
+                    if (type.includes("wireless") || type.includes("wifi")) {
+                        if (wifi === "") wifi = name;
+                    } else if (type.includes("ethernet") || type.includes("wired")) {
+                        // nmcli device output format is DEVICE:TYPE
+                        // nmcli con show output format is TYPE:NAME
+                        if (line.includes(":") && !name.includes("ethernet") && !name.includes("wired")) {
+                             iface = parts[0];
+                        } else {
+                             eth = name;
                         }
                     }
                 }
+                
+                shellRoot.networkName = wifi;
+                shellRoot.activeEthernetName = eth;
+                if (iface !== "") shellRoot.ethernetIface = iface;
             }
         }
     }
@@ -503,9 +519,12 @@ ShellRoot {
     }
 
     property bool ethernetConnected: activeEthernetName !== ""
-    
+    property bool networkEnabled: wifiConnected || ethernetConnected
+    property bool networkConnected: wifiConnected || ethernetConnected
+    property string networkType: ethernetConnected ? "ethernet" : "wifi"
+
     // Signal level from 0 to 4
-    property int wifiSignalLevel: {
+    property int networkSignalLevel: {
         if (!wifiDevice || !wifiDevice.connected || !wifiDevice.networks) return 0;
         const networks = wifiDevice.networks.values;
         for (let i = 0; i < networks.length; i++) {
@@ -584,19 +603,19 @@ ShellRoot {
         running: false
     }
 
-    function startWifiScan() {
+    property bool isScanningNetwork: networkScanProc.running
+    function refreshNetwork() {
+        if (networkScanProc.running) return;
+
         if (Networking.wifi) {
             Networking.wifi.scan();
         }
         
-        // Fallback for systems where native scan trigger fails
-        if (!wifiScanProc.running) {
-            wifiScanProc.running = true;
-        }
+        networkScanProc.running = true;
     }
 
     Process {
-        id: wifiScanProc
+        id: networkScanProc
         command: ["nmcli", "device", "wifi", "rescan"]
         running: false
     }
@@ -684,6 +703,20 @@ ShellRoot {
         setPowerProfileProc.running = true;
     }
 
+    // ── Caffeine ──
+    property bool caffeineActive: false
+    Process { id: caffeineProc; running: false }
+
+    function setCaffeine(active) {
+        shellRoot.caffeineActive = active;
+        if (active) {
+            caffeineProc.command = ["pkill", "-STOP", "hypridle"];
+        } else {
+            caffeineProc.command = ["pkill", "-CONT", "hypridle"];
+        }
+        caffeineProc.running = true;
+    }
+
     // ── Icon helper (direct lookup for breeze-dark) ──
     function icon(name) {
         let table = {
@@ -715,10 +748,10 @@ ShellRoot {
             "power-profile-power-saver":           "file:///usr/share/icons/breeze-dark/status/22/battery-profile-powersave-symbolic.svg",
             "power-profile-balanced":              "file:///usr/share/icons/breeze-dark/status/22/battery-profile-balanced-symbolic.svg",
             "power-profile-performance":           "file:///usr/share/icons/breeze-dark/status/22/battery-profile-performance-symbolic.svg",
+            "system-suspend-inhibited-symbolic":   "file:///usr/share/icons/breeze-dark/status/24/system-suspend-inhibited.svg",
         };
-        
+
         if (table[name]) return table[name];
-        
         if (name.startsWith("battery-")) {
             return "file:///usr/share/icons/breeze-dark/status/24/" + name + ".svg";
         }

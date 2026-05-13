@@ -18,17 +18,13 @@ Item {
 
     // ── Signals ──
     signal resized(int newColSpan, int newRowSpan)
-    signal dragStarted()
+    signal dragStarted(real grabOffsetX, real grabOffsetY)
+    signal dragMoved(real globalX, real globalY)
     signal dragFinished()
     signal removed()
 
     // ── Drag state ──
     property alias dragActive: dragArea.dragActive
-
-    Drag.active: dragArea.dragActive
-    Drag.keys: ["toggle"]
-    Drag.hotSpot.x: width / 2
-    Drag.hotSpot.y: height / 2
 
     // Dimming overlay (matches iOS 18 jiggle mode)
     Rectangle {
@@ -44,19 +40,29 @@ Item {
         id: dragArea
         anchors.fill: parent
         anchors.margins: 10 // Leave room for handles
-        drag.target: dragActive ? editOverlay.parent : null
-        drag.axis: Drag.XAndYAxis
         property bool dragActive: false
         pressAndHoldInterval: 300
+        property real grabX: 0
+        property real grabY: 0
 
         onPressAndHold: {
             dragActive = true
-            editOverlay.dragStarted()
+            grabX = mouseX
+            grabY = mouseY
+            // Calculate grab offset relative to editOverlay
+            let offsetX = mouseX + dragArea.anchors.margins
+            let offsetY = mouseY + dragArea.anchors.margins
+            editOverlay.dragStarted(offsetX, offsetY)
+        }
+        onPositionChanged: {
+            if (dragActive) {
+                let p = dragArea.mapToItem(null, mouseX, mouseY)
+                editOverlay.dragMoved(p.x, p.y)
+            }
         }
         onReleased: {
             if (dragActive) {
                 dragActive = false
-                editOverlay.Drag.drop()
                 editOverlay.dragFinished()
             }
         }

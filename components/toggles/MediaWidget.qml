@@ -8,9 +8,10 @@ import Quickshell.Services.Mpris
 
 Item {
     id: root
+    property bool isControlWidget: true
     property var modelData: parent ? parent.modelData : ({})
     property var activePlayer: Mpris.players.values.length > 0 ? Mpris.players.values[0] : null
-    property string titleText: "Media Control"
+    property string toggleName: "Media Control"
 
     property var availableSizes: [
         { colSpan: 2, rowSpan: 2 },

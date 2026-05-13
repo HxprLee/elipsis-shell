@@ -3,48 +3,35 @@ import QtQuick.Layouts
 
 // ExpandedHeader.qml — Reusable header for expanded toggle views.
 //
-// Usage (minimal):
+// Usage (with toggle reference — preferred, reads properties automatically):
+//   ExpandedHeader {
+//       toggle: root
+//       showSwitch: true
+//       onSwitchToggled: root.toggled()
+//   }
+//
+// Usage (manual — still supported, overrides toggle properties):
 //   ExpandedHeader {
 //       title: "Wi-Fi"
 //       subtitle: "Connected"
 //       iconSource: root.iconSource
 //       isActive: root.isActive
 //       activeColor: root.activeColor
-//   }
-//
-// Usage (with switch toggle):
-//   ExpandedHeader {
-//       title: "Wi-Fi"
-//       subtitle: root.isActive ? "Connected" : "Off"
-//       iconSource: root.iconSource
-//       isActive: root.isActive
-//       activeColor: root.activeColor
-//       showSwitch: true
-//       onSwitchToggled: root.toggled()
-//   }
-//
-// Usage (with extra trailing content, e.g. a refresh button):
-//   ExpandedHeader {
-//       title: "Wi-Fi"
-//       subtitle: "Connected"
-//       iconSource: root.iconSource
-//       isActive: root.isActive
-//       activeColor: root.activeColor
-//       showSwitch: true
-//       onSwitchToggled: root.toggled()
-//       trailingContent: Rectangle { /* your custom button */ }
 //   }
 
 ColumnLayout {
     id: header
     spacing: 16
 
-    // ── Required properties ──
-    property string title: ""
-    property string subtitle: ""
-    property string iconSource: ""
-    property bool isActive: false
-    property color activeColor: Qt.rgba(0.2, 0.5, 1.0, 1.0)
+    // ── Toggle reference (auto-reads properties) ──
+    property var toggle: null
+
+    // ── Properties — auto-read from toggle if set, overridable ──
+    property string title: toggle ? (toggle.titleText !== undefined ? toggle.titleText : (toggle.toggleName || "")) : ""
+    property string subtitle: toggle ? (toggle.subtitleText || "") : ""
+    property string iconSource: toggle ? (toggle.iconSource || "") : ""
+    property bool isActive: toggle ? !!toggle.isActive : false
+    property color activeColor: toggle ? (toggle.activeColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)) : Qt.rgba(0.2, 0.5, 1.0, 1.0)
 
     // ── Optional: Material 3 switch ──
     property bool showSwitch: false

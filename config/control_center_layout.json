@@ -2,26 +2,11 @@
   {
     "source": "toggles/NetworkToggle.qml",
     "colSpan": 2,
-    "rowSpan": 2
+    "rowSpan": 1
   },
   {
     "source": "toggles/BluetoothToggle.qml",
     "colSpan": 2,
-    "rowSpan": 2
-  },
-  {
-    "source": "toggles/BrightnessSlider.qml",
-    "colSpan": 4,
-    "rowSpan": 1
-  },
-  {
-    "source": "toggles/VolumeSlider.qml",
-    "colSpan": 4,
-    "rowSpan": 1
-  },
-  {
-    "source": "toggles/SettingsToggle.qml",
-    "colSpan": 1,
     "rowSpan": 1
   },
   {
@@ -30,12 +15,32 @@
     "rowSpan": 2
   },
   {
-    "source": "toggles/LockToggle.qml",
+    "source": "toggles/VolumeSlider.qml",
     "colSpan": 1,
     "rowSpan": 2
   },
   {
+    "source": "toggles/BrightnessSlider.qml",
+    "colSpan": 1,
+    "rowSpan": 2
+  },
+  {
+    "source": "toggles/LockToggle.qml",
+    "colSpan": 1,
+    "rowSpan": 1
+  },
+  {
     "source": "toggles/PowerToggle.qml",
+    "colSpan": 1,
+    "rowSpan": 1
+  },
+  {
+    "source": "toggles/CaffeineToggle.qml",
+    "colSpan": 1,
+    "rowSpan": 1
+  },
+  {
+    "source": "toggles/SettingsToggle.qml",
     "colSpan": 1,
     "rowSpan": 1
   },

@@ -32,37 +32,38 @@ Row {
         }
     }
 
-    // 3. WiFi
+    // 3. Network
     Item {
-        width: (shellRoot.wifiEnabled && shellRoot.wifiConnected) ? 20 : 0
+        width: shellRoot.networkEnabled ? 20 : 0
         height: 20
         visible: width > 0
         anchors.verticalCenter: parent.verticalCenter
         Image {
-            id: wifiIcon
+            id: networkIcon
             anchors.fill: parent
             source: {
-                if (!shellRoot.wifiEnabled) return shellRoot.icon("network-wireless-offline-symbolic");
-                if (!shellRoot.wifiConnected) return shellRoot.icon("network-disconnect-symbolic");
+                if (shellRoot.networkType === "ethernet") {
+                    return shellRoot.icon("network-wired-symbolic");
+                }
 
                 let levels = ["none", "weak", "ok", "good", "excellent"];
-                let level = levels[shellRoot.wifiSignalLevel] || "none";
+                let level = levels[shellRoot.networkSignalLevel] || "none";
                 return shellRoot.icon("network-wireless-signal-" + level + "-symbolic");
             }
             sourceSize: Qt.size(24, 24)
             visible: false
         }
         ColorOverlay {
-            anchors.fill: wifiIcon
-            source: wifiIcon
+            anchors.fill: networkIcon
+            source: networkIcon
             color: cluster.color
             Behavior on color { ColorAnimation { duration: 400 } }
         }
 
-        ToolTip.visible: wifiMouse.containsMouse && shellRoot.wifiSsid !== ""
-        ToolTip.text: shellRoot.wifiSsid
+        ToolTip.visible: networkMouse.containsMouse && (shellRoot.ethernetConnected || shellRoot.networkName !== "")
+        ToolTip.text: shellRoot.ethernetConnected ? "Ethernet" : shellRoot.networkName
         MouseArea {
-            id: wifiMouse
+            id: networkMouse
             anchors.fill: parent
             hoverEnabled: true
             acceptedButtons: Qt.NoButton

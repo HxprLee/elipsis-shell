@@ -6,8 +6,9 @@ import ".."
 
 Item {
     id: root
+    property bool isControlWidget: true
     property bool isSimpleToggle: true
-    property string titleText: "Power Profile"
+    property string toggleName: "Power Profile"
     property string subtitleText: {
         if (shellRoot.powerProfile === "power-saver") return "Power Saver";
         if (shellRoot.powerProfile === "performance") return "Performance";
@@ -43,11 +44,7 @@ Item {
                 // Header (no switch toggle)
                 ExpandedHeader {
                     Layout.fillWidth: true
-                    title: "Power Profile"
-                    subtitle: root.subtitleText
-                    iconSource: root.iconSource
-                    isActive: root.isActive
-                    activeColor: root.activeColor
+                    toggle: root
                 }
 
                 // Profile list
