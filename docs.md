@@ -159,7 +159,7 @@ Item {
 }
 ```
 
-That's it — **15 lines**. No visual elements, no layouts. The shell does the rest.
+That's it — **12 lines**. No visual elements, no layouts. The shell does the rest.
 
 #### Dynamic State Example — `PowerProfileToggle.qml`
 
@@ -565,7 +565,7 @@ After creating your file, add it to `config/control_center_layout.json`:
 }
 ```
 
-Or use **Edit Mode** (tap "Edit" in the Control Center header) → tap the **+** button to add your toggle from the picker.
+Or use **Edit Mode** (tap "Edit" in the Control Center header) → tap the **Add a Control** button to add your toggle from the picker.
 
 ---
 
