@@ -4,7 +4,6 @@ import Qt5Compat.GraphicalEffects
 import Quickshell.Services.Mpris
 
 // MediaWidget.qml — MPRIS media player with album art, playback controls,
-// and an iOS-style expanded view with large artwork, progress bar, and transport controls.
 
 Item {
     id: root
@@ -51,7 +50,7 @@ Item {
                 anchors.right: parent.right
                 spacing: 0
 
-                // ── Large Album Art (iOS style) ──
+                // ── Large Album Art ──
                 Item {
                     Layout.fillWidth: true
                     Layout.preferredHeight: width
@@ -119,7 +118,7 @@ Item {
 
                 Item { Layout.preferredHeight: 16 }
 
-                // ── Progress Bar (iOS style) ──
+                // ── Progress Bar ──
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 6
@@ -187,7 +186,7 @@ Item {
 
                 Item { Layout.preferredHeight: 8 }
 
-                // ── Transport Controls (iOS style — large centered play, skip on sides) ──
+                // ── Transport Controls ──
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignHCenter
@@ -239,7 +238,7 @@ Item {
                             sourceSize: Qt.size(48, 48)
                             visible: false
                         }
-                        
+
                         ColorOverlay {
                             anchors.fill: expandedPlayIcon
                             source: expandedPlayIcon
@@ -435,7 +434,7 @@ Item {
                     fillMode: Image.PreserveAspectCrop
                     visible: source !== ""
                 }
-                
+
                 Image {
                     anchors.centerIn: parent
                     visible: parent.children[0].status !== Image.Ready
@@ -497,7 +496,7 @@ Item {
             }
             Rectangle {
                 width: 44; height: 44; radius: 22
-                color: "white" // iOS 18 style solid white for primary action
+                color: "white"
                 opacity: activePlayer && (activePlayer.canTogglePlaying ?? false) ? 1.0 : 0.4
                 Image {
                     id: playIcon2x2
@@ -535,7 +534,7 @@ Item {
         }
     }
 
-    // ── 4x2 iOS 18 Style Layout ──
+    // ── 4x2 Layout ──
     RowLayout {
         anchors.fill: parent
         anchors.margins: 14 // slightly tighter margins to maximize art size
@@ -556,7 +555,7 @@ Item {
                 fillMode: Image.PreserveAspectCrop
                 visible: source !== ""
             }
-            
+
             Image {
                 anchors.centerIn: parent
                 visible: parent.children[0].status !== Image.Ready
@@ -583,7 +582,7 @@ Item {
                     Text {
                         text: activePlayer ? (activePlayer.trackTitle || "Unknown Title") : "No Media"
                         color: "white"
-                        font.pixelSize: 16
+                        font.pixelSize: 14
                         font.bold: true
                         elide: Text.ElideRight
                         Layout.fillWidth: true
@@ -591,7 +590,8 @@ Item {
                     Text {
                         text: activePlayer ? (activePlayer.trackArtist || "Unknown Artist") : ""
                         color: Qt.rgba(1, 1, 1, 0.7)
-                        font.pixelSize: 14
+                        font.pixelSize: 13
+                        font.bold: true
                         elide: Text.ElideRight
                         Layout.fillWidth: true
                         visible: activePlayer !== null

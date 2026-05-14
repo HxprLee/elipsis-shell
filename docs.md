@@ -294,7 +294,7 @@ Item {
 
 **File:** `components/ExpandedHeader.qml`
 
-A drop-in header that gives your expanded view a consistent look: icon badge, title, subtitle, optional trailing content, optional Material 3 switch, and a divider line.
+A drop-in header that gives your expanded view a consistent look: icon badge, title, subtitle, optional trailing content, optional toggle switch, and a divider line.
 
 #### Properties
 
@@ -306,14 +306,20 @@ A drop-in header that gives your expanded view a consistent look: icon badge, ti
 | `iconSource`      | `string` | auto     | No       | Icon for the 48px circular badge. Auto-read from `toggle.iconSource`. |
 | `isActive`        | `bool`   | auto     | No       | Controls active/inactive colors. Auto-read from `toggle.isActive`. |
 | `activeColor`     | `color`  | blue     | No       | Accent color for badge & switch track. Auto-read from `toggle.activeColor`. |
-| `showSwitch`      | `bool`   | `false`  | No       | Shows the toggle switch               |
-| `trailingContent` | `Item`   | —        | No       | Slot for extra buttons before the switch |
+| `showSwitch`      | `bool`   | `false`  | No       | Shows the toggle switch.               |
+| `showButton`      | `bool`   | `false`  | No       | Shows a customizable button instead of the switch. Mutually exclusive with `showSwitch`. |
+| `buttonText`      | `string` | `""`     | No       | Text displayed on the button. |
+| `buttonIconSource`| `string` | `""`     | No       | Icon displayed on the button. |
+| `isButtonActive`  | `bool`   | `false`  | No       | Drives the filled active color state of the button. |
+| `buttonActiveColor`| `color` | auto     | No       | Active color for the button. Defaults to `header.activeColor`. |
+| `trailingContent` | `Item`   | —        | No       | Slot for extra buttons before the switch/button |
 
 #### Signals
 
 | Signal           | Emitted When                    |
 |------------------|---------------------------------|
-| `switchToggled()`| The switch is tapped |
+| `switchToggled()`| The switch is tapped            |
+| `buttonClicked()`| The button is tapped            |
 
 #### Visual Layout
 
@@ -345,6 +351,19 @@ ExpandedHeader {
     toggle: root
     showSwitch: true
     onSwitchToggled: root.toggled()
+}
+```
+
+**With toggle + button:**
+```qml
+ExpandedHeader {
+    Layout.fillWidth: true
+    toggle: root
+    showButton: true
+    buttonText: "Action"
+    buttonIconSource: shellRoot.icon("media-playback-start-symbolic")
+    isButtonActive: root.isActive
+    onButtonClicked: { /* action logic */ }
 }
 ```
 

@@ -17,7 +17,7 @@ Item {
     property string iconSource: shellRoot.icon("power-profile-" + shellRoot.powerProfile)
     property bool isActive: true
     property color activeColor: Qt.rgba(0.2, 0.5, 1.0, 1.0)
-    
+
     signal toggled()
     onToggled: {
         if (shellRoot.powerProfile === "power-saver") {
@@ -56,14 +56,11 @@ Item {
                     Rectangle {
                         Layout.fillWidth: true
                         height: 72
-                        radius: 16
+                        radius: 8
                         color: shellRoot.powerProfile === "power-saver"
                             ? Qt.rgba(0.2, 0.5, 1.0, 0.15)
                             : (saverMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.04))
-                        border.width: shellRoot.powerProfile === "power-saver" ? 2 : 0
-                        border.color: Qt.rgba(0.2, 0.5, 1.0, 0.6)
                         Behavior on color { ColorAnimation { duration: 200 } }
-                        Behavior on border.width { NumberAnimation { duration: 200 } }
 
                         RowLayout {
                             anchors.fill: parent
@@ -137,14 +134,11 @@ Item {
                     Rectangle {
                         Layout.fillWidth: true
                         height: 72
-                        radius: 16
+                        radius: 8
                         color: shellRoot.powerProfile === "balanced"
                             ? Qt.rgba(0.2, 0.5, 1.0, 0.15)
                             : (balancedMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.04))
-                        border.width: shellRoot.powerProfile === "balanced" ? 2 : 0
-                        border.color: Qt.rgba(0.2, 0.5, 1.0, 0.6)
                         Behavior on color { ColorAnimation { duration: 200 } }
-                        Behavior on border.width { NumberAnimation { duration: 200 } }
 
                         RowLayout {
                             anchors.fill: parent
@@ -218,14 +212,11 @@ Item {
                     Rectangle {
                         Layout.fillWidth: true
                         height: 72
-                        radius: 16
+                        radius: 8
                         color: shellRoot.powerProfile === "performance"
                             ? Qt.rgba(0.2, 0.5, 1.0, 0.15)
                             : (perfMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(1, 1, 1, 0.04))
-                        border.width: shellRoot.powerProfile === "performance" ? 2 : 0
-                        border.color: Qt.rgba(0.2, 0.5, 1.0, 0.6)
                         Behavior on color { ColorAnimation { duration: 200 } }
-                        Behavior on border.width { NumberAnimation { duration: 200 } }
 
                         RowLayout {
                             anchors.fill: parent

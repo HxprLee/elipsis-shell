@@ -37,12 +37,20 @@ ColumnLayout {
     property bool showSwitch: false
     signal switchToggled()
 
+    // ── Optional: Button toggle ──
+    property bool showButton: false
+    property string buttonText: ""
+    property string buttonIconSource: ""
+    property bool isButtonActive: false
+    property color buttonActiveColor: header.activeColor
+    signal buttonClicked()
+
     // ── Optional: extra content before the switch (e.g. refresh button) ──
     property alias trailingContent: trailingSlot.data
 
     Item {
         Layout.fillWidth: true
-        height: Math.max(iconBadge.height, titles.implicitHeight, switchItem.height, trailingSlot.implicitHeight)
+        height: Math.max(iconBadge.height, titles.implicitHeight, switchItem.height, buttonItem.height, trailingSlot.implicitHeight)
 
         // Icon badge
         Rectangle {
@@ -64,7 +72,7 @@ ColumnLayout {
             id: titles
             anchors.left: iconBadge.right
             anchors.leftMargin: 16
-            anchors.right: trailingSlot.visible ? trailingSlot.left : (header.showSwitch ? switchItem.left : parent.right)
+            anchors.right: trailingSlot.visible ? trailingSlot.left : (header.showSwitch ? switchItem.left : (header.showButton ? buttonItem.left : parent.right))
             anchors.rightMargin: 16
             anchors.verticalCenter: parent.verticalCenter
             spacing: 2
@@ -92,8 +100,8 @@ ColumnLayout {
             visible: children.length > 0
             implicitWidth: childrenRect.width
             implicitHeight: childrenRect.height
-            anchors.right: header.showSwitch ? switchItem.left : parent.right
-            anchors.rightMargin: header.showSwitch ? 16 : 0
+            anchors.right: header.showSwitch ? switchItem.left : (header.showButton ? buttonItem.left : parent.right)
+            anchors.rightMargin: (header.showSwitch || header.showButton) ? 16 : 0
             anchors.verticalCenter: parent.verticalCenter
         }
 
@@ -138,6 +146,56 @@ ColumnLayout {
                 anchors.margins: -4
                 enabled: header.showSwitch
                 onClicked: header.switchToggled()
+            }
+        }
+
+        // Button Toggle
+        Item {
+            id: buttonItem
+            visible: header.showButton && !header.showSwitch
+            width: visible ? buttonRect.width : 0
+            height: 36
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+
+            Rectangle {
+                id: buttonRect
+                height: 36
+                width: buttonLayout.implicitWidth + 24
+                radius: 18
+                color: header.isButtonActive ? header.buttonActiveColor : Qt.rgba(1, 1, 1, 0.1)
+                border.width: header.isButtonActive ? 0 : 1
+                border.color: header.isButtonActive ? "transparent" : Qt.rgba(1, 1, 1, 0.2)
+                Behavior on color { ColorAnimation { duration: 200 } }
+
+                RowLayout {
+                    id: buttonLayout
+                    anchors.centerIn: parent
+                    spacing: 6
+
+                    Image {
+                        source: header.buttonIconSource
+                        sourceSize: Qt.size(16, 16)
+                        visible: header.buttonIconSource !== ""
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+                    Text {
+                        text: header.buttonText
+                        color: "white"
+                        font.pixelSize: 14
+                        font.bold: true
+                        visible: header.buttonText !== ""
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onEntered: parent.color = header.isButtonActive ? Qt.lighter(header.buttonActiveColor, 1.1) : Qt.rgba(1, 1, 1, 0.15)
+                    onExited: parent.color = header.isButtonActive ? header.buttonActiveColor : Qt.rgba(1, 1, 1, 0.1)
+                    onClicked: header.buttonClicked()
+                }
             }
         }
     }

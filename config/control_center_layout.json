@@ -25,11 +25,6 @@
     "rowSpan": 2
   },
   {
-    "source": "toggles/LockToggle.qml",
-    "colSpan": 1,
-    "rowSpan": 1
-  },
-  {
     "source": "toggles/PowerToggle.qml",
     "colSpan": 1,
     "rowSpan": 1
@@ -40,8 +35,8 @@
     "rowSpan": 1
   },
   {
-    "source": "toggles/SettingsToggle.qml",
-    "colSpan": 1,
+    "source": "toggles/ScreenRecordToggle.qml",
+    "colSpan": 2,
     "rowSpan": 1
   },
   {

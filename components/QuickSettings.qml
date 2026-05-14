@@ -23,7 +23,7 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
     aboveWindows: true
-    
+
     WlrLayershell.keyboardFocus: (isOpen || visible) ? WlrLayershell.OnDemand : WlrLayershell.None
 
     property bool isOpen: shellRoot.panelOpen
@@ -105,7 +105,7 @@ PanelWindow {
             progress = isOpen ? 1.0 : 0.0
             if (isOpen) qs.visible = true
         }
-        
+
         // Calculate physics values
         panelContainer.y = 10 + (progress * 40)
         panelContainer.bloomScale = 0.85 + (progress * 0.15)
@@ -138,14 +138,14 @@ PanelWindow {
         id: bgDim
         anchors.fill: parent
         opacity: 0
-        
+
         Image {
             id: bgBlur
             anchors.fill: parent
             source: shellRoot.blurredWallpaperPath
             cache: false
             fillMode: Image.PreserveAspectCrop
-            
+
             Connections {
                 target: shellRoot
                 function onBlurVersionChanged() {
@@ -156,7 +156,7 @@ PanelWindow {
             }
             visible: shellRoot.usePrecomputedBlur
         }
-        
+
         Rectangle {
             anchors.fill: parent
             color: Qt.rgba(0, 0, 0, 0.3)
@@ -294,7 +294,7 @@ PanelWindow {
                 // Morphing Logic:
                 // Start: StatusBar position (x: 16, y: (40-15)/2 - panelY)
                 // End: Notification Panel position (margin 24)
-                
+
                 property real targetX: 24
                 property real targetY: 24
                 property real startX: 16 - notifPanel.anchors.leftMargin
@@ -302,7 +302,7 @@ PanelWindow {
 
                 x: startX + (targetX - startX) * progress
                 y: startY + (targetY - startY) * progress
-                
+
                 spacing: 16
 
                 Text {
@@ -1004,7 +1004,7 @@ PanelWindow {
                 expandedOverlay.startY = pos.y
                 expandedOverlay.startWidth = sourceRect.width
                 expandedOverlay.startHeight = sourceRect.height
-                
+
                 // Disable animations to instantly snap to the source toggle
                 expandedCard.animationsEnabled = false
                 expandedCard.x = expandedOverlay.startX
@@ -1012,7 +1012,7 @@ PanelWindow {
                 expandedCard.width = expandedOverlay.startWidth
                 expandedCard.height = expandedOverlay.startHeight
                 expandedCard.radius = (expandedOverlay.startWidth === expandedOverlay.startHeight) ? expandedOverlay.startWidth / 2 : 24
-                
+
                 // Use a Timer to ensure QML engine commits the geometry snap before re-enabling animations
                 morphStartTimer.start()
             }
@@ -1187,7 +1187,7 @@ PanelWindow {
                         color: controlPanel.editMode ? Qt.rgba(0.2, 0.5, 1.0, 1.0) : Qt.rgba(1, 1, 1, 0.1)
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.left: parent.left
-                        
+
                         Text {
                             anchors.centerIn: parent
                             text: controlPanel.editMode ? "Done" : "Edit"
@@ -1387,7 +1387,8 @@ PanelWindow {
                                                 text: (widgetLoader.item && widgetLoader.item.subtitleText) || ""
                                                 visible: text !== ""
                                                 color: Qt.rgba(1, 1, 1, 0.6)
-                                                font.pixelSize: 12
+                                                font.pixelSize: 13
+                                                font.bold: true
                                                 Layout.fillWidth: true
                                                 horizontalAlignment: model.colSpan > model.rowSpan ? Text.AlignLeft : Text.AlignHCenter
                                                 elide: Text.ElideRight
@@ -1438,7 +1439,8 @@ PanelWindow {
                                                 text: (widgetLoader.item && widgetLoader.item.subtitleText) || ""
                                                 visible: text !== ""
                                                 color: Qt.rgba(1, 1, 1, 0.6)
-                                                font.pixelSize: 12
+                                                font.pixelSize: 13
+                                                font.bold: true
                                                 Layout.fillWidth: true
                                                 elide: Text.ElideRight
                                             }
@@ -1535,7 +1537,7 @@ PanelWindow {
                     } // closes Repeater
                     } // closes GridLayout
 
-                    // ── Add a Control Button (iOS 18 style) ──
+                    // ── Add a Control Button ──
                     Rectangle {
                         Layout.alignment: Qt.AlignHCenter
                         Layout.bottomMargin: 48
@@ -1595,7 +1597,7 @@ PanelWindow {
             Rectangle {
                 id: addControlPopup
                 anchors.fill: parent
-                radius: 28
+                radius: 16
                 color: Qt.rgba(0.1, 0.1, 0.15, 0.95)
                 visible: opacity > 0
                 opacity: 0
@@ -1973,18 +1975,18 @@ PanelWindow {
                     } else if (widgetItem.expandedHeight > 0) {
                         targetH = widgetItem.expandedHeight;
                     }
-                    
+
                     let targetX = 0;
                     let targetY = (expandedOverlay.height - targetH) / 2;
 
-                    // Set values directly to trigger parallel behaviors. 
-                    // We avoid bindings here because y = (parent.h - height)/2 would cause 
+                    // Set values directly to trigger parallel behaviors.
+                    // We avoid bindings here because y = (parent.h - height)/2 would cause
                     // y to "chase" height as it animates, breaking parallelism.
                     expandedCard.x = targetX;
                     expandedCard.y = targetY;
                     expandedCard.width = targetW;
                     expandedCard.height = targetH;
-                    expandedCard.radius = 32;
+                    expandedCard.radius = 16;
                 }
 
                 function close() {
@@ -2008,7 +2010,7 @@ PanelWindow {
                     property bool animationsEnabled: true
                     color: Qt.rgba(0.15, 0.15, 0.2, 0.95)
                     clip: true
-                    
+
                     Behavior on x { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 400; easing.type: Easing.OutExpo } }
                     Behavior on y { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 400; easing.type: Easing.OutExpo } }
                     Behavior on width { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 400; easing.type: Easing.OutExpo } }
