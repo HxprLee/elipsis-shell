@@ -29,8 +29,10 @@ PanelWindow {
     property bool isOpen: shellRoot.panelOpen
     property real dragOffset: shellRoot.panelDragOffset
     property real progress: {
-        if (!isOpen && dragOffset > 0) return Math.min(1.0, dragOffset / 60.0);
-        if (isOpen && dragOffset < 0) return Math.max(0.0, 1.0 - (Math.abs(dragOffset) / 60.0));
+        if (!isOpen && dragOffset > 0)
+            return Math.min(1.0, dragOffset / 60.0);
+        if (isOpen && dragOffset < 0)
+            return Math.max(0.0, 1.0 - (Math.abs(dragOffset) / 60.0));
         return isOpen ? 1.0 : 0.0;
     }
 
@@ -47,12 +49,11 @@ PanelWindow {
     property int batteryPct: -1
     property string batteryStatus: ""
 
-
     function toggleWifi() {
-        shellRoot.toggleWifi()
+        shellRoot.toggleWifi();
     }
     function toggleBluetooth() {
-        shellRoot.toggleBluetooth()
+        shellRoot.toggleBluetooth();
     }
 
     // ── Brightness ──
@@ -60,76 +61,100 @@ PanelWindow {
     property int maxBrightness: 100
     property string backlightDevice: "intel_backlight"
 
-    Component.onCompleted: { maxBrightnessProc.running = true; brightnessProc.running = true }
+    Component.onCompleted: {
+        maxBrightnessProc.running = true;
+        brightnessProc.running = true;
+    }
 
-    Process { id: maxBrightnessProc; command: ["cat", "/sys/class/backlight/" + qs.backlightDevice + "/max_brightness"]; running: false
-        stdout: SplitParser { onRead: data => { let v = parseInt(data.trim()); if (!isNaN(v)) qs.maxBrightness = v } }
+    Process {
+        id: maxBrightnessProc
+        command: ["cat", "/sys/class/backlight/" + qs.backlightDevice + "/max_brightness"]
+        running: false
+        stdout: SplitParser {
+            onRead: data => {
+                let v = parseInt(data.trim());
+                if (!isNaN(v))
+                    qs.maxBrightness = v;
+            }
+        }
     }
-    Process { id: brightnessProc; command: ["cat", "/sys/class/backlight/" + qs.backlightDevice + "/brightness"]; running: false
-        stdout: SplitParser { onRead: data => { let v = parseInt(data.trim()); if (!isNaN(v) && qs.maxBrightness > 0) qs.brightnessValue = Math.round((v / qs.maxBrightness) * 100) } }
+    Process {
+        id: brightnessProc
+        command: ["cat", "/sys/class/backlight/" + qs.backlightDevice + "/brightness"]
+        running: false
+        stdout: SplitParser {
+            onRead: data => {
+                let v = parseInt(data.trim());
+                if (!isNaN(v) && qs.maxBrightness > 0)
+                    qs.brightnessValue = Math.round((v / qs.maxBrightness) * 100);
+            }
+        }
     }
-    Process { id: setBrightnessProc; running: false }
+    Process {
+        id: setBrightnessProc
+        running: false
+    }
 
     function setBrightness(pct) {
-        brightnessValue = pct
-        let raw = Math.round((pct / 100.0) * maxBrightness)
-        setBrightnessProc.command = ["busctl", "call", "org.freedesktop.login1",
-            "/org/freedesktop/login1/session/auto", "org.freedesktop.login1.Session",
-            "SetBrightness", "ssu", "backlight", backlightDevice, String(raw)]
-        setBrightnessProc.running = true
+        brightnessValue = pct;
+        let raw = Math.round((pct / 100.0) * maxBrightness);
+        setBrightnessProc.command = ["busctl", "call", "org.freedesktop.login1", "/org/freedesktop/login1/session/auto", "org.freedesktop.login1.Session", "SetBrightness", "ssu", "backlight", backlightDevice, String(raw)];
+        setBrightnessProc.running = true;
     }
 
     // ── Drag / open animation ──
     onDragOffsetChanged: {
-        let progress = 0.0
+        let progress = 0.0;
         if (!isOpen && dragOffset > 0) {
             // Dragging down while closed
-            progress = Math.min(1.0, dragOffset / 60.0)
-            qs.visible = true
-            panelBehavior.enabled = false
-            scaleBehavior.enabled = false
-            opacityBehavior.enabled = false
-            bgOpacityBehavior.enabled = false
+            progress = Math.min(1.0, dragOffset / 60.0);
+            qs.visible = true;
+            panelBehavior.enabled = false;
+            scaleBehavior.enabled = false;
+            opacityBehavior.enabled = false;
+            bgOpacityBehavior.enabled = false;
         } else if (isOpen && dragOffset < 0) {
             // Dragging up while open
-            progress = Math.max(0.0, 1.0 - (Math.abs(dragOffset) / 60.0))
-            panelBehavior.enabled = false
-            scaleBehavior.enabled = false
-            opacityBehavior.enabled = false
-            bgOpacityBehavior.enabled = false
+            progress = Math.max(0.0, 1.0 - (Math.abs(dragOffset) / 60.0));
+            panelBehavior.enabled = false;
+            scaleBehavior.enabled = false;
+            opacityBehavior.enabled = false;
+            bgOpacityBehavior.enabled = false;
         } else if (dragOffset === 0) {
-            panelBehavior.enabled = true
-            scaleBehavior.enabled = true
-            opacityBehavior.enabled = true
-            bgOpacityBehavior.enabled = true
-            progress = isOpen ? 1.0 : 0.0
-            if (isOpen) qs.visible = true
+            panelBehavior.enabled = true;
+            scaleBehavior.enabled = true;
+            opacityBehavior.enabled = true;
+            bgOpacityBehavior.enabled = true;
+            progress = isOpen ? 1.0 : 0.0;
+            if (isOpen)
+                qs.visible = true;
         }
 
         // Calculate physics values
-        panelContainer.y = 10 + (progress * 40)
-        panelContainer.bloomScale = 0.85 + (progress * 0.15)
-        panelContainer.opacity = progress > 0 ? 1.0 : 0.0 // Instant opacity for morphing elements
-        bgDim.opacity = progress
+        panelContainer.y = 10 + (progress * 40);
+        panelContainer.bloomScale = 0.85 + (progress * 0.15);
+        panelContainer.opacity = progress > 0 ? 1.0 : 0.0; // Instant opacity for morphing elements
+        bgDim.opacity = progress;
     }
 
     onIsOpenChanged: {
-        panelBehavior.enabled = true
-        scaleBehavior.enabled = true
-        opacityBehavior.enabled = true
-        bgOpacityBehavior.enabled = true
+        panelBehavior.enabled = true;
+        scaleBehavior.enabled = true;
+        opacityBehavior.enabled = true;
+        bgOpacityBehavior.enabled = true;
         if (isOpen) {
-            qs.visible = true
-            panelContainer.y = 50
-            panelContainer.bloomScale = 1.0
-            panelContainer.opacity = 1.0
-            bgDim.opacity = 1.0
+            qs.visible = true;
+            panelContainer.y = 50;
+            panelContainer.bloomScale = 1.0;
+            panelContainer.opacity = 1.0;
+            bgDim.opacity = 1.0;
         } else {
-            if (expandedOverlay.isExpanded) controlPanel.closeExpandedView()
-            panelContainer.y = 10
-            panelContainer.bloomScale = 0.85
-            panelContainer.opacity = 0.0
-            bgDim.opacity = 0.0
+            if (expandedOverlay.isExpanded)
+                controlPanel.closeExpandedView();
+            panelContainer.y = 10;
+            panelContainer.bloomScale = 0.85;
+            panelContainer.opacity = 0.0;
+            bgDim.opacity = 0.0;
         }
     }
 
@@ -149,9 +174,9 @@ PanelWindow {
             Connections {
                 target: shellRoot
                 function onBlurVersionChanged() {
-                    let s = bgBlur.source
-                    bgBlur.source = ""
-                    bgBlur.source = s
+                    let s = bgBlur.source;
+                    bgBlur.source = "";
+                    bgBlur.source = s;
                 }
             }
             visible: shellRoot.usePrecomputedBlur
@@ -164,7 +189,10 @@ PanelWindow {
 
         Behavior on opacity {
             id: bgOpacityBehavior
-            NumberAnimation { duration: 300; easing.type: Easing.OutExpo }
+            NumberAnimation {
+                duration: 300
+                easing.type: Easing.OutExpo
+            }
         }
 
         MouseArea {
@@ -172,33 +200,33 @@ PanelWindow {
             property real startY: 0
             property bool isDragging: false
 
-            onPressed: (mouse) => {
-                startY = mapToItem(null, mouse.x, mouse.y).y
-                isDragging = false
+            onPressed: mouse => {
+                startY = mapToItem(null, mouse.x, mouse.y).y;
+                isDragging = false;
             }
-            onPositionChanged: (mouse) => {
+            onPositionChanged: mouse => {
                 if (isOpen) {
-                    let mappedY = mapToItem(null, mouse.x, mouse.y).y
-                    let dy = mappedY - startY
+                    let mappedY = mapToItem(null, mouse.x, mouse.y).y;
+                    let dy = mappedY - startY;
                     if (dy < -10) {
-                        isDragging = true
-                        shellRoot.panelDragOffset = dy
+                        isDragging = true;
+                        shellRoot.panelDragOffset = dy;
                     }
                 }
             }
-            onReleased: (mouse) => {
+            onReleased: mouse => {
                 if (isDragging) {
                     if (shellRoot.panelDragOffset < -60) {
-                        shellRoot.panelOpen = false
+                        shellRoot.panelOpen = false;
                     }
-                    shellRoot.panelDragOffset = 0
-                    isDragging = false
+                    shellRoot.panelDragOffset = 0;
+                    isDragging = false;
                 } else {
                     // If expanded view is open, close it instead of the whole panel
                     if (expandedOverlay.isExpanded) {
-                        controlPanel.closeExpandedView()
+                        controlPanel.closeExpandedView();
                     } else {
-                        shellRoot.panelOpen = false
+                        shellRoot.panelOpen = false;
                     }
                 }
             }
@@ -216,21 +244,31 @@ PanelWindow {
 
         onOpacityChanged: {
             if (opacity <= 0.01 && !isOpen && dragOffset === 0) {
-                qs.visible = false
+                qs.visible = false;
             }
         }
 
         Behavior on y {
             id: panelBehavior
-            NumberAnimation { duration: 400; easing.type: Easing.OutExpo }
+            NumberAnimation {
+                duration: 400
+                easing.type: Easing.OutExpo
+            }
         }
         Behavior on bloomScale {
             id: scaleBehavior
-            NumberAnimation { duration: 400; easing.type: Easing.OutBack; easing.overshoot: 1.2 }
+            NumberAnimation {
+                duration: 400
+                easing.type: Easing.OutBack
+                easing.overshoot: 1.2
+            }
         }
         Behavior on opacity {
             id: opacityBehavior
-            NumberAnimation { duration: 300; easing.type: Easing.OutExpo }
+            NumberAnimation {
+                duration: 300
+                easing.type: Easing.OutExpo
+            }
         }
 
         MouseArea {
@@ -239,27 +277,27 @@ PanelWindow {
             property real startY: 0
             property bool isDragging: false
 
-            onPressed: (mouse) => {
-                startY = mapToItem(null, mouse.x, mouse.y).y
-                isDragging = false
+            onPressed: mouse => {
+                startY = mapToItem(null, mouse.x, mouse.y).y;
+                isDragging = false;
             }
-            onPositionChanged: (mouse) => {
+            onPositionChanged: mouse => {
                 if (isOpen) {
-                    let mappedY = mapToItem(null, mouse.x, mouse.y).y
-                    let dy = mappedY - startY
+                    let mappedY = mapToItem(null, mouse.x, mouse.y).y;
+                    let dy = mappedY - startY;
                     if (dy < -10) {
-                        isDragging = true
-                        shellRoot.panelDragOffset = dy
+                        isDragging = true;
+                        shellRoot.panelDragOffset = dy;
                     }
                 }
             }
-            onReleased: (mouse) => {
+            onReleased: mouse => {
                 if (isDragging) {
                     if (shellRoot.panelDragOffset < -60) {
-                        shellRoot.panelOpen = false
+                        shellRoot.panelOpen = false;
                     }
-                    shellRoot.panelDragOffset = 0
-                    isDragging = false
+                    shellRoot.panelDragOffset = 0;
+                    isDragging = false;
                 }
             }
         }
@@ -282,10 +320,12 @@ PanelWindow {
             property string timeString: Qt.formatTime(new Date(), "HH:mm")
             property string dateString: Qt.formatDate(new Date(), "dddd, MMMM d")
             Timer {
-                interval: 1000; running: true; repeat: true
+                interval: 1000
+                running: true
+                repeat: true
                 onTriggered: {
-                    notifPanel.timeString = Qt.formatTime(new Date(), "HH:mm")
-                    notifPanel.dateString = Qt.formatDate(new Date(), "dddd, MMMM d")
+                    notifPanel.timeString = Qt.formatTime(new Date(), "HH:mm");
+                    notifPanel.dateString = Qt.formatDate(new Date(), "dddd, MMMM d");
                 }
             }
 
@@ -358,19 +398,26 @@ PanelWindow {
             // Timestamp refresh trigger
             property int timeRefresh: 0
             Timer {
-                interval: 30000; running: true; repeat: true
+                interval: 30000
+                running: true
+                repeat: true
                 onTriggered: notifPanel.timeRefresh++
             }
 
             function relativeTime(ts) {
                 // Use timeRefresh to force re-evaluation
                 void notifPanel.timeRefresh;
-                if (!ts) return "";
+                if (!ts)
+                    return "";
                 let diff = Math.floor((Date.now() - ts) / 1000);
-                if (diff < 30) return "Just now";
-                if (diff < 60) return diff + "s ago";
-                if (diff < 3600) return Math.floor(diff / 60) + "m ago";
-                if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
+                if (diff < 30)
+                    return "Just now";
+                if (diff < 60)
+                    return diff + "s ago";
+                if (diff < 3600)
+                    return Math.floor(diff / 60) + "m ago";
+                if (diff < 86400)
+                    return Math.floor(diff / 3600) + "h ago";
                 return Math.floor(diff / 86400) + "d ago";
             }
 
@@ -384,7 +431,12 @@ PanelWindow {
                 for (let i = 0; i < list.length; i++) {
                     let n = list[i];
                     if (!groups[n.appName]) {
-                        groups[n.appName] = { appName: n.appName, appIcon: n.appIcon, notifications: [], latestTs: n.timestamp || 0 };
+                        groups[n.appName] = {
+                            appName: n.appName,
+                            appIcon: n.appIcon,
+                            notifications: [],
+                            latestTs: n.timestamp || 0
+                        };
                         order.push(n.appName);
                     }
                     groups[n.appName].notifications.push(n);
@@ -392,12 +444,16 @@ PanelWindow {
                         groups[n.appName].latestTs = n.timestamp || 0;
                     }
                     // Keep the most recent icon
-                    if (n.appIcon && n.appIcon !== "") groups[n.appName].appIcon = n.appIcon;
+                    if (n.appIcon && n.appIcon !== "")
+                        groups[n.appName].appIcon = n.appIcon;
                 }
                 // Sort groups by most recent notification
-                order.sort(function(a, b) { return groups[b].latestTs - groups[a].latestTs; });
+                order.sort(function (a, b) {
+                    return groups[b].latestTs - groups[a].latestTs;
+                });
                 let result = [];
-                for (let j = 0; j < order.length; j++) result.push(groups[order[j]]);
+                for (let j = 0; j < order.length; j++)
+                    result.push(groups[order[j]]);
                 return result;
             }
 
@@ -422,7 +478,7 @@ PanelWindow {
                 anchors.rightMargin: 10
                 clip: true
                 contentHeight: notifGroupCol.implicitHeight
-                ScrollBar.vertical: ScrollBar { }
+                ScrollBar.vertical: ScrollBar {}
 
                 ColumnLayout {
                     id: notifGroupCol
@@ -456,7 +512,11 @@ PanelWindow {
                                     height: Math.max(70, stackedCardContent.implicitHeight + 28)
                                     radius: 16
                                     color: stackedCardMouse.containsMouse ? Qt.rgba(0.18, 0.18, 0.24, 0.85) : Qt.rgba(0.15, 0.15, 0.2, 0.7)
-                                    Behavior on color { ColorAnimation { duration: 150 } }
+                                    Behavior on color {
+                                        ColorAnimation {
+                                            duration: 150
+                                        }
+                                    }
                                     z: 10
 
                                     property var notif: group.notifications[0]
@@ -474,13 +534,16 @@ PanelWindow {
 
                                             // App icon — only if provided
                                             Rectangle {
-                                                width: 28; height: 28; radius: 6
+                                                width: 28
+                                                height: 28
+                                                radius: 6
                                                 color: Qt.rgba(1, 1, 1, 0.1)
                                                 visible: stackedTopCard.notif.appIcon !== ""
 
                                                 Image {
                                                     anchors.centerIn: parent
-                                                    width: 20; height: 20
+                                                    width: 20
+                                                    height: 20
                                                     source: (stackedTopCard.notif.appIcon !== "" && stackedTopCard.notif.appIcon.startsWith("/")) ? "file://" + stackedTopCard.notif.appIcon : (stackedTopCard.notif.appIcon || "")
                                                     fillMode: Image.PreserveAspectFit
                                                 }
@@ -562,7 +625,7 @@ PanelWindow {
                                         hoverEnabled: true
                                         onClicked: {
                                             if (group.notifications.length > 1) {
-                                                notifPanel.toggleAppExpanded(group.appName)
+                                                notifPanel.toggleAppExpanded(group.appName);
                                             }
                                         }
                                     }
@@ -575,11 +638,11 @@ PanelWindow {
                                         property bool isSwiping: false
                                         z: 1
 
-                                        onPressed: (mouse) => {
+                                        onPressed: mouse => {
                                             startX = mouse.x;
                                             isSwiping = false;
                                         }
-                                        onPositionChanged: (mouse) => {
+                                        onPositionChanged: mouse => {
                                             let dx = mouse.x - startX;
                                             if (Math.abs(dx) > 10) {
                                                 isSwiping = true;
@@ -601,9 +664,18 @@ PanelWindow {
                                             stackedTopCard.x = 0;
                                         }
 
-                                        Behavior on x { NumberAnimation { duration: 0 } }
+                                        Behavior on x {
+                                            NumberAnimation {
+                                                duration: 0
+                                            }
+                                        }
                                     }
-                                    Behavior on x { NumberAnimation { duration: stackedSwipeMouse.pressed ? 0 : 250; easing.type: Easing.OutCubic } }
+                                    Behavior on x {
+                                        NumberAnimation {
+                                            duration: stackedSwipeMouse.pressed ? 0 : 250
+                                            easing.type: Easing.OutCubic
+                                        }
+                                    }
                                 }
                             }
 
@@ -633,17 +705,28 @@ PanelWindow {
 
                                     // Collapse button (chevron up icon)
                                     Rectangle {
-                                        width: 32; height: 32; radius: 16
+                                        width: 32
+                                        height: 32
+                                        radius: 16
                                         color: collapseHeaderMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.15) : Qt.rgba(1, 1, 1, 0.08)
-                                        Behavior on color { ColorAnimation { duration: 150 } }
+                                        Behavior on color {
+                                            ColorAnimation {
+                                                duration: 150
+                                            }
+                                        }
 
                                         Image {
                                             anchors.centerIn: parent
-                                            width: 16; height: 16
+                                            width: 16
+                                            height: 16
                                             sourceSize: Qt.size(16, 16)
                                             source: shellRoot.icon("go-up-symbolic")
                                             opacity: collapseHeaderMouse.containsMouse ? 1.0 : 0.6
-                                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                                            Behavior on opacity {
+                                                NumberAnimation {
+                                                    duration: 150
+                                                }
+                                            }
                                         }
 
                                         MouseArea {
@@ -657,17 +740,28 @@ PanelWindow {
 
                                     // Clear group button (trash icon)
                                     Rectangle {
-                                        width: 32; height: 32; radius: 16
+                                        width: 32
+                                        height: 32
+                                        radius: 16
                                         color: groupClearMouse.containsMouse ? Qt.rgba(1, 0.3, 0.3, 0.25) : Qt.rgba(1, 1, 1, 0.08)
-                                        Behavior on color { ColorAnimation { duration: 150 } }
+                                        Behavior on color {
+                                            ColorAnimation {
+                                                duration: 150
+                                            }
+                                        }
 
                                         Image {
                                             anchors.centerIn: parent
-                                            width: 16; height: 16
+                                            width: 16
+                                            height: 16
                                             sourceSize: Qt.size(16, 16)
                                             source: shellRoot.icon("edit-clear-all-symbolic")
                                             opacity: groupClearMouse.containsMouse ? 1.0 : 0.5
-                                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                                            Behavior on opacity {
+                                                NumberAnimation {
+                                                    duration: 150
+                                                }
+                                            }
                                         }
 
                                         MouseArea {
@@ -719,11 +813,24 @@ PanelWindow {
                                         height: Math.max(70, cardContent.implicitHeight + 28)
                                         radius: 16
                                         color: cardMouse.containsMouse ? Qt.rgba(0.18, 0.18, 0.24, 0.85) : Qt.rgba(0.15, 0.15, 0.2, 0.7)
-                                        Behavior on color { ColorAnimation { duration: 150 } }
+                                        Behavior on color {
+                                            ColorAnimation {
+                                                duration: 150
+                                            }
+                                        }
                                         opacity: swipeContainer.dismissed ? 0 : 1
-                                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                                        Behavior on opacity {
+                                            NumberAnimation {
+                                                duration: 200
+                                            }
+                                        }
 
-                                        Behavior on x { NumberAnimation { duration: swipeMouse.pressed ? 0 : 250; easing.type: Easing.OutCubic } }
+                                        Behavior on x {
+                                            NumberAnimation {
+                                                duration: swipeMouse.pressed ? 0 : 250
+                                                easing.type: Easing.OutCubic
+                                            }
+                                        }
 
                                         RowLayout {
                                             id: cardContent
@@ -733,14 +840,17 @@ PanelWindow {
 
                                             // App icon — only if provided
                                             Rectangle {
-                                                width: 40; height: 40; radius: 8
+                                                width: 40
+                                                height: 40
+                                                radius: 8
                                                 color: Qt.rgba(1, 1, 1, 0.1)
                                                 Layout.alignment: Qt.AlignTop
                                                 visible: notif.appIcon !== ""
 
                                                 Image {
                                                     anchors.centerIn: parent
-                                                    width: 28; height: 28
+                                                    width: 28
+                                                    height: 28
                                                     source: (notif.appIcon !== "" && notif.appIcon.startsWith("/")) ? "file://" + notif.appIcon : (notif.appIcon || "")
                                                     fillMode: Image.PreserveAspectFit
                                                 }
@@ -773,13 +883,19 @@ PanelWindow {
 
                                                     // Close button — hover only
                                                     Item {
-                                                        width: 20; height: 20
+                                                        width: 20
+                                                        height: 20
                                                         opacity: cardMouse.containsMouse ? 1.0 : 0.0
-                                                        Behavior on opacity { NumberAnimation { duration: 150 } }
+                                                        Behavior on opacity {
+                                                            NumberAnimation {
+                                                                duration: 150
+                                                            }
+                                                        }
 
                                                         Image {
                                                             anchors.centerIn: parent
-                                                            width: 14; height: 14
+                                                            width: 14
+                                                            height: 14
                                                             sourceSize: Qt.size(16, 16)
                                                             source: shellRoot.icon("window-close-symbolic")
                                                             opacity: closeBtnMouse.containsMouse ? 1.0 : 0.6
@@ -825,11 +941,11 @@ PanelWindow {
                                         property real startX: 0
                                         property bool isSwiping: false
 
-                                        onPressed: (mouse) => {
+                                        onPressed: mouse => {
                                             startX = mouse.x;
                                             isSwiping = false;
                                         }
-                                        onPositionChanged: (mouse) => {
+                                        onPositionChanged: mouse => {
                                             let dx = mouse.x - startX;
                                             if (Math.abs(dx) > 10) {
                                                 isSwiping = true;
@@ -901,7 +1017,8 @@ PanelWindow {
             // ── Drag Tracker (invisible item for DropArea hit detection) ──
             Item {
                 id: dragTracker
-                width: 20; height: 20
+                width: 20
+                height: 20
                 visible: false
                 parent: toggleFlickable.contentItem
                 z: 300
@@ -915,17 +1032,61 @@ PanelWindow {
             }
 
             property var defaultLayout: [
-                { source: "toggles/WifiToggle.qml",       colSpan: 2, rowSpan: 1 },
-                { source: "toggles/BluetoothToggle.qml",  colSpan: 2, rowSpan: 1 },
-                { source: "toggles/PowerProfileToggle.qml", colSpan: 2, rowSpan: 1 },
-                { source: "toggles/MediaWidget.qml",      colSpan: 2, rowSpan: 2 },
-                { source: "toggles/BrightnessSlider.qml", colSpan: 2, rowSpan: 1 },
-                { source: "toggles/VolumeSlider.qml",     colSpan: 2, rowSpan: 1 },
-                { source: "toggles/SettingsToggle.qml",   colSpan: 1, rowSpan: 1 },
-                { source: "toggles/LockToggle.qml",       colSpan: 1, rowSpan: 1 },
-                { source: "toggles/PowerToggle.qml",      colSpan: 1, rowSpan: 1 },
-                { source: "toggles/DndToggle.qml",        colSpan: 1, rowSpan: 1 },
-                { source: "toggles/CaffeineToggle.qml",   colSpan: 1, rowSpan: 1 }
+                {
+                    source: "toggles/WifiToggle.qml",
+                    colSpan: 2,
+                    rowSpan: 1
+                },
+                {
+                    source: "toggles/BluetoothToggle.qml",
+                    colSpan: 2,
+                    rowSpan: 1
+                },
+                {
+                    source: "toggles/PowerProfileToggle.qml",
+                    colSpan: 2,
+                    rowSpan: 1
+                },
+                {
+                    source: "toggles/MediaWidget.qml",
+                    colSpan: 2,
+                    rowSpan: 2
+                },
+                {
+                    source: "toggles/BrightnessSlider.qml",
+                    colSpan: 2,
+                    rowSpan: 1
+                },
+                {
+                    source: "toggles/VolumeSlider.qml",
+                    colSpan: 2,
+                    rowSpan: 1
+                },
+                {
+                    source: "toggles/SettingsToggle.qml",
+                    colSpan: 1,
+                    rowSpan: 1
+                },
+                {
+                    source: "toggles/LockToggle.qml",
+                    colSpan: 1,
+                    rowSpan: 1
+                },
+                {
+                    source: "toggles/PowerToggle.qml",
+                    colSpan: 1,
+                    rowSpan: 1
+                },
+                {
+                    source: "toggles/DndToggle.qml",
+                    colSpan: 1,
+                    rowSpan: 1
+                },
+                {
+                    source: "toggles/CaffeineToggle.qml",
+                    colSpan: 1,
+                    rowSpan: 1
+                }
             ]
 
             Component.onCompleted: loadLayoutProc.running = true
@@ -934,11 +1095,7 @@ PanelWindow {
 
             Process {
                 id: fileWatcherProc
-                command: [
-                    "python3", "-c",
-                    "import time, os, sys; p=sys.argv[1]; lm=os.stat(p).st_mtime if os.path.exists(p) else 0;\nwhile True:\n time.sleep(1)\n try: m=os.stat(p).st_mtime\n except: m=0\n if m!=lm:\n  print('changed', flush=True); lm=m",
-                    Qt.resolvedUrl("../config/control_center_layout.json").toString().replace("file://", "")
-                ]
+                command: ["python3", "-c", "import time, os, sys; p=sys.argv[1]; lm=os.stat(p).st_mtime if os.path.exists(p) else 0;\nwhile True:\n time.sleep(1)\n try: m=os.stat(p).st_mtime\n except: m=0\n if m!=lm:\n  print('changed', flush=True); lm=m", Qt.resolvedUrl("../config/control_center_layout.json").toString().replace("file://", "")]
                 running: true
                 stdout: SplitParser {
                     onRead: data => {
@@ -960,15 +1117,15 @@ PanelWindow {
                 stdout: StdioCollector {
                     onStreamFinished: {
                         try {
-                            let items = JSON.parse(text)
+                            let items = JSON.parse(text);
                             if (Array.isArray(items) && items.length > 0) {
-                                controlPanel.applyLayout(items)
+                                controlPanel.applyLayout(items);
                             } else {
-                                controlPanel.applyLayout(controlPanel.defaultLayout)
+                                controlPanel.applyLayout(controlPanel.defaultLayout);
                             }
-                        } catch(e) {
-                            console.warn("Layout load error, using defaults:", e)
-                            controlPanel.applyLayout(controlPanel.defaultLayout)
+                        } catch (e) {
+                            console.warn("Layout load error, using defaults:", e);
+                            controlPanel.applyLayout(controlPanel.defaultLayout);
                         }
                     }
                 }
@@ -980,9 +1137,9 @@ PanelWindow {
             }
 
             function applyLayout(items) {
-                togglesModel.clear()
+                togglesModel.clear();
                 for (let i = 0; i < items.length; i++) {
-                    togglesModel.append(items[i])
+                    togglesModel.append(items[i]);
                 }
             }
 
@@ -990,56 +1147,56 @@ PanelWindow {
                 id: morphStartTimer
                 interval: 20
                 onTriggered: {
-                    expandedCard.animationsEnabled = true
-                    expandedLoader.sourceComponent = expandedOverlay.widgetItem.expandedComponent
-                    expandedOverlay.open()
+                    expandedCard.animationsEnabled = true;
+                    expandedLoader.sourceComponent = expandedOverlay.widgetItem.expandedComponent;
+                    expandedOverlay.open();
                 }
             }
 
             function openExpandedView(sourceRect, widgetItem) {
-                let pos = sourceRect.mapToItem(controlPanel, 0, 0)
-                expandedOverlay.sourceItem = sourceRect
-                expandedOverlay.widgetItem = widgetItem
-                expandedOverlay.startX = pos.x
-                expandedOverlay.startY = pos.y
-                expandedOverlay.startWidth = sourceRect.width
-                expandedOverlay.startHeight = sourceRect.height
+                let pos = sourceRect.mapToItem(controlPanel, 0, 0);
+                expandedOverlay.sourceItem = sourceRect;
+                expandedOverlay.widgetItem = widgetItem;
+                expandedOverlay.startX = pos.x;
+                expandedOverlay.startY = pos.y;
+                expandedOverlay.startWidth = sourceRect.width;
+                expandedOverlay.startHeight = sourceRect.height;
 
                 // Disable animations to instantly snap to the source toggle
-                expandedCard.animationsEnabled = false
-                expandedCard.x = expandedOverlay.startX
-                expandedCard.y = expandedOverlay.startY
-                expandedCard.width = expandedOverlay.startWidth
-                expandedCard.height = expandedOverlay.startHeight
-                expandedCard.radius = (expandedOverlay.startWidth === expandedOverlay.startHeight) ? expandedOverlay.startWidth / 2 : 24
+                expandedCard.animationsEnabled = false;
+                expandedCard.x = expandedOverlay.startX;
+                expandedCard.y = expandedOverlay.startY;
+                expandedCard.width = expandedOverlay.startWidth;
+                expandedCard.height = expandedOverlay.startHeight;
+                expandedCard.radius = (expandedOverlay.startWidth === expandedOverlay.startHeight) ? expandedOverlay.startWidth / 2 : 24;
 
                 // Use a Timer to ensure QML engine commits the geometry snap before re-enabling animations
-                morphStartTimer.start()
+                morphStartTimer.start();
             }
 
             function closeExpandedView() {
-                expandedOverlay.close()
+                expandedOverlay.close();
             }
 
             function saveLayout() {
-                let items = []
+                let items = [];
                 for (let i = 0; i < togglesModel.count; i++) {
-                    let item = togglesModel.get(i)
+                    let item = togglesModel.get(i);
                     items.push({
                         source: item.source,
                         colSpan: item.colSpan,
                         rowSpan: item.rowSpan
-                    })
+                    });
                 }
-                let path = Qt.resolvedUrl("../config/control_center_layout.json").toString().replace("file://", "")
-                controlPanel.ignoreNextChange = true
-                saveLayoutProc.command = ["sh", "-c", "echo \"$1\" > \"$2\"", "sh", JSON.stringify(items, null, 2), path]
-                saveLayoutProc.running = true
+                let path = Qt.resolvedUrl("../config/control_center_layout.json").toString().replace("file://", "");
+                controlPanel.ignoreNextChange = true;
+                saveLayoutProc.command = ["sh", "-c", "echo \"$1\" > \"$2\"", "sh", JSON.stringify(items, null, 2), path];
+                saveLayoutProc.running = true;
             }
 
             function resetLayout() {
-                applyLayout(defaultLayout)
-                saveLayout()
+                applyLayout(defaultLayout);
+                saveLayout();
             }
 
             Rectangle {
@@ -1075,7 +1232,8 @@ PanelWindow {
                             Repeater {
                                 model: SystemTray.items
                                 delegate: Item {
-                                    width: 20; height: 20
+                                    width: 20
+                                    height: 20
                                     Image {
                                         id: trayIconMorph
                                         anchors.fill: parent
@@ -1146,21 +1304,24 @@ PanelWindow {
                             spacing: 6
                             anchors.verticalCenter: parent.verticalCenter
                             Item {
-                                width: 20; height: 20
+                                width: 20
+                                height: 20
                                 anchors.verticalCenter: parent.verticalCenter
                                 Image {
                                     id: battIconMorph
                                     anchors.fill: parent
                                     source: {
-                                        let isCharging = qs.batteryStatus === "Charging"
-                                        let pct = qs.batteryPct
-                                        if (pct < 0) return shellRoot.icon("battery-missing-symbolic")
-                                        let level = Math.max(0, Math.min(100, Math.round(pct / 10) * 10))
-                                        let sLevel = (level < 100 ? (level < 10 ? "00" : "0") : "") + level
-                                        let name = "battery-" + sLevel
-                                        if (isCharging) name += "-charging"
-                                        name += "-symbolic"
-                                        return shellRoot.icon(name)
+                                        let isCharging = qs.batteryStatus === "Charging";
+                                        let pct = qs.batteryPct;
+                                        if (pct < 0)
+                                            return shellRoot.icon("battery-missing-symbolic");
+                                        let level = Math.max(0, Math.min(100, Math.round(pct / 10) * 10));
+                                        let sLevel = (level < 100 ? (level < 10 ? "00" : "0") : "") + level;
+                                        let name = "battery-" + sLevel;
+                                        if (isCharging)
+                                            name += "-charging";
+                                        name += "-symbolic";
+                                        return shellRoot.icon(name);
                                     }
                                     sourceSize: Qt.size(24, 24)
                                     visible: false
@@ -1183,7 +1344,9 @@ PanelWindow {
 
                     // Edit Button
                     Rectangle {
-                        width: 60; height: 28; radius: 14
+                        width: 60
+                        height: 28
+                        radius: 14
                         color: controlPanel.editMode ? Qt.rgba(0.2, 0.5, 1.0, 1.0) : Qt.rgba(1, 1, 1, 0.1)
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.left: parent.left
@@ -1199,394 +1362,446 @@ PanelWindow {
                             anchors.fill: parent
                             onClicked: {
                                 if (controlPanel.editMode) {
-                                    controlPanel.saveLayout()
+                                    controlPanel.saveLayout();
                                 }
-                                controlPanel.editMode = !controlPanel.editMode
+                                controlPanel.editMode = !controlPanel.editMode;
                             }
                         }
                     }
                 }
-            // Toggles Model (populated from JSON at startup)
-            ListModel {
-                id: togglesModel
-            }
+                // Toggles Model (populated from JSON at startup)
+                ListModel {
+                    id: togglesModel
+                }
 
-            // ── Customizable Quick toggles grid ──
-            Flickable {
-                id: toggleFlickable
-                anchors.top: controlHeader.bottom
-                anchors.topMargin: 16
-                height: Math.min(parent.height - y - 24, contentHeight || 0)
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.leftMargin: 24
-                anchors.rightMargin: 24
-                contentHeight: flickableContent.implicitHeight
-                clip: true
-                opacity: progress // Non-morphing content fades in
-                interactive: controlPanel.dragIndex === -1 // Allow scrolling even in edit mode, unless dragging
+                // ── Customizable Quick toggles grid ──
+                Flickable {
+                    id: toggleFlickable
+                    anchors.top: controlHeader.bottom
+                    anchors.topMargin: 16
+                    height: Math.min(parent.height - y - 24, contentHeight || 0)
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 24
+                    anchors.rightMargin: 24
+                    contentHeight: flickableContent.implicitHeight
+                    clip: true
+                    opacity: progress // Non-morphing content fades in
+                    interactive: controlPanel.dragIndex === -1 // Allow scrolling even in edit mode, unless dragging
 
-                ColumnLayout {
-                    id: flickableContent
-                    width: parent.width
-                    spacing: 24
+                    ColumnLayout {
+                        id: flickableContent
+                        width: parent.width
+                        spacing: 24
 
-                    GridLayout {
-                        id: toggleGrid
-                        Layout.fillWidth: true
-                        columns: 4
-                        rowSpacing: 16
-                        columnSpacing: 16
-
-                        Repeater {
-                        model: togglesModel
-                        delegate: Item {
-                            id: delegateItem
-                            property int itemIndex: index
-                            property bool isDragging: controlPanel.dragIndex === index
-
-                            // Keep the layout slot full size so it acts as a placeholder
-                            Layout.columnSpan: model.colSpan
-                            Layout.rowSpan: model.rowSpan
+                        GridLayout {
+                            id: toggleGrid
                             Layout.fillWidth: true
-                            Layout.preferredHeight: (model.rowSpan * ((400 - 48 - 48) / 4)) + ((model.rowSpan - 1) * 16)
+                            columns: 4
+                            rowSpacing: 16
+                            columnSpacing: 16
 
-                            Behavior on x { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
-                            Behavior on y { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
-                            Behavior on Layout.preferredHeight { NumberAnimation { duration: 200 } }
+                            Repeater {
+                                model: togglesModel
+                                delegate: Item {
+                                    id: delegateItem
+                                    property int itemIndex: index
+                                    property bool isDragging: controlPanel.dragIndex === index
 
-                            Timer {
-                                id: moveThrottle
-                                interval: 200
-                            }
+                                    // Keep the layout slot full size so it acts as a placeholder
+                                    Layout.columnSpan: model.colSpan
+                                    Layout.rowSpan: model.rowSpan
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: (model.rowSpan * ((400 - 48 - 48) / 4)) + ((model.rowSpan - 1) * 16)
 
-                            DropArea {
-                                anchors.fill: parent
-                                keys: ["toggle"]
-                                enabled: controlPanel.editMode && !delegateItem.isDragging
-                                onEntered: (drag) => {
-                                    if (!moveThrottle.running && dragTracker.sourceDelegate && dragTracker.sourceDelegate.itemIndex !== delegateItem.itemIndex) {
-                                        let fromIdx = dragTracker.sourceDelegate.itemIndex
-                                        let targetIdx = delegateItem.itemIndex
-                                        togglesModel.move(fromIdx, targetIdx, 1)
-                                        controlPanel.dragIndex = targetIdx
-                                        moveThrottle.start()
+                                    Behavior on x {
+                                        NumberAnimation {
+                                            duration: 300
+                                            easing.type: Easing.OutCubic
+                                        }
                                     }
-                                }
-                            }
+                                    Behavior on y {
+                                        NumberAnimation {
+                                            duration: 300
+                                            easing.type: Easing.OutCubic
+                                        }
+                                    }
+                                    Behavior on Layout.preferredHeight {
+                                        NumberAnimation {
+                                            duration: 200
+                                        }
+                                    }
 
-                            Rectangle {
-                                id: widgetBg
-                                property bool isCircle: model.colSpan === 1 && model.rowSpan === 1
-                                width: isCircle ? Math.min(parent.width, parent.height) : parent.width
-                                height: isCircle ? width : parent.height
-                                x: (parent.width - width) / 2
-                                y: (parent.height - height) / 2
-                                radius: (model.colSpan >= 2 && model.rowSpan >= 2) ? 24 : Math.min(width, height) / 2
-                                color: Qt.rgba(0.15, 0.15, 0.2, 0.8)
-                                clip: true
+                                    Timer {
+                                        id: moveThrottle
+                                        interval: 200
+                                    }
 
-                                property bool isItemPressed: {
-                                    if (controlPanel.editMode) return false;
-                                    if (widgetLoader.item && widgetLoader.item.isSimpleToggle) return simpleToggleMouse.pressed;
-                                    if (widgetLoader.item && "isPressed" in widgetLoader.item) return widgetLoader.item.isPressed;
-                                    return complexHoldArea.pressed;
-                                }
+                                    DropArea {
+                                        anchors.fill: parent
+                                        keys: ["toggle"]
+                                        enabled: controlPanel.editMode && !delegateItem.isDragging
+                                        onEntered: drag => {
+                                            if (!moveThrottle.running && dragTracker.sourceDelegate && dragTracker.sourceDelegate.itemIndex !== delegateItem.itemIndex) {
+                                                let fromIdx = dragTracker.sourceDelegate.itemIndex;
+                                                let targetIdx = delegateItem.itemIndex;
+                                                togglesModel.move(fromIdx, targetIdx, 1);
+                                                controlPanel.dragIndex = targetIdx;
+                                                moveThrottle.start();
+                                            }
+                                        }
+                                    }
 
-                                scale: widgetOverlay.dragActive ? 1.05 : (isItemPressed ? 0.95 : 1.0)
-                                Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                                    Rectangle {
+                                        id: widgetBg
+                                        property bool isCircle: model.colSpan === 1 && model.rowSpan === 1
+                                        width: isCircle ? Math.min(parent.width, parent.height) : parent.width
+                                        height: isCircle ? width : parent.height
+                                        x: (parent.width - width) / 2
+                                        y: (parent.height - height) / 2
+                                        radius: (model.colSpan >= 2 && model.rowSpan >= 2) ? 16 : Math.min(width, height) / 2
+                                        color: Qt.rgba(0.15, 0.15, 0.2, 0.8)
+                                        clip: true
 
-                                layer.enabled: true
-                                layer.effect: OpacityMask {
-                                    maskSource: Rectangle {
+                                        property bool isItemPressed: {
+                                            if (controlPanel.editMode)
+                                                return false;
+                                            if (widgetLoader.item && widgetLoader.item.isSimpleToggle)
+                                                return simpleToggleMouse.pressed;
+                                            if (widgetLoader.item && "isPressed" in widgetLoader.item)
+                                                return widgetLoader.item.isPressed;
+                                            return complexHoldArea.pressed;
+                                        }
+
+                                        scale: widgetOverlay.dragActive ? 1.05 : (isItemPressed ? 0.95 : 1.0)
+                                        Behavior on scale {
+                                            NumberAnimation {
+                                                duration: 150
+                                                easing.type: Easing.OutCubic
+                                            }
+                                        }
+
+                                        layer.enabled: true
+                                        layer.effect: OpacityMask {
+                                            maskSource: Rectangle {
+                                                width: widgetBg.width
+                                                height: widgetBg.height
+                                                radius: widgetBg.radius
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            id: complexHoldArea
+                                            anchors.fill: parent
+                                            enabled: !controlPanel.editMode && widgetLoader.item !== null && widgetLoader.item.hasExpandedView === true && widgetLoader.item.isSimpleToggle !== true
+                                            pressAndHoldInterval: 300
+                                            onPressAndHold: {
+                                                controlPanel.openExpandedView(widgetBg, widgetLoader.item);
+                                            }
+                                        }
+
+                                        Loader {
+                                            id: widgetLoader
+                                            anchors.fill: parent
+                                            property var modelData: model
+                                            source: model.source || ""
+                                            onLoaded: {
+                                                // Connect expandRequested signal for widgets that handle their own hold detection
+                                                if (item && item.expandRequested) {
+                                                    item.expandRequested.connect(function () {
+                                                        if (!controlPanel.editMode && item.hasExpandedView) {
+                                                            controlPanel.openExpandedView(widgetBg, item);
+                                                        }
+                                                    });
+                                                }
+                                            }
+                                        }
+
+                                        // ── Shell-provided toggle chrome for simple toggles ──
+                                        // If the loaded widget has `isSimpleToggle: true`, the shell
+                                        // handles all styling (active bg, icon, label, click).
+                                        Rectangle {
+                                            id: toggleChrome
+                                            anchors.fill: parent
+                                            visible: widgetLoader.item && widgetLoader.item.isSimpleToggle === true
+                                            radius: widgetBg.radius
+                                            color: {
+                                                if (!widgetLoader.item || !widgetLoader.item.isSimpleToggle)
+                                                    return "transparent";
+                                                if (model.colSpan === 2 && model.rowSpan === 2)
+                                                    return "transparent";
+                                                let w = widgetLoader.item;
+                                                return w.isActive ? (w.activeColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)) : "transparent";
+                                            }
+                                            Behavior on color {
+                                                ColorAnimation {
+                                                    duration: 200
+                                                }
+                                            }
+
+                                            // ── Layout for non-2x2 toggles (1x1 circles, 2x1 pills) ──
+                                            GridLayout {
+                                                visible: !(model.colSpan === 2 && model.rowSpan === 2)
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                x: model.colSpan > model.rowSpan ? (parent.height / 2 - 16) : 8
+                                                width: model.colSpan > model.rowSpan ? (parent.width - x - 16) : (parent.width - 16)
+
+                                                columns: model.colSpan > model.rowSpan ? 2 : 1
+                                                rowSpacing: 8
+                                                columnSpacing: 12
+
+                                                Image {
+                                                    Layout.alignment: Qt.AlignCenter
+                                                    width: (model.colSpan === 1 && model.rowSpan === 1) ? 24 : 32
+                                                    height: width
+                                                    sourceSize: Qt.size(width, width)
+                                                    source: (widgetLoader.item && widgetLoader.item.iconSource) || ""
+                                                }
+
+                                                ColumnLayout {
+                                                    visible: model.colSpan > 1
+                                                    Layout.alignment: model.colSpan > model.rowSpan ? Qt.AlignVCenter | Qt.AlignLeft : Qt.AlignHCenter
+                                                    Layout.fillWidth: model.colSpan > model.rowSpan
+                                                    spacing: 0
+
+                                                    Text {
+                                                        text: (widgetLoader.item && (widgetLoader.item.titleText !== undefined ? widgetLoader.item.titleText : widgetLoader.item.toggleName)) || ""
+                                                        color: "white"
+                                                        font.pixelSize: 14
+                                                        font.bold: true
+                                                        Layout.fillWidth: true
+                                                        horizontalAlignment: model.colSpan > model.rowSpan ? Text.AlignLeft : Text.AlignHCenter
+                                                        elide: Text.ElideRight
+                                                    }
+
+                                                    Text {
+                                                        text: (widgetLoader.item && widgetLoader.item.subtitleText) || ""
+                                                        visible: text !== ""
+                                                        color: Qt.rgba(1, 1, 1, 0.6)
+                                                        font.pixelSize: 13
+                                                        font.bold: true
+                                                        Layout.fillWidth: true
+                                                        horizontalAlignment: model.colSpan > model.rowSpan ? Text.AlignLeft : Text.AlignHCenter
+                                                        elide: Text.ElideRight
+                                                    }
+                                                }
+                                            }
+
+                                            // ── Layout for 2x2 toggles ──
+                                            Item {
+                                                anchors.fill: parent
+                                                visible: model.colSpan === 2 && model.rowSpan === 2
+
+                                                Rectangle {
+                                                    width: 48
+                                                    height: 48
+                                                    radius: 24
+                                                    anchors.top: parent.top
+                                                    anchors.topMargin: 16
+                                                    anchors.left: parent.left
+                                                    anchors.leftMargin: 16
+                                                    color: {
+                                                        if (!widgetLoader.item || !widgetLoader.item.isSimpleToggle)
+                                                            return Qt.rgba(1, 1, 1, 0.1);
+                                                        let w = widgetLoader.item;
+                                                        return w.isActive ? (w.activeColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)) : Qt.rgba(1, 1, 1, 0.1);
+                                                    }
+                                                    Behavior on color {
+                                                        ColorAnimation {
+                                                            duration: 200
+                                                        }
+                                                    }
+
+                                                    Image {
+                                                        anchors.centerIn: parent
+                                                        width: 24
+                                                        height: 24
+                                                        sourceSize: Qt.size(24, 24)
+                                                        source: (widgetLoader.item && widgetLoader.item.iconSource) || ""
+                                                    }
+                                                }
+
+                                                ColumnLayout {
+                                                    anchors.bottom: parent.bottom
+                                                    anchors.bottomMargin: 16
+                                                    anchors.left: parent.left
+                                                    anchors.leftMargin: 16
+                                                    anchors.right: parent.right
+                                                    anchors.rightMargin: 16
+                                                    spacing: 0
+
+                                                    Text {
+                                                        text: (widgetLoader.item && (widgetLoader.item.titleText !== undefined ? widgetLoader.item.titleText : widgetLoader.item.toggleName)) || ""
+                                                        color: "white"
+                                                        font.pixelSize: 14
+                                                        font.bold: true
+                                                        Layout.fillWidth: true
+                                                        elide: Text.ElideRight
+                                                    }
+
+                                                    Text {
+                                                        text: (widgetLoader.item && widgetLoader.item.subtitleText) || ""
+                                                        visible: text !== ""
+                                                        color: Qt.rgba(1, 1, 1, 0.6)
+                                                        font.pixelSize: 13
+                                                        font.bold: true
+                                                        Layout.fillWidth: true
+                                                        elide: Text.ElideRight
+                                                    }
+                                                }
+                                            }
+
+                                            MouseArea {
+                                                id: simpleToggleMouse
+                                                anchors.fill: parent
+                                                enabled: !controlPanel.editMode
+                                                pressAndHoldInterval: 300
+                                                onClicked: {
+                                                    if (widgetLoader.item && widgetLoader.item.toggled)
+                                                        widgetLoader.item.toggled();
+                                                }
+                                                onPressAndHold: {
+                                                    if (widgetLoader.item && widgetLoader.item.hasExpandedView) {
+                                                        controlPanel.openExpandedView(widgetBg, widgetLoader.item);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    EditOverlay {
+                                        id: widgetOverlay
+                                        x: widgetBg.x
+                                        y: widgetBg.y
                                         width: widgetBg.width
                                         height: widgetBg.height
-                                        radius: widgetBg.radius
-                                    }
-                                }
+                                        editMode: controlPanel.editMode
+                                        itemIndex: delegateItem.itemIndex
+                                        widgetSource: model.source || ""
+                                        currentColSpan: model.colSpan
+                                        currentRowSpan: model.rowSpan
+                                        availableSizes: widgetLoader.item ? widgetLoader.item.availableSizes : undefined
 
-                                MouseArea {
-                                    id: complexHoldArea
-                                    anchors.fill: parent
-                                    enabled: !controlPanel.editMode && widgetLoader.item !== null && widgetLoader.item.hasExpandedView === true && widgetLoader.item.isSimpleToggle !== true
-                                    pressAndHoldInterval: 300
-                                    onPressAndHold: {
-                                        controlPanel.openExpandedView(widgetBg, widgetLoader.item)
-                                    }
-                                }
+                                        onDragStarted: (grabOffsetX, grabOffsetY) => {
+                                            // Position proxy at widgetBg's location in controlPanel coordinates
+                                            let pos = widgetBg.mapToItem(controlPanel, 0, 0);
+                                            dragProxy.x = pos.x;
+                                            dragProxy.y = pos.y;
+                                            dragProxy.width = widgetBg.width;
+                                            dragProxy.height = widgetBg.height;
+                                            dragProxy.radius = widgetBg.radius;
+                                            dragProxy.grabOffsetX = grabOffsetX;
+                                            dragProxy.grabOffsetY = grabOffsetY;
+                                            dragProxy.visible = true;
 
-                                Loader {
-                                    id: widgetLoader
-                                    anchors.fill: parent
-                                    property var modelData: model
-                                    source: model.source || ""
-                                    onLoaded: {
-                                        // Connect expandRequested signal for widgets that handle their own hold detection
-                                        if (item && item.expandRequested) {
-                                            item.expandRequested.connect(function() {
-                                                if (!controlPanel.editMode && item.hasExpandedView) {
-                                                    controlPanel.openExpandedView(widgetBg, item)
-                                                }
-                                            })
+                                            // Position tracker at widgetBg's center in flickable coordinates
+                                            let fPos = widgetBg.mapToItem(toggleFlickable.contentItem, widgetBg.width / 2, widgetBg.height / 2);
+                                            dragTracker.x = fPos.x - 10;
+                                            dragTracker.y = fPos.y - 10;
+                                            dragTracker.sourceDelegate = delegateItem;
+
+                                            // Ghost the original widget
+                                            widgetBg.opacity = 0.3;
+                                            controlPanel.dragIndex = delegateItem.itemIndex;
+                                        }
+
+                                        onDragMoved: (globalX, globalY) => {
+                                            // Update proxy position in controlPanel coordinates
+                                            let cp = controlPanel.mapFromItem(null, globalX, globalY);
+                                            dragProxy.x = cp.x - dragProxy.grabOffsetX;
+                                            dragProxy.y = cp.y - dragProxy.grabOffsetY;
+
+                                            // Update invisible tracker in flickable coordinates
+                                            let fp = toggleFlickable.contentItem.mapFromItem(null, globalX, globalY);
+                                            dragTracker.x = fp.x - 10;
+                                            dragTracker.y = fp.y - 10;
+                                        }
+
+                                        onDragFinished: {
+                                            // Hide proxy
+                                            dragProxy.visible = false;
+
+                                            // Drop the tracker to trigger DropArea
+                                            dragTracker.Drag.drop();
+                                            dragTracker.sourceDelegate = null;
+
+                                            // Unghost the widget
+                                            widgetBg.opacity = 1.0;
+                                            controlPanel.dragIndex = -1;
+
+                                            // Save layout after reorder
+                                            controlPanel.saveLayout();
+                                        }
+                                        onRemoved: {
+                                            togglesModel.remove(index);
+                                        }
+                                        onResized: (newColSpan, newRowSpan) => {
+                                            togglesModel.setProperty(index, "colSpan", newColSpan);
+                                            togglesModel.setProperty(index, "rowSpan", newRowSpan);
                                         }
                                     }
                                 }
+                            } // closes Repeater
+                        } // closes GridLayout
 
-                                // ── Shell-provided toggle chrome for simple toggles ──
-                                // If the loaded widget has `isSimpleToggle: true`, the shell
-                                // handles all styling (active bg, icon, label, click).
+                        // ── Add a Control Button ──
+                        Rectangle {
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.bottomMargin: 48
+                            width: 160
+                            height: 36
+                            radius: 18
+                            color: Qt.rgba(0.15, 0.15, 0.2, 0.8)
+                            border.color: Qt.rgba(1, 1, 1, 0.1)
+                            border.width: 1
+                            visible: controlPanel.editMode
+
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 8
                                 Rectangle {
-                                    id: toggleChrome
-                                    anchors.fill: parent
-                                    visible: widgetLoader.item && widgetLoader.item.isSimpleToggle === true
-                                    radius: widgetBg.radius
-                                    color: {
-                                        if (!widgetLoader.item || !widgetLoader.item.isSimpleToggle) return "transparent"
-                                        if (model.colSpan === 2 && model.rowSpan === 2) return "transparent"
-                                        let w = widgetLoader.item
-                                        return w.isActive ? (w.activeColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)) : "transparent"
+                                    width: 16
+                                    height: 16
+                                    radius: 8
+                                    color: "transparent"
+                                    border.color: "white"
+                                    border.width: 1
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    Rectangle {
+                                        width: 8
+                                        height: 2
+                                        radius: 1
+                                        color: "white"
+                                        anchors.centerIn: parent
                                     }
-                                    Behavior on color { ColorAnimation { duration: 200 } }
-
-                                    // ── Layout for non-2x2 toggles (1x1 circles, 2x1 pills) ──
-                                    GridLayout {
-                                        visible: !(model.colSpan === 2 && model.rowSpan === 2)
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        x: model.colSpan > model.rowSpan ? (parent.height / 2 - 16) : 8
-                                        width: model.colSpan > model.rowSpan ? (parent.width - x - 16) : (parent.width - 16)
-
-                                        columns: model.colSpan > model.rowSpan ? 2 : 1
-                                        rowSpacing: 8
-                                        columnSpacing: 12
-
-                                        Image {
-                                            Layout.alignment: Qt.AlignCenter
-                                            width: (model.colSpan === 1 && model.rowSpan === 1) ? 24 : 32
-                                            height: width
-                                            sourceSize: Qt.size(width, width)
-                                            source: (widgetLoader.item && widgetLoader.item.iconSource) || ""
-                                        }
-
-                                        ColumnLayout {
-                                            visible: model.colSpan > 1
-                                            Layout.alignment: model.colSpan > model.rowSpan ? Qt.AlignVCenter | Qt.AlignLeft : Qt.AlignHCenter
-                                            Layout.fillWidth: model.colSpan > model.rowSpan
-                                            spacing: 0
-
-                                            Text {
-                                                text: (widgetLoader.item && (widgetLoader.item.titleText !== undefined ? widgetLoader.item.titleText : widgetLoader.item.toggleName)) || ""
-                                                color: "white"
-                                                font.pixelSize: 14
-                                                font.bold: true
-                                                Layout.fillWidth: true
-                                                horizontalAlignment: model.colSpan > model.rowSpan ? Text.AlignLeft : Text.AlignHCenter
-                                                elide: Text.ElideRight
-                                            }
-
-                                            Text {
-                                                text: (widgetLoader.item && widgetLoader.item.subtitleText) || ""
-                                                visible: text !== ""
-                                                color: Qt.rgba(1, 1, 1, 0.6)
-                                                font.pixelSize: 13
-                                                font.bold: true
-                                                Layout.fillWidth: true
-                                                horizontalAlignment: model.colSpan > model.rowSpan ? Text.AlignLeft : Text.AlignHCenter
-                                                elide: Text.ElideRight
-                                            }
-                                        }
-                                    }
-
-                                    // ── Layout for 2x2 toggles ──
-                                    Item {
-                                        anchors.fill: parent
-                                        visible: model.colSpan === 2 && model.rowSpan === 2
-
-                                        Rectangle {
-                                            width: 48; height: 48; radius: 24
-                                            anchors.top: parent.top; anchors.topMargin: 16
-                                            anchors.left: parent.left; anchors.leftMargin: 16
-                                            color: {
-                                                if (!widgetLoader.item || !widgetLoader.item.isSimpleToggle) return Qt.rgba(1, 1, 1, 0.1)
-                                                let w = widgetLoader.item
-                                                return w.isActive ? (w.activeColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)) : Qt.rgba(1, 1, 1, 0.1)
-                                            }
-                                            Behavior on color { ColorAnimation { duration: 200 } }
-
-                                            Image {
-                                                anchors.centerIn: parent
-                                                width: 24; height: 24
-                                                sourceSize: Qt.size(24, 24)
-                                                source: (widgetLoader.item && widgetLoader.item.iconSource) || ""
-                                            }
-                                        }
-
-                                        ColumnLayout {
-                                            anchors.bottom: parent.bottom; anchors.bottomMargin: 16
-                                            anchors.left: parent.left; anchors.leftMargin: 16
-                                            anchors.right: parent.right; anchors.rightMargin: 16
-                                            spacing: 0
-
-                                            Text {
-                                                text: (widgetLoader.item && (widgetLoader.item.titleText !== undefined ? widgetLoader.item.titleText : widgetLoader.item.toggleName)) || ""
-                                                color: "white"
-                                                font.pixelSize: 14
-                                                font.bold: true
-                                                Layout.fillWidth: true
-                                                elide: Text.ElideRight
-                                            }
-
-                                            Text {
-                                                text: (widgetLoader.item && widgetLoader.item.subtitleText) || ""
-                                                visible: text !== ""
-                                                color: Qt.rgba(1, 1, 1, 0.6)
-                                                font.pixelSize: 13
-                                                font.bold: true
-                                                Layout.fillWidth: true
-                                                elide: Text.ElideRight
-                                            }
-                                        }
-                                    }
-
-                                    MouseArea {
-                                        id: simpleToggleMouse
-                                        anchors.fill: parent
-                                        enabled: !controlPanel.editMode
-                                        pressAndHoldInterval: 300
-                                        onClicked: {
-                                            if (widgetLoader.item && widgetLoader.item.toggled)
-                                                widgetLoader.item.toggled()
-                                        }
-                                        onPressAndHold: {
-                                            if (widgetLoader.item && widgetLoader.item.hasExpandedView) {
-                                                controlPanel.openExpandedView(widgetBg, widgetLoader.item)
-                                            }
-                                        }
+                                    Rectangle {
+                                        width: 2
+                                        height: 8
+                                        radius: 1
+                                        color: "white"
+                                        anchors.centerIn: parent
                                     }
                                 }
-
-                                EditOverlay {
-                                    id: widgetOverlay
-                                    anchors.fill: parent
-                                    editMode: controlPanel.editMode
-                                    itemIndex: delegateItem.itemIndex
-                                    widgetSource: model.source || ""
-                                    currentColSpan: model.colSpan
-                                    currentRowSpan: model.rowSpan
-                                    availableSizes: widgetLoader.item ? widgetLoader.item.availableSizes : undefined
-
-                                    onDragStarted: (grabOffsetX, grabOffsetY) => {
-                                        // Position proxy at widgetBg's location in controlPanel coordinates
-                                        let pos = widgetBg.mapToItem(controlPanel, 0, 0)
-                                        dragProxy.x = pos.x
-                                        dragProxy.y = pos.y
-                                        dragProxy.width = widgetBg.width
-                                        dragProxy.height = widgetBg.height
-                                        dragProxy.radius = widgetBg.radius
-                                        dragProxy.grabOffsetX = grabOffsetX
-                                        dragProxy.grabOffsetY = grabOffsetY
-                                        dragProxy.visible = true
-
-                                        // Position tracker at widgetBg's center in flickable coordinates
-                                        let fPos = widgetBg.mapToItem(toggleFlickable.contentItem, widgetBg.width / 2, widgetBg.height / 2)
-                                        dragTracker.x = fPos.x - 10
-                                        dragTracker.y = fPos.y - 10
-                                        dragTracker.sourceDelegate = delegateItem
-
-                                        // Ghost the original widget
-                                        widgetBg.opacity = 0.3
-                                        controlPanel.dragIndex = delegateItem.itemIndex
-                                    }
-
-                                    onDragMoved: (globalX, globalY) => {
-                                        // Update proxy position in controlPanel coordinates
-                                        let cp = controlPanel.mapFromItem(null, globalX, globalY)
-                                        dragProxy.x = cp.x - dragProxy.grabOffsetX
-                                        dragProxy.y = cp.y - dragProxy.grabOffsetY
-
-                                        // Update invisible tracker in flickable coordinates
-                                        let fp = toggleFlickable.contentItem.mapFromItem(null, globalX, globalY)
-                                        dragTracker.x = fp.x - 10
-                                        dragTracker.y = fp.y - 10
-                                    }
-
-                                    onDragFinished: {
-                                        // Hide proxy
-                                        dragProxy.visible = false
-
-                                        // Drop the tracker to trigger DropArea
-                                        dragTracker.Drag.drop()
-                                        dragTracker.sourceDelegate = null
-
-                                        // Unghost the widget
-                                        widgetBg.opacity = 1.0
-                                        controlPanel.dragIndex = -1
-
-                                        // Save layout after reorder
-                                        controlPanel.saveLayout()
-                                    }
-                                    onRemoved: {
-                                        togglesModel.remove(index)
-                                    }
-                                    onResized: (newColSpan, newRowSpan) => {
-                                        togglesModel.setProperty(index, "colSpan", newColSpan)
-                                        togglesModel.setProperty(index, "rowSpan", newRowSpan)
-                                    }
-                                }
-                            }
-                        }
-                    } // closes Repeater
-                    } // closes GridLayout
-
-                    // ── Add a Control Button ──
-                    Rectangle {
-                        Layout.alignment: Qt.AlignHCenter
-                        Layout.bottomMargin: 48
-                        width: 160; height: 36; radius: 18
-                        color: Qt.rgba(0.15, 0.15, 0.2, 0.8)
-                        border.color: Qt.rgba(1, 1, 1, 0.1)
-                        border.width: 1
-                        visible: controlPanel.editMode
-
-                        Row {
-                            anchors.centerIn: parent
-                            spacing: 8
-                            Rectangle {
-                                width: 16; height: 16; radius: 8
-                                color: "transparent"
-                                border.color: "white"
-                                border.width: 1
-                                anchors.verticalCenter: parent.verticalCenter
-                                Rectangle {
-                                    width: 8; height: 2; radius: 1
+                                Text {
+                                    text: "Add a Control"
                                     color: "white"
-                                    anchors.centerIn: parent
-                                }
-                                Rectangle {
-                                    width: 2; height: 8; radius: 1
-                                    color: "white"
-                                    anchors.centerIn: parent
+                                    font.pixelSize: 14
+                                    anchors.verticalCenter: parent.verticalCenter
                                 }
                             }
-                            Text {
-                                text: "Add a Control"
-                                color: "white"
-                                font.pixelSize: 14
-                                anchors.verticalCenter: parent.verticalCenter
-                            }
-                        }
 
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: {
-                                addControlPopup.open()
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: {
+                                    addControlPopup.open();
+                                }
                             }
                         }
                     }
                 }
-            }
-        } // closes background Rectangle
+            } // closes background Rectangle
 
-        // ── Add Control Popup ──
+            // ── Add Control Popup ──
             FolderListModel {
                 id: togglesFolderModel
                 folder: Qt.resolvedUrl("toggles")
@@ -1604,21 +1819,42 @@ PanelWindow {
                 z: 100
                 scale: opacity > 0.5 ? 1.0 : 0.9
 
-                Behavior on opacity { NumberAnimation { duration: 200 } }
-                Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.OutBack } }
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 200
+                    }
+                }
+                Behavior on scale {
+                    NumberAnimation {
+                        duration: 200
+                        easing.type: Easing.OutBack
+                    }
+                }
 
-                function open() { opacity = 1.0 }
-                function close() { opacity = 0.0 }
+                function open() {
+                    opacity = 1.0;
+                }
+                function close() {
+                    opacity = 0.0;
+                }
 
                 // Preview metrics — matches the real grid math
                 readonly property real realCellSize: 76  // (400 - 48 - 48) / 4
                 readonly property real realGridSpacing: 16
                 readonly property real pvScale: 1
 
-                function realW(cs) { return cs * realCellSize + (cs - 1) * realGridSpacing }
-                function realH(rs) { return rs * realCellSize + (rs - 1) * realGridSpacing }
-                function pvW(cs) { return realW(cs) * pvScale }
-                function pvH(rs) { return realH(rs) * pvScale }
+                function realW(cs) {
+                    return cs * realCellSize + (cs - 1) * realGridSpacing;
+                }
+                function realH(rs) {
+                    return rs * realCellSize + (rs - 1) * realGridSpacing;
+                }
+                function pvW(cs) {
+                    return realW(cs) * pvScale;
+                }
+                function pvH(rs) {
+                    return realH(rs) * pvScale;
+                }
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -1636,11 +1872,14 @@ PanelWindow {
                             Layout.fillWidth: true
                         }
                         Rectangle {
-                            width: 32; height: 32; radius: 16
+                            width: 32
+                            height: 32
+                            radius: 16
                             color: Qt.rgba(1, 1, 1, 0.1)
                             Image {
                                 anchors.centerIn: parent
-                                width: 16; height: 16
+                                width: 16
+                                height: 16
                                 sourceSize: Qt.size(24, 24)
                                 source: shellRoot.icon("window-close-symbolic")
                             }
@@ -1658,7 +1897,7 @@ PanelWindow {
                         Layout.fillHeight: true
                         clip: true
                         contentHeight: addSectionsColumn.implicitHeight
-                        ScrollBar.vertical: ScrollBar { }
+                        ScrollBar.vertical: ScrollBar {}
 
                         ColumnLayout {
                             id: addSectionsColumn
@@ -1685,19 +1924,46 @@ PanelWindow {
                                         source: Qt.resolvedUrl(toggleSection.toggleSource)
                                         asynchronous: true
                                         visible: false
-                                        property var modelData: ({ colSpan: 2, rowSpan: 1 })
+                                        property var modelData: ({
+                                                colSpan: 2,
+                                                rowSpan: 1
+                                            })
                                     }
 
                                     property bool isSimple: !!(sectionInspector.item && sectionInspector.item.isSimpleToggle)
 
                                     property var sizes: {
-                                        if (!sectionInspector.item) return [{ colSpan: 1, rowSpan: 1 }];
+                                        if (!sectionInspector.item)
+                                            return [
+                                                {
+                                                    colSpan: 1,
+                                                    rowSpan: 1
+                                                }
+                                            ];
                                         let item = sectionInspector.item;
                                         if (item.availableSizes && Array.isArray(item.availableSizes) && item.availableSizes.length > 0)
                                             return item.availableSizes;
                                         if (item.isSimpleToggle)
-                                            return [{ colSpan: 1, rowSpan: 1 }, { colSpan: 2, rowSpan: 1 }, { colSpan: 2, rowSpan: 2 }];
-                                        return [{ colSpan: 2, rowSpan: 1 }];
+                                            return [
+                                                {
+                                                    colSpan: 1,
+                                                    rowSpan: 1
+                                                },
+                                                {
+                                                    colSpan: 2,
+                                                    rowSpan: 1
+                                                },
+                                                {
+                                                    colSpan: 2,
+                                                    rowSpan: 2
+                                                }
+                                            ];
+                                        return [
+                                            {
+                                                colSpan: 2,
+                                                rowSpan: 1
+                                            }
+                                        ];
                                     }
 
                                     property string sectionName: {
@@ -1769,7 +2035,10 @@ PanelWindow {
                                                             Loader {
                                                                 id: pvLoader
                                                                 anchors.fill: parent
-                                                                property var modelData: ({ colSpan: pColSpan, rowSpan: pRowSpan })
+                                                                property var modelData: ({
+                                                                        colSpan: pColSpan,
+                                                                        rowSpan: pRowSpan
+                                                                    })
                                                                 source: toggleSection.toggleSource
                                                                 asynchronous: true
                                                             }
@@ -1781,8 +2050,10 @@ PanelWindow {
                                                                 visible: pvLoader.item && pvLoader.item.isSimpleToggle === true
                                                                 radius: pvBg.radius
                                                                 color: {
-                                                                    if (!pvLoader.item || !pvLoader.item.isSimpleToggle) return "transparent";
-                                                                    if (pColSpan === 2 && pRowSpan === 2) return "transparent";
+                                                                    if (!pvLoader.item || !pvLoader.item.isSimpleToggle)
+                                                                        return "transparent";
+                                                                    if (pColSpan === 2 && pRowSpan === 2)
+                                                                        return "transparent";
                                                                     return pvLoader.item.isActive ? (pvLoader.item.activeColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)) : "transparent";
                                                                 }
 
@@ -1838,26 +2109,35 @@ PanelWindow {
                                                                     visible: pColSpan === 2 && pRowSpan === 2
 
                                                                     Rectangle {
-                                                                        width: 48; height: 48; radius: 24
-                                                                        anchors.top: parent.top; anchors.topMargin: 16
-                                                                        anchors.left: parent.left; anchors.leftMargin: 16
+                                                                        width: 48
+                                                                        height: 48
+                                                                        radius: 24
+                                                                        anchors.top: parent.top
+                                                                        anchors.topMargin: 16
+                                                                        anchors.left: parent.left
+                                                                        anchors.leftMargin: 16
                                                                         color: {
-                                                                            if (!pvLoader.item || !pvLoader.item.isSimpleToggle) return Qt.rgba(1, 1, 1, 0.1);
+                                                                            if (!pvLoader.item || !pvLoader.item.isSimpleToggle)
+                                                                                return Qt.rgba(1, 1, 1, 0.1);
                                                                             return pvLoader.item.isActive ? (pvLoader.item.activeColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)) : Qt.rgba(1, 1, 1, 0.1);
                                                                         }
 
                                                                         Image {
                                                                             anchors.centerIn: parent
-                                                                            width: 24; height: 24
+                                                                            width: 24
+                                                                            height: 24
                                                                             sourceSize: Qt.size(24, 24)
                                                                             source: (pvLoader.item && pvLoader.item.iconSource) || ""
                                                                         }
                                                                     }
 
                                                                     ColumnLayout {
-                                                                        anchors.bottom: parent.bottom; anchors.bottomMargin: 16
-                                                                        anchors.left: parent.left; anchors.leftMargin: 16
-                                                                        anchors.right: parent.right; anchors.rightMargin: 16
+                                                                        anchors.bottom: parent.bottom
+                                                                        anchors.bottomMargin: 16
+                                                                        anchors.left: parent.left
+                                                                        anchors.leftMargin: 16
+                                                                        anchors.right: parent.right
+                                                                        anchors.rightMargin: 16
                                                                         spacing: 0
 
                                                                         Text {
@@ -1896,8 +2176,16 @@ PanelWindow {
                                                         color: pvAddMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
                                                         border.color: pvAddMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.2) : "transparent"
                                                         border.width: 1
-                                                        Behavior on color { ColorAnimation { duration: 150 } }
-                                                        Behavior on border.color { ColorAnimation { duration: 150 } }
+                                                        Behavior on color {
+                                                            ColorAnimation {
+                                                                duration: 150
+                                                            }
+                                                        }
+                                                        Behavior on border.color {
+                                                            ColorAnimation {
+                                                                duration: 150
+                                                            }
+                                                        }
 
                                                         MouseArea {
                                                             id: pvAddMouse
@@ -1909,8 +2197,8 @@ PanelWindow {
                                                                     source: toggleSection.toggleSource,
                                                                     colSpan: pColSpan,
                                                                     rowSpan: pRowSpan
-                                                                })
-                                                                addControlPopup.close()
+                                                                });
+                                                                addControlPopup.close();
                                                             }
                                                         }
                                                     }
@@ -1941,7 +2229,6 @@ PanelWindow {
                 }
             }
 
-
             // ── Expanded View Overlay ──
             Item {
                 id: expandedOverlay
@@ -1958,14 +2245,18 @@ PanelWindow {
                 property real startHeight: 0
                 property bool isExpanded: false
 
-                Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.OutExpo } }
-
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: 300
+                        easing.type: Easing.OutExpo
+                    }
+                }
 
                 function open() {
-                    isExpanded = true
-                    opacity = 1.0
+                    isExpanded = true;
+                    opacity = 1.0;
 
-                    expandedLoader.sourceComponent = widgetItem.expandedComponent
+                    expandedLoader.sourceComponent = widgetItem.expandedComponent;
 
                     // Calculate target dimensions
                     let targetW = expandedOverlay.width;
@@ -1990,14 +2281,14 @@ PanelWindow {
                 }
 
                 function close() {
-                    isExpanded = false
-                    opacity = 0.0
+                    isExpanded = false;
+                    opacity = 0.0;
                     // Morph back to original slot
-                    expandedCard.x = startX
-                    expandedCard.y = startY
-                    expandedCard.width = startWidth
-                    expandedCard.height = startHeight
-                    expandedCard.radius = (startWidth === startHeight) ? startWidth / 2 : 24
+                    expandedCard.x = startX;
+                    expandedCard.y = startY;
+                    expandedCard.width = startWidth;
+                    expandedCard.height = startHeight;
+                    expandedCard.radius = (startWidth === startHeight) ? startWidth / 2 : 24;
                 }
 
                 MouseArea {
@@ -2011,11 +2302,41 @@ PanelWindow {
                     color: Qt.rgba(0.15, 0.15, 0.2, 0.95)
                     clip: true
 
-                    Behavior on x { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 400; easing.type: Easing.OutExpo } }
-                    Behavior on y { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 400; easing.type: Easing.OutExpo } }
-                    Behavior on width { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 400; easing.type: Easing.OutExpo } }
-                    Behavior on height { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 400; easing.type: Easing.OutExpo } }
-                    Behavior on radius { enabled: expandedCard.animationsEnabled; NumberAnimation { duration: 400; easing.type: Easing.OutExpo } }
+                    Behavior on x {
+                        enabled: expandedCard.animationsEnabled
+                        NumberAnimation {
+                            duration: 400
+                            easing.type: Easing.OutExpo
+                        }
+                    }
+                    Behavior on y {
+                        enabled: expandedCard.animationsEnabled
+                        NumberAnimation {
+                            duration: 400
+                            easing.type: Easing.OutExpo
+                        }
+                    }
+                    Behavior on width {
+                        enabled: expandedCard.animationsEnabled
+                        NumberAnimation {
+                            duration: 400
+                            easing.type: Easing.OutExpo
+                        }
+                    }
+                    Behavior on height {
+                        enabled: expandedCard.animationsEnabled
+                        NumberAnimation {
+                            duration: 400
+                            easing.type: Easing.OutExpo
+                        }
+                    }
+                    Behavior on radius {
+                        enabled: expandedCard.animationsEnabled
+                        NumberAnimation {
+                            duration: 400
+                            easing.type: Easing.OutExpo
+                        }
+                    }
 
                     // Only show loader content when fully expanded to avoid layout jumping during morph
                     Loader {
@@ -2025,12 +2346,15 @@ PanelWindow {
                         focus: true
                         asynchronous: true
                         opacity: expandedOverlay.isExpanded ? 1.0 : 0.0
-                        Behavior on opacity { NumberAnimation { duration: 200 } }
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: 200
+                            }
+                        }
                     }
                 }
             }
         } // closes controlPanel
-
 
         // Hide after close animation
         Timer {

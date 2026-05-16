@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import Quickshell.Bluetooth
 import ".."
+import "../reusables"
 
 // BluetoothToggle.qml — Bluetooth toggle (data-only, styled by the shell).
 
@@ -12,7 +13,19 @@ Item {
     property bool isControlWidget: true
     property bool isSimpleToggle: true
     property string toggleName: "Bluetooth"
-    property string subtitleText: qs.bluetoothEnabled ? (shellRoot.bluetoothConnected ? shellRoot.bluetoothDeviceName : "On") : "Off"
+    property string titleText: {
+        if (!qs.bluetoothEnabled) return "Bluetooth";
+        let count = shellRoot.connectedBluetoothDevices.length;
+        if (count === 1) return shellRoot.bluetoothDeviceName;
+        return "Bluetooth";
+    }
+    property string subtitleText: {
+        if (!qs.bluetoothEnabled) return "Off";
+        let count = shellRoot.connectedBluetoothDevices.length;
+        if (count === 1) return "Connected";
+        if (count > 1) return count + " connected";
+        return "On";
+    }
     property string iconSource: shellRoot.icon(qs.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
     property bool isActive: qs.bluetoothEnabled
     property color activeColor: Qt.rgba(0.2, 0.5, 1.0, 1.0)
@@ -165,78 +178,18 @@ Item {
             // Define the delegate as a reusable component
             Component {
                 id: deviceDelegateComponent
-                Rectangle {
-                    id: delegateRoot
-                    Layout.fillWidth: true
-                    height: modelData.connected ? 40 : 30
-                    radius: 12
-                    color: deviceArea.containsMouse ? Qt.rgba(1, 1, 1, 0.05) : "transparent"
-                    clip: true
-
-                    ColumnLayout {
-                        id: contentColumn
-                        anchors.fill: parent
-                        spacing: 0
-
-                        // Top Row (Always Visible)
-                        RowLayout {
-                            id: mainRow
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: modelData.connected ? 40 : 30
-                            Layout.leftMargin: 12
-                            Layout.rightMargin: 12
-                            spacing: 10
-
-                            Image {
-                                Layout.alignment: Qt.AlignVCenter
-                                sourceSize: Qt.size(20, 20)
-                                source: shellRoot.icon("bluetooth-active-symbolic")
-                                opacity: modelData.connected ? 1.0 : 0.6
-                            }
-
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                Layout.alignment: Qt.AlignVCenter
-                                spacing: 2
-
-                                Text {
-                                    text: modelData.name || modelData.alias || "Unknown Device"
-                                    color: "white"
-                                    font.pixelSize: 15
-                                    font.weight: Font.Medium
-                                    Layout.fillWidth: true
-                                    elide: Text.ElideRight
-                                }
-
-                                Text {
-                                    visible: modelData.connected
-                                    text: "Connected"
-                                    color: root.activeColor
-                                    font.pixelSize: 12
-                                    font.weight: Font.Medium
-                                    Layout.fillWidth: true
-                                }
-                            }
-
-                            Image {
-                                visible: modelData.connected
-                                Layout.alignment: Qt.AlignVCenter
-                                sourceSize: Qt.size(16, 16)
-                                source: shellRoot.icon("object-select-symbolic")
-                            }
-                        }
-                    }
-
-                    MouseArea {
-                        id: deviceArea
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: {
-                            if (modelData.connected) {
-                                modelData.disconnect()
-                            } else {
-                                modelData.connect()
-                            }
+                ToggleListItem {
+                    title: modelData.name || modelData.alias || "Unknown Device"
+                    subtitle: modelData.connected ? "Connected" : ""
+                    subtitleColor: root.activeColor
+                    iconSource: shellRoot.icon("bluetooth-active-symbolic")
+                    iconOpacity: modelData.connected ? 1.0 : 0.6
+                    showCheckmark: modelData.connected
+                    onClicked: {
+                        if (modelData.connected) {
+                            modelData.disconnect()
+                        } else {
+                            modelData.connect()
                         }
                     }
                 }

@@ -35,6 +35,40 @@ Item {
     property var bitrateOptions: ["medium", "high", "very_high", "ultra"]
     property var bitrateLabels: ["Medium", "High", "Very High", "Ultra"]
 
+    property bool _loading: false
+
+    function loadSettings() {
+        if (!shellRoot.toggleDataLoaded) return;
+        _loading = true;
+        audioIndex = shellRoot.getToggleSetting("ScreenRecordToggle", "audioIndex", audioIndex)
+        fpsIndex = shellRoot.getToggleSetting("ScreenRecordToggle", "fpsIndex", fpsIndex)
+        encoderIndex = shellRoot.getToggleSetting("ScreenRecordToggle", "encoderIndex", encoderIndex)
+        resIndex = shellRoot.getToggleSetting("ScreenRecordToggle", "resIndex", resIndex)
+        bitrateIndex = shellRoot.getToggleSetting("ScreenRecordToggle", "bitrateIndex", bitrateIndex)
+        _loading = false;
+    }
+
+    Connections {
+        target: shellRoot
+        function onToggleDataLoadedChanged() {
+            if (shellRoot.toggleDataLoaded) {
+                root.loadSettings();
+            }
+        }
+    }
+
+    // Load saved settings
+    Component.onCompleted: {
+        loadSettings();
+    }
+
+    // Save settings on change
+    onAudioIndexChanged: { if (!_loading) shellRoot.setToggleSetting("ScreenRecordToggle", "audioIndex", audioIndex) }
+    onFpsIndexChanged: { if (!_loading) shellRoot.setToggleSetting("ScreenRecordToggle", "fpsIndex", fpsIndex) }
+    onEncoderIndexChanged: { if (!_loading) shellRoot.setToggleSetting("ScreenRecordToggle", "encoderIndex", encoderIndex) }
+    onResIndexChanged: { if (!_loading) shellRoot.setToggleSetting("ScreenRecordToggle", "resIndex", resIndex) }
+    onBitrateIndexChanged: { if (!_loading) shellRoot.setToggleSetting("ScreenRecordToggle", "bitrateIndex", bitrateIndex) }
+
     property bool isRecording: recordProc.running
 
     function toggleRecording() {

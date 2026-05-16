@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import Quickshell.Networking
 import ".."
+import "../reusables"
 
 Item {
     id: root
@@ -70,7 +71,7 @@ Item {
                             id: networksLoader
                             Layout.fillWidth: true
                             asynchronous: true
-                            active: false // Started by timer
+                            active: true 
                             sourceComponent: networksComponent
                         }
 
@@ -92,25 +93,20 @@ Item {
                                 Layout.alignment: Qt.AlignHCenter
                             }
                         }
-
-                        Timer {
-                            id: delayLoadTimer
-                            interval: 350 // Wait for morph animation to finish
-                            running: true
-                            onTriggered: {
-                                networksLoader.active = true
-                                if (root.isActive) {
-                                    shellRoot.refreshNetwork()
-                                }
-                            }
-                        }
                     }
                 }
 
                 Component {
                     id: networksComponent
                     ColumnLayout {
+                        width: scrollView.width // Use scrollView width directly to prevent collapse
                         spacing: 12
+                        
+                        Component.onCompleted: {
+                            if (root.isActive) {
+                                shellRoot.refreshNetwork()
+                            }
+                        }
                         
                         // Internal filtered models to avoid redundant expensive filtering
                         property var allNetworks: {
@@ -138,57 +134,18 @@ Item {
                                 Layout.leftMargin: 4
                             }
 
-                            Rectangle {
-                                Layout.fillWidth: true
-                                height: 40
-                                radius: 12
-                                color: ethHoverArea.containsMouse ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
-
-                                MouseArea {
-                                    id: ethHoverArea
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    onClicked: {
-                                        if (shellRoot.ethernetConnected) {
-                                            shellRoot.disconnectEthernet();
-                                        } else {
-                                            shellRoot.connectEthernet();
-                                        }
-                                    }
-                                }
-
-                                RowLayout {
-                                    anchors.fill: parent
-                                    Layout.preferredHeight: 40
-                                    anchors.leftMargin: 12
-                                    anchors.rightMargin: 12
-                                    spacing: 10
-
-                                    Image {
-                                        sourceSize: Qt.size(20, 20)
-                                        source: shellRoot.icon(shellRoot.ethernetConnected ? "network-wired-symbolic" : "network-wired-offline-symbolic")
-                                    }
-
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 2
-                                        Text {
-                                            text: shellRoot.activeEthernetName !== "" ? shellRoot.activeEthernetName : (shellRoot.ethernetIface !== "" ? shellRoot.ethernetIface : "Wired Connection")
-                                            color: "white"
-                                            font.pixelSize: 15
-                                            font.weight: Font.Medium
-                                        }
-                                        Text {
-                                            text: shellRoot.ethernetConnected ? "Connected" : "Disconnected"
-                                            color: shellRoot.ethernetConnected ? root.activeColor : Qt.rgba(1, 1, 1, 0.6)
-                                            font.pixelSize: 12
-                                        }
-                                    }
-
-                                    Image {
-                                        visible: shellRoot.ethernetConnected
-                                        sourceSize: Qt.size(16, 16)
-                                        source: shellRoot.icon("object-select-symbolic")
+                            ToggleListItem {
+                                title: shellRoot.activeEthernetName !== "" ? shellRoot.activeEthernetName : (shellRoot.ethernetIface !== "" ? shellRoot.ethernetIface : "Wired Connection")
+                                subtitle: shellRoot.ethernetConnected ? "Connected" : "Disconnected"
+                                subtitleColor: shellRoot.ethernetConnected ? root.activeColor : Qt.rgba(1, 1, 1, 0.6)
+                                iconSource: shellRoot.icon(shellRoot.ethernetConnected ? "network-wired-symbolic" : "network-wired-offline-symbolic")
+                                iconOpacity: shellRoot.ethernetConnected ? 1.0 : 0.6
+                                showCheckmark: shellRoot.ethernetConnected
+                                onClicked: {
+                                    if (shellRoot.ethernetConnected) {
+                                        shellRoot.disconnectEthernet();
+                                    } else {
+                                        shellRoot.connectEthernet();
                                     }
                                 }
                             }
@@ -298,101 +255,33 @@ Item {
 
                 Component {
                     id: networkDelegateComponent
-                    Rectangle {
-                        id: delegateRoot
-                        Layout.fillWidth: true
-                        height: isExpanded ? implicitHeight : (modelData.connected ? 40 : 30)
-                        implicitHeight: contentColumn.implicitHeight + 16
-                        radius: 12
-                        color: netArea.containsMouse ? Qt.rgba(1, 1, 1, 0.05) : "transparent"
-                        clip: true
-
-                        Behavior on height { NumberAnimation { duration: 300; easing.type: Easing.OutExpo } }
-
-                        property bool isExpanded: expandedRoot.selectedNetwork === modelData && !modelData.connected && modelData.security !== 0 && !modelData.known
-
-                        ColumnLayout {
-                            id: contentColumn
-                            anchors.fill: parent
-                            spacing: 0
-
-                            RowLayout {
-                                id: mainRow
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: modelData.connected ? 40 : 30
-                                Layout.leftMargin: 12
-                                Layout.rightMargin: 12
-                                spacing: 10
-
-                                Image {
-                                    sourceSize: Qt.size(20, 20)
-                                    source: {
-                                        if (modelData.signalStrength >= 0.8) return shellRoot.icon("network-wireless-signal-excellent-symbolic");
-                                        if (modelData.signalStrength >= 0.6) return shellRoot.icon("network-wireless-signal-good-symbolic");
-                                        if (modelData.signalStrength >= 0.4) return shellRoot.icon("network-wireless-signal-ok-symbolic");
-                                        if (modelData.signalStrength >= 0.2) return shellRoot.icon("network-wireless-signal-weak-symbolic");
-                                        return shellRoot.icon("network-wireless-signal-none-symbolic");
-                                    }
-                                }
-
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 2
-                                    Text {
-                                        text: modelData.name || "Hidden Network"
-                                        color: "white"
-                                        font.pixelSize: 15
-                                        font.weight: Font.Medium
-                                        Layout.fillWidth: true
-                                        elide: Text.ElideRight
-                                    }
-                                    Text {
-                                        visible: modelData.connected
-                                        text: "Connected"
-                                        color: root.activeColor
-                                        font.pixelSize: 12
-                                        Layout.fillWidth: true
-                                    }
-                                }
-
-                                Image {
-                                    visible: modelData.connected
-                                    sourceSize: Qt.size(16, 16)
-                                    source: shellRoot.icon("object-select-symbolic")
-                                }
-
-                                Image {
-                                    visible: !modelData.connected && modelData.security !== 0
-                                    sourceSize: Qt.size(14, 14)
-                                    source: shellRoot.icon("system-lock-screen-symbolic")
-                                    opacity: 0.5
-                                }
-                            }
-
-                            Loader {
-                                id: passLoader
-                                Layout.fillWidth: true
-                                active: delegateRoot.isExpanded
-                                sourceComponent: passwordInputComponent
-                                visible: delegateRoot.isExpanded
-                            }
+                    ToggleListItem {
+                        title: modelData.name || "Hidden Network"
+                        subtitle: modelData.connected ? "Connected" : ""
+                        subtitleColor: root.activeColor
+                        iconSource: {
+                            if (modelData.signalStrength >= 0.8) return shellRoot.icon("network-wireless-signal-excellent-symbolic");
+                            if (modelData.signalStrength >= 0.6) return shellRoot.icon("network-wireless-signal-good-symbolic");
+                            if (modelData.signalStrength >= 0.4) return shellRoot.icon("network-wireless-signal-ok-symbolic");
+                            if (modelData.signalStrength >= 0.2) return shellRoot.icon("network-wireless-signal-weak-symbolic");
+                            return shellRoot.icon("network-wireless-signal-none-symbolic");
                         }
-
-                        MouseArea {
-                            id: netArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: {
-                                if (modelData.connected) {
-                                    modelData.disconnect();
-                                } else if (modelData.known || modelData.security === 0) {
-                                    shellRoot.connectWifi(modelData.name, "");
-                                } else {
-                                    if (expandedRoot.selectedNetwork === modelData)
-                                        expandedRoot.selectedNetwork = null;
-                                    else
-                                        expandedRoot.selectedNetwork = modelData;
-                                }
+                        iconOpacity: modelData.connected ? 1.0 : 0.6
+                        showCheckmark: modelData.connected
+                        showLock: !modelData.connected && modelData.security !== 0
+                        isExpanded: expandedRoot.selectedNetwork === modelData && !modelData.connected && modelData.security !== 0 && !modelData.known
+                        expandedComponent: passwordInputComponent
+                        
+                        onClicked: {
+                            if (modelData.connected) {
+                                modelData.disconnect();
+                            } else if (modelData.known || modelData.security === 0) {
+                                shellRoot.connectWifi(modelData.name, "");
+                            } else {
+                                if (expandedRoot.selectedNetwork === modelData)
+                                    expandedRoot.selectedNetwork = null;
+                                else
+                                    expandedRoot.selectedNetwork = modelData;
                             }
                         }
                     }
@@ -400,7 +289,7 @@ Item {
 
                 Component {
                     id: passwordInputComponent
-                    ColumnLayout {
+                    RowLayout {
                         Layout.fillWidth: true
                         Layout.leftMargin: 12
                         Layout.rightMargin: 12
@@ -409,7 +298,7 @@ Item {
 
                         Rectangle {
                             Layout.fillWidth: true
-                            height: 40
+                            height: 36
                             radius: 10
                             color: Qt.rgba(1, 1, 1, 0.1)
                             border.color: passInput.activeFocus ? root.activeColor : "transparent"
@@ -427,28 +316,32 @@ Item {
                                 font.pixelSize: 14
                                 background: null
                                 focus: true
+                                onAccepted: {
+                                    shellRoot.connectWifi(modelData.name, passInput.text);
+                                    expandedRoot.selectedNetwork = null;
+                                }
                             }
                         }
 
-                        Button {
-                            id: connectBtn
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 36
-                            contentItem: Text {
-                                text: "Connect"
-                                color: "white"
-                                font.pixelSize: 13
-                                font.bold: true
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
+                        Rectangle {
+                            width: 36
+                            height: 36
+                            radius: 10
+                            color: connectArea.pressed ? Qt.darker(root.activeColor, 1.2) : root.activeColor
+                            
+                            Image {
+                                anchors.centerIn: parent
+                                sourceSize: Qt.size(16, 16)
+                                source: shellRoot.icon("go-next-symbolic")
                             }
-                            background: Rectangle {
-                                radius: 10
-                                color: parent.pressed ? Qt.darker(root.activeColor, 1.2) : root.activeColor
-                            }
-                            onClicked: {
-                                shellRoot.connectWifi(modelData.name, passInput.text);
-                                expandedRoot.selectedNetwork = null;
+                            
+                            MouseArea {
+                                id: connectArea
+                                anchors.fill: parent
+                                onClicked: {
+                                    shellRoot.connectWifi(modelData.name, passInput.text);
+                                    expandedRoot.selectedNetwork = null;
+                                }
                             }
                         }
                     }

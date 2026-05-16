@@ -126,6 +126,56 @@ ShellRoot {
         savePinnedProc.running = true
     }
 
+    // ── Toggle Persistent Data ──
+    property var toggleData: ({})
+    property bool toggleDataLoaded: false
+
+    Process {
+        id: loadToggleDataProc
+        command: ["cat", Qt.resolvedUrl("config/toggle_data.json").toString().replace("file://", "")]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    shellRoot.toggleData = JSON.parse(text) || {};
+                } catch(e) { 
+                    console.error("Toggle data load error:", e); 
+                    shellRoot.toggleData = {};
+                }
+                shellRoot.toggleDataLoaded = true;
+            }
+        }
+    }
+
+    FileView {
+        path: Qt.resolvedUrl("config/toggle_data.json").toString().replace("file://", "")
+        watchChanges: true
+        onFileChanged: loadToggleDataProc.running = true
+    }
+
+    Process { id: saveToggleDataProc; running: false }
+
+    function saveToggleData() {
+        let path = Qt.resolvedUrl("config/toggle_data.json").toString().replace("file://", "");
+        // Use bash to pass the JSON string securely
+        saveToggleDataProc.command = ["sh", "-c", "echo \"$1\" > \"$2\"", "sh", JSON.stringify(toggleData, null, 2), path];
+        saveToggleDataProc.running = true;
+    }
+
+    function getToggleSetting(toggleId, key, defaultValue) {
+        if (!toggleData[toggleId]) return defaultValue;
+        if (toggleData[toggleId][key] === undefined) return defaultValue;
+        return toggleData[toggleId][key];
+    }
+
+    function setToggleSetting(toggleId, key, value) {
+        let currentData = Object.assign({}, toggleData);
+        if (!currentData[toggleId]) currentData[toggleId] = {};
+        currentData[toggleId][key] = value;
+        toggleData = currentData; // Trigger binding updates
+        saveToggleData();
+    }
+
     function movePinnedApp(fromId, toId) {
         let copy = pinnedApps.map(id => id.toLowerCase());
         let fid = fromId.toLowerCase();
@@ -565,22 +615,19 @@ ShellRoot {
             shellRoot.bluetoothEnabledManual = (code === 0);
         }
     }
-    property bool bluetoothConnected: {
-        if (!Bluetooth.devices) return false;
-        const devices = Bluetooth.devices.values;
-        for (let i = 0; i < devices.length; i++) {
-            if (devices[i].connected) return true;
-        }
-        return false;
-    }
+    property bool bluetoothConnected: connectedBluetoothDevices.length > 0
 
     property string bluetoothDeviceName: {
-        if (!Bluetooth.devices) return "";
-        const devices = Bluetooth.devices.values;
-        for (let i = 0; i < devices.length; i++) {
-            if (devices[i].connected) return devices[i].name || devices[i].alias || "Connected";
+        if (connectedBluetoothDevices.length > 0) {
+            let d = connectedBluetoothDevices[0];
+            return d.name || d.alias || "Connected";
         }
         return "";
+    }
+
+    property var connectedBluetoothDevices: {
+        if (!Bluetooth.devices) return [];
+        return Bluetooth.devices.values.filter(d => d.connected);
     }
 
     property bool bluetoothScanningManual: btScanProc.running
