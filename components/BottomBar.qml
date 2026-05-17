@@ -184,12 +184,12 @@ PanelWindow {
                 if (internal.isSwipe) {
                     // Horizontal swipe → switch workspace
                     if (Math.abs(dx) > 100) {
-                        Hyprland.dispatch("workspace " + (dx < 0 ? "+1" : "-1"))
+                        Hyprland.dispatch("hl.dsp.focus({ workspace = '" + (dx < 0 ? "+1" : "-1") + "' })")
                     }
 
                     if (dy < -30 && !_switcherTriggered) {
                         if (velocity > 0.8) {
-                            Hyprland.dispatch("killactive")
+                            Hyprland.dispatch("hl.dsp.window.close()")
                             root.setBarState("handle", true)
                         } else if (barState !== "overlay") {
                             root.setBarState("overlay")
@@ -452,7 +452,7 @@ PanelWindow {
                                 return
                             }
                             if (model.isRunning && model.address) {
-                                Hyprland.dispatch("focuswindow address:" + model.address)
+                                Hyprland.dispatch("hl.dsp.focus({ window = 'address:" + model.address + "' })")
                             } else if (model.entry) {
                                 model.entry.execute()
                             } else {

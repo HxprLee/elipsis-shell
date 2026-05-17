@@ -254,31 +254,27 @@ PanelWindow {
                         console.log("DROP EVENT FIRED!");
                         
                         let addr = "";
-                        if (drop.hasText && drop.text !== "") {
+                        if (drop.source && drop.source.windowAddr) {
+                            addr = drop.source.windowAddr;
+                        } else if (drop.hasText && drop.text !== "") {
                             addr = drop.text;
-                        } else if (drop.keys.indexOf("window-address") !== -1) {
-                            addr = drop.getDataAsText("window-address");
-                        } else if (drop.keys.indexOf("text/plain") !== -1) {
-                            addr = drop.getDataAsText("text/plain");
-                        } else if (drop.keys.indexOf("text") !== -1) {
-                            addr = drop.getDataAsText("text");
                         }
                         
                         if (addr) {
-                            // Ensure address: prefix is only added once
                             let finalAddr = addr.toString();
                             if (!finalAddr.startsWith("address:")) {
                                 finalAddr = "address:" + finalAddr;
                             }
                             
                             console.log("SUCCESS: Moving window " + finalAddr + " to workspace " + workspace.id);
-                            Hyprland.dispatch("movetoworkspacesilent " + workspace.id + "," + finalAddr);
+                            // Using window key for the selector and follow=false for silent move
+                            Hyprland.dispatch("hl.dsp.window.move({ workspace = " + workspace.id + ", window = '" + finalAddr + "', follow = false })");
                             drop.accept(Qt.MoveAction);
                         } else {
-                            console.log("ERROR: Drop had no payload.");
+                            console.log("ERROR: Drop had no payload. Source exists: " + !!drop.source);
                         }
                         
-                        root.forceResetDrag();
+                        Qt.callLater(root.forceResetDrag);
                     }
                     
                     onEntered: (drag) => {
@@ -291,7 +287,7 @@ PanelWindow {
                         anchors.fill: parent
                         hoverEnabled: true
                         onClicked: {
-                            Hyprland.dispatch("workspace " + workspace.id);
+                            Hyprland.dispatch("hl.dsp.focus({ workspace = " + workspace.id + " })");
                             closeTimer.restart();
                         }
                     }
@@ -464,6 +460,7 @@ PanelWindow {
                         holdTimer.stop()
                         // Reset card position if it was being dragged
                         if (dragEnabled) {
+                            card.Drag.drop()
                             card.x = (parent.width - card.width) / 2
                             card.y = (parent.height - card.height) / 2
                             resetDragTimer.restart()
@@ -493,7 +490,7 @@ PanelWindow {
                         if (Math.abs(cardTranslate.y) < 20 && !drag.active) {
                             let addr = toplevel.lastIpcObject ? toplevel.lastIpcObject.address : toplevel.address;
                             if (addr) {
-                                Hyprland.dispatch("focuswindow address:" + addr)
+                                Hyprland.dispatch("hl.dsp.focus({ window = 'address:" + addr + "' })")
                                 closeTimer.restart()
                             }
                         }
@@ -508,8 +505,11 @@ PanelWindow {
                     width: targetWidth
                     height: targetHeight + 50 // Space for header above or below
                     
+                    property string windowAddr: parent.windowAddr
+                    
                     // Drag logic
                     Drag.active: cardMouse.dragEnabled || cardMouse.drag.active
+                    Drag.source: card
                     Drag.hotSpot.x: width / 2
                     Drag.hotSpot.y: height / 2
                     Drag.keys: ["window-address"]
@@ -529,7 +529,7 @@ PanelWindow {
                     Drag.onDragStarted: console.log("DRAG STARTED for window: " + windowAddr)
                     Drag.onDragFinished: (dropAction) => {
                         console.log("DRAG FINISHED with action: " + dropAction)
-                        cardMouse.dragEnabled = false
+                        Qt.callLater(() => { cardMouse.dragEnabled = false; })
                     }
 
                     transform: Translate { id: cardTranslate }
@@ -578,7 +578,7 @@ PanelWindow {
                         ScriptAction {
                             script: {
                                 let addr = toplevel.lastIpcObject ? toplevel.lastIpcObject.address : toplevel.address;
-                                if (addr) Hyprland.dispatch("closewindow address:" + addr)
+                                if (addr) Hyprland.dispatch("hl.dsp.window.close({ window = 'address:" + addr + "' })")
                             }
                         }
                     }
@@ -634,7 +634,7 @@ PanelWindow {
                                 }
                                 onClicked: {
                                     let addr = toplevel.lastIpcObject ? toplevel.lastIpcObject.address : toplevel.address;
-                                    if (addr) Hyprland.dispatch("closewindow address:" + addr)
+                                    if (addr) Hyprland.dispatch("hl.dsp.window.close({ window = 'address:" + addr + "' })")
                                 }
                             }
                         }
@@ -894,7 +894,7 @@ PanelWindow {
                         anchors.fill: parent
                         hoverEnabled: true
                         onClicked: {
-                            Hyprland.dispatch("workspace " + workspace.id);
+                            Hyprland.dispatch("hl.dsp.focus({ workspace = " + workspace.id + " })");
                             closeTimer.restart();
                         }
                     }

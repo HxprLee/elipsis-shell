@@ -236,7 +236,7 @@ ShellRoot {
             }
             
             if (match) {
-                Hyprland.dispatch("closewindow address:" + ipc.address);
+                Hyprland.dispatch("hl.dsp.window.close({ window = 'address:" + ipc.address + "' })");
             }
         }
     }

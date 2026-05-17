@@ -1394,10 +1394,15 @@ PanelWindow {
                         width: parent.width
                         spacing: 24
 
-                        GridLayout {
-                            id: toggleGrid
+                        Item {
+                            id: gridWrapper
                             Layout.fillWidth: true
-                            columns: 4
+                            Layout.preferredHeight: toggleGrid.implicitHeight
+
+                            GridLayout {
+                                id: toggleGrid
+                                anchors.fill: parent
+                                columns: 4
                             rowSpacing: 16
                             columnSpacing: 16
 
@@ -1412,23 +1417,24 @@ PanelWindow {
                                     Layout.columnSpan: model.colSpan
                                     Layout.rowSpan: model.rowSpan
                                     Layout.fillWidth: true
+                                    property real colWidth: Math.max(0, (toggleGrid.width - (3 * toggleGrid.columnSpacing)) / 4)
+                                    Layout.preferredWidth: (model.colSpan * colWidth) + ((model.colSpan - 1) * toggleGrid.columnSpacing)
+                                    Layout.minimumWidth: Layout.preferredWidth
+                                    Layout.maximumWidth: Layout.preferredWidth
                                     Layout.preferredHeight: (model.rowSpan * ((400 - 48 - 48) / 4)) + ((model.rowSpan - 1) * 16)
 
                                     Behavior on x {
+                                        enabled: controlPanel.editMode
                                         NumberAnimation {
                                             duration: 300
                                             easing.type: Easing.OutCubic
                                         }
                                     }
                                     Behavior on y {
+                                        enabled: controlPanel.editMode
                                         NumberAnimation {
                                             duration: 300
                                             easing.type: Easing.OutCubic
-                                        }
-                                    }
-                                    Behavior on Layout.preferredHeight {
-                                        NumberAnimation {
-                                            duration: 200
                                         }
                                     }
 
@@ -1454,14 +1460,21 @@ PanelWindow {
 
                                     Rectangle {
                                         id: widgetBg
+                                        parent: gridWrapper
                                         property bool isCircle: model.colSpan === 1 && model.rowSpan === 1
-                                        width: isCircle ? Math.min(parent.width, parent.height) : parent.width
-                                        height: isCircle ? width : parent.height
-                                        x: (parent.width - width) / 2
-                                        y: (parent.height - height) / 2
+                                        width: delegateItem.width
+                                        height: delegateItem.height
+                                        x: delegateItem.x
+                                        y: delegateItem.y
                                         radius: (model.colSpan >= 2 && model.rowSpan >= 2) ? 16 : Math.min(width, height) / 2
                                         color: Qt.rgba(0.15, 0.15, 0.2, 0.8)
                                         clip: true
+
+                                        Behavior on width { enabled: controlPanel.editMode; NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+                                        Behavior on height { enabled: controlPanel.editMode; NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+                                        Behavior on x { enabled: controlPanel.editMode; NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+                                        Behavior on y { enabled: controlPanel.editMode; NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+                                        Behavior on radius { enabled: controlPanel.editMode; NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
 
                                         property bool isItemPressed: {
                                             if (controlPanel.editMode)
@@ -1671,17 +1684,19 @@ PanelWindow {
 
                                     EditOverlay {
                                         id: widgetOverlay
+                                        parent: gridWrapper
+                                        z: 10
                                         x: widgetBg.x
                                         y: widgetBg.y
                                         width: widgetBg.width
                                         height: widgetBg.height
+                                        widgetRadius: widgetBg.radius
                                         editMode: controlPanel.editMode
                                         itemIndex: delegateItem.itemIndex
                                         widgetSource: model.source || ""
                                         currentColSpan: model.colSpan
                                         currentRowSpan: model.rowSpan
                                         availableSizes: widgetLoader.item ? widgetLoader.item.availableSizes : undefined
-
                                         onDragStarted: (grabOffsetX, grabOffsetY) => {
                                             // Position proxy at widgetBg's location in controlPanel coordinates
                                             let pos = widgetBg.mapToItem(controlPanel, 0, 0);
@@ -1743,6 +1758,7 @@ PanelWindow {
                                 }
                             } // closes Repeater
                         } // closes GridLayout
+                        } // closes gridWrapper
 
                         // ── Add a Control Button ──
                         Rectangle {

@@ -131,7 +131,7 @@ Timer {
 
                     MouseArea {
                         anchors.fill: parent
-                        onClicked: Hyprland.dispatch("workspace " + wsId)
+                        onClicked: Hyprland.dispatch("hl.dsp.focus({ workspace = " + wsId + " })")
                     }
                 }
             }
