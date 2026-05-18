@@ -27,6 +27,7 @@ Item {
 
     // Expanded view support
     property bool hasExpandedView: true
+    property int expandedHeight: 520
     property Component expandedComponent: Component {
         Item {
             id: expandedRoot
@@ -219,7 +220,7 @@ Item {
                     id: tabFlickable
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    Layout.preferredHeight: 380
+                    Layout.preferredHeight: tabContent.implicitHeight
                     contentHeight: tabContent.implicitHeight
                     clip: true
                     ScrollBar.vertical: ScrollBar { }

@@ -226,6 +226,7 @@ Add these alongside the simple toggle interface:
 |----------------------|-------------|-------------------------------------------------------|
 | `hasExpandedView`    | `bool`      | Must be `true` — enables long-press expansion         |
 | `expandedComponent`  | `Component` | The QML component to render inside the expanded card  |
+| `expandedHeight`     | `int`       | Optional. Hardcode the height of the expanded view. Use if `implicitHeight` fails to evaluate correctly (e.g. async lists). If omitted, UI scales to `implicitHeight` up to a max limit. |
 
 #### How the Expansion Works
 

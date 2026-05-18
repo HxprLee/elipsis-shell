@@ -20,9 +20,10 @@ Item {
     property string iconSource: shellRoot.icon(isWired ? "network-wired-symbolic" : (qs.wifiEnabled ? "network-wireless-symbolic" : "network-wireless-offline-symbolic"))
     property bool isActive: qs.wifiEnabled || isWired
     property color activeColor: Qt.rgba(0.2, 0.5, 1.0, 1.0)
-    
+
     // Expanded view support
     property bool hasExpandedView: true
+    property int expandedHeight: 480
     property Component expandedComponent: Component {
         Item {
             id: expandedRoot
@@ -57,9 +58,10 @@ Item {
                     id: scrollView
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    Layout.preferredHeight: innerCol.implicitHeight
                     contentHeight: innerCol.implicitHeight
                     clip: true
-                    ScrollBar.vertical: ScrollBar { }
+                    ScrollBar.vertical: ScrollBar {}
 
                     ColumnLayout {
                         id: innerCol
@@ -71,7 +73,7 @@ Item {
                             id: networksLoader
                             Layout.fillWidth: true
                             asynchronous: true
-                            active: true 
+                            active: true
                             sourceComponent: networksComponent
                         }
 
@@ -81,10 +83,11 @@ Item {
                             visible: networksLoader.status !== Loader.Ready && root.isActive
                             spacing: 10
                             Layout.topMargin: 40
-                            
+
                             BusyIndicator {
                                 Layout.alignment: Qt.AlignHCenter
-                                implicitWidth: 32; implicitHeight: 32
+                                implicitWidth: 32
+                                implicitHeight: 32
                             }
                             Text {
                                 text: "Searching for networks..."
@@ -101,19 +104,21 @@ Item {
                     ColumnLayout {
                         width: scrollView.width // Use scrollView width directly to prevent collapse
                         spacing: 12
-                        
+
                         Component.onCompleted: {
                             if (root.isActive) {
-                                shellRoot.refreshNetwork()
+                                shellRoot.refreshNetwork();
                             }
                         }
-                        
+
                         // Internal filtered models to avoid redundant expensive filtering
                         property var allNetworks: {
                             let nets = shellRoot.wifiDevice ? shellRoot.wifiDevice.networks.values : [];
                             return nets.slice().sort((a, b) => {
-                                if (a.connected) return -1;
-                                if (b.connected) return 1;
+                                if (a.connected)
+                                    return -1;
+                                if (b.connected)
+                                    return 1;
                                 return (b.signalStrength || 0) - (a.signalStrength || 0);
                             });
                         }
@@ -198,7 +203,7 @@ Item {
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: refreshRow.implicitWidth
                                     height: 24
-                                    
+
                                     property bool isScanning: shellRoot.isScanningNetwork
 
                                     Row {
@@ -221,7 +226,10 @@ Item {
                                             opacity: 0.6
                                             RotationAnimation on rotation {
                                                 running: refreshBtn.isScanning
-                                                from: 0; to: 360; duration: 1000; loops: Animation.Infinite
+                                                from: 0
+                                                to: 360
+                                                duration: 1000
+                                                loops: Animation.Infinite
                                             }
                                         }
                                     }
@@ -260,10 +268,14 @@ Item {
                         subtitle: modelData.connected ? "Connected" : ""
                         subtitleColor: root.activeColor
                         iconSource: {
-                            if (modelData.signalStrength >= 0.8) return shellRoot.icon("network-wireless-signal-excellent-symbolic");
-                            if (modelData.signalStrength >= 0.6) return shellRoot.icon("network-wireless-signal-good-symbolic");
-                            if (modelData.signalStrength >= 0.4) return shellRoot.icon("network-wireless-signal-ok-symbolic");
-                            if (modelData.signalStrength >= 0.2) return shellRoot.icon("network-wireless-signal-weak-symbolic");
+                            if (modelData.signalStrength >= 0.8)
+                                return shellRoot.icon("network-wireless-signal-excellent-symbolic");
+                            if (modelData.signalStrength >= 0.6)
+                                return shellRoot.icon("network-wireless-signal-good-symbolic");
+                            if (modelData.signalStrength >= 0.4)
+                                return shellRoot.icon("network-wireless-signal-ok-symbolic");
+                            if (modelData.signalStrength >= 0.2)
+                                return shellRoot.icon("network-wireless-signal-weak-symbolic");
                             return shellRoot.icon("network-wireless-signal-none-symbolic");
                         }
                         iconOpacity: modelData.connected ? 1.0 : 0.6
@@ -271,7 +283,7 @@ Item {
                         showLock: !modelData.connected && modelData.security !== 0
                         isExpanded: expandedRoot.selectedNetwork === modelData && !modelData.connected && modelData.security !== 0 && !modelData.known
                         expandedComponent: passwordInputComponent
-                        
+
                         onClicked: {
                             if (modelData.connected) {
                                 modelData.disconnect();
@@ -328,13 +340,13 @@ Item {
                             height: 36
                             radius: 10
                             color: connectArea.pressed ? Qt.darker(root.activeColor, 1.2) : root.activeColor
-                            
+
                             Image {
                                 anchors.centerIn: parent
                                 sourceSize: Qt.size(16, 16)
                                 source: shellRoot.icon("go-next-symbolic")
                             }
-                            
+
                             MouseArea {
                                 id: connectArea
                                 anchors.fill: parent
@@ -350,6 +362,6 @@ Item {
         }
     }
 
-    signal toggled()
+    signal toggled
     onToggled: qs.toggleWifi()
 }

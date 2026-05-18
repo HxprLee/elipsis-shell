@@ -32,6 +32,7 @@ Item {
     
     // Expanded view support
     property bool hasExpandedView: true
+    property int expandedHeight: 480
     property Component expandedComponent: Component {
         Item {
             id: expandedRoot
@@ -59,6 +60,7 @@ Item {
                     id: scrollView
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    Layout.preferredHeight: contentLayout.implicitHeight
                     contentHeight: contentLayout.implicitHeight
                     clip: true
                     ScrollBar.vertical: ScrollBar { }

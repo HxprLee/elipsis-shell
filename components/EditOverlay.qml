@@ -155,14 +155,27 @@ Item {
                 let stepX = 92
                 let stepY = 92
 
-                let targetCs = Math.max(1, Math.min(4, startColSpan + Math.round(dx / stepX)))
-                let targetRs = Math.max(1, Math.min(4, startRowSpan + Math.round(dy / stepY)))
+                let targetCs = startColSpan + dx / stepX
+                let targetRs = startRowSpan + dy / stepY
                 
+                let newCs = Math.max(1, Math.min(4, Math.round(targetCs)))
+                let newRs = Math.max(1, Math.min(4, Math.round(targetRs)))
+
+                if (newCs !== editOverlay.currentColSpan || newRs !== editOverlay.currentRowSpan) {
+                    editOverlay.resized(newCs, newRs)
+                }
+            }
+
+            onReleased: {
+                if (!isDraggingSize) return;
+                isDraggingSize = false;
+
+                let targetCs = editOverlay.currentColSpan
+                let targetRs = editOverlay.currentRowSpan
                 let newCs = targetCs
                 let newRs = targetRs
 
                 if (editOverlay.availableSizes && Array.isArray(editOverlay.availableSizes) && editOverlay.availableSizes.length > 0) {
-                    // Snap to the closest available size
                     let closestDist = Infinity;
                     let bestSize = editOverlay.availableSizes[0];
                     
@@ -177,7 +190,6 @@ Item {
                     newCs = bestSize.colSpan;
                     newRs = bestSize.rowSpan;
                 } else {
-                    // Fallback logic
                     let isSlider = widgetSource.indexOf("Slider") !== -1
                     let isMedia = widgetSource.indexOf("Media") !== -1
 

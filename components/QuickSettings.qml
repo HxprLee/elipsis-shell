@@ -2259,6 +2259,7 @@ PanelWindow {
                 property real startY: 0
                 property real startWidth: 0
                 property real startHeight: 0
+                property real targetHeight: 420
                 property bool isExpanded: false
 
                 Behavior on opacity {
@@ -2274,36 +2275,46 @@ PanelWindow {
 
                     expandedLoader.sourceComponent = widgetItem.expandedComponent;
 
-                    // Calculate target dimensions
                     let targetW = expandedOverlay.width;
-                    let targetH = 420; // fallback
-                    if (expandedLoader.item && expandedLoader.item.implicitHeight > 0) {
-                        targetH = expandedLoader.item.implicitHeight + 48;
-                    } else if (widgetItem.expandedHeight > 0) {
-                        targetH = widgetItem.expandedHeight;
-                    }
-
                     let targetX = 0;
-                    let targetY = (expandedOverlay.height - targetH) / 2;
 
-                    // Set values directly to trigger parallel behaviors.
-                    // We avoid bindings here because y = (parent.h - height)/2 would cause
-                    // y to "chase" height as it animates, breaking parallelism.
                     expandedCard.x = targetX;
-                    expandedCard.y = targetY;
                     expandedCard.width = targetW;
-                    expandedCard.height = targetH;
+
+                    expandedOverlay.targetHeight = Qt.binding(function() {
+                        let targetH = 420; // fallback
+                        let implicitH = (expandedLoader.item && expandedLoader.item.implicitHeight > 0) ? expandedLoader.item.implicitHeight + 48 : 0;
+                        let explicitH = (widgetItem && widgetItem.expandedHeight > 0) ? widgetItem.expandedHeight : 0;
+
+                        if (implicitH > 0) {
+                            targetH = implicitH;
+                        } else if (explicitH > 0) {
+                            targetH = explicitH;
+                        }
+
+                        let maxH = Math.min(expandedOverlay.height - 40, 680);
+                        if (maxH > 0) {
+                            targetH = Math.min(targetH, maxH);
+                        }
+                        return targetH;
+                    });
+
+                    expandedCard.height = Qt.binding(function() { return expandedOverlay.targetHeight; });
+                    expandedCard.y = Qt.binding(function() { return (expandedOverlay.height - expandedOverlay.targetHeight) / 2; });
+
                     expandedCard.radius = 16;
                 }
 
                 function close() {
                     isExpanded = false;
                     opacity = 0.0;
-                    // Morph back to original slot
-                    expandedCard.x = startX;
-                    expandedCard.y = startY;
-                    expandedCard.width = startWidth;
+                    
+                    // Break bindings and morph back to original slot
+                    expandedOverlay.targetHeight = 420; // Break binding
                     expandedCard.height = startHeight;
+                    expandedCard.y = startY;
+                    expandedCard.x = startX;
+                    expandedCard.width = startWidth;
                     expandedCard.radius = (startWidth === startHeight) ? startWidth / 2 : 24;
                 }
 

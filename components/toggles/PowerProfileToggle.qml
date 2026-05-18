@@ -31,6 +31,7 @@ Item {
 
     // Expanded view support
     property bool hasExpandedView: true
+    property int expandedHeight: 320
     property Component expandedComponent: Component {
         Item {
             id: expandedRoot
