@@ -95,7 +95,7 @@ PanelWindow {
                     bgBlur.source = s
                 }
             }
-            visible: shellRoot.usePrecomputedBlur
+            visible: shellRoot.usePrecomputedBlur && shellRoot.blurEnabled
         }
 
         Rectangle {

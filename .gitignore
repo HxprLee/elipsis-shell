@@ -2,3 +2,5 @@ node_modules/
 .gemini/
 *.qslog
 /tmp/
+config/
+elipsis-shell.wiki/

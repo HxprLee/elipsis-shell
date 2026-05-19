@@ -1,7 +1,9 @@
 import QtQuick
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
+import Quickshell
 import Quickshell.Services.Mpris
+import ".."
 
 // MediaWidget.qml — MPRIS media player with album art, playback controls,
 
@@ -9,8 +11,20 @@ Item {
     id: root
     property bool isControlWidget: true
     property var modelData: parent ? parent.modelData : ({})
-    property var activePlayer: Mpris.players.values.length > 0 ? Mpris.players.values[0] : null
+    property var activePlayer: {
+        if (_manualPlayer && Mpris.players.values.indexOf(_manualPlayer) !== -1)
+            return _manualPlayer;
+        return Mpris.players.values.length > 0 ? Mpris.players.values[0] : null;
+    }
+    property var _manualPlayer: null
     property string toggleName: "Media Control"
+    
+    property bool _playerMenuJustClosed: false
+    Timer {
+        id: menuCloseTimer
+        interval: 200
+        onTriggered: root._playerMenuJustClosed = false
+    }
 
     property var availableSizes: [
         {
@@ -34,6 +48,35 @@ Item {
         return mins + ":" + (secs < 10 ? "0" : "") + secs;
     }
 
+    function getAppIcon(player) {
+        if (!player)
+            return "";
+
+        const apps = DesktopEntries.applications.values;
+        const identity = player.identity.toLowerCase();
+        const desktopId = player.desktopEntry ? player.desktopEntry.toLowerCase() : "";
+
+        // 1. Try to match by desktop entry ID
+        if (desktopId) {
+            const app = apps.find(a => a.id.toLowerCase() === desktopId || a.id.toLowerCase() === desktopId + ".desktop");
+            if (app && app.icon) {
+                if (app.icon.startsWith("/"))
+                    return "file://" + app.icon;
+                return "image://icon/" + app.icon;
+            }
+        }
+
+        // 2. Try to match by identity/name
+        const app = apps.find(a => a.name.toLowerCase() === identity || a.id.toLowerCase().includes(identity));
+        if (app && app.icon) {
+            if (app.icon.startsWith("/"))
+                return "file://" + app.icon;
+            return "image://icon/" + app.icon;
+        }
+
+        return "";
+    }
+
     // Position tracker — emit positionChanged every second for reactive updates
     Timer {
         running: activePlayer && activePlayer.isPlaying && (is4x2 || expandedOverlay.isExpanded)
@@ -45,6 +88,17 @@ Item {
 
     // ── Expanded view support ──
     property bool hasExpandedView: true
+    signal expandRequested()
+    property alias isPressed: bgMouseArea.pressed
+
+    MouseArea {
+        id: bgMouseArea
+        anchors.fill: parent
+        pressAndHoldInterval: 300
+        onClicked: root.expandRequested()
+        onPressAndHold: root.expandRequested()
+    }
+
     property int expandedHeight: 680
     property Component expandedComponent: Component {
         Item {
@@ -70,7 +124,7 @@ Item {
                         anchors.centerIn: parent
                         width: parent.width
                         height: width
-                        radius: 16
+                        radius: 8
                         color: Qt.rgba(1, 1, 1, 0.05)
                         clip: true
 
@@ -85,19 +139,12 @@ Item {
                                 maskSource: Rectangle {
                                     width: albumArt.width
                                     height: albumArt.height
-                                    radius: 16
+                                    radius: 8
                                 }
                             }
                         }
 
-                        // Fallback icon
-                        Image {
-                            anchors.centerIn: parent
-                            visible: !albumArt.visible || albumArt.status !== Image.Ready
-                            source: shellRoot.icon("multimedia-audio-player-symbolic")
-                            sourceSize: Qt.size(64, 64)
-                            opacity: 0.3
-                        }
+
 
                         // Subtle scale animation when playing
                         scale: expandedRoot.player && expandedRoot.player.isPlaying ? 1.0 : 0.92
@@ -105,6 +152,126 @@ Item {
                             NumberAnimation {
                                 duration: 400
                                 easing.type: Easing.OutCubic
+                            }
+                        }
+
+                        // Player identity pill (moved inside art card)
+                        Item {
+                            id: playerPillContainer
+                            anchors.bottom: parent.bottom
+                            anchors.left: parent.left
+                            anchors.margins: 16
+                            height: 34
+                            width: playerIdRow.width + 20
+                            visible: Mpris.players.values.length > 1
+
+                            ShaderEffectSource {
+                                id: pillBlurSource
+                                width: playerPillContainer.width
+                                height: playerPillContainer.height
+                                sourceItem: albumArt
+                                sourceRect: Qt.rect(playerPillContainer.x, playerPillContainer.y, width, height)
+                                live: true
+                                visible: false
+                            }
+
+                            Rectangle {
+                                id: playerPill
+                                anchors.fill: parent
+                                radius: 17
+                                color: Qt.rgba(0, 0, 0, 0.35)
+                                
+                                layer.enabled: true
+                                layer.effect: OpacityMask {
+                                    maskSource: Rectangle {
+                                        width: playerPill.width
+                                        height: playerPill.height
+                                        radius: playerPill.radius
+                                    }
+                                }
+
+                                FastBlur {
+                                    anchors.fill: parent
+                                    source: pillBlurSource
+                                    radius: 48
+                                    visible: shellRoot.blurEnabled
+                                }
+
+                                // Overlay border (to keep it sharp and above the blur)
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: parent.radius
+                                    color: Qt.rgba(0, 0, 0, 0.45) // Tinted black
+                                    border.color: Qt.rgba(1, 1, 1, 0.2)
+                                    border.width: 1
+                                }
+
+                                RowLayout {
+                                    id: playerIdRow
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: 8
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    spacing: 8
+
+                                    Image {
+                                        id: appIcon
+                                        source: root.getAppIcon(expandedRoot.player)
+                                        sourceSize: Qt.size(16, 16)
+                                        fillMode: Image.PreserveAspectFit
+                                    }
+
+                                    Text {
+                                        text: expandedRoot.player ? (expandedRoot.player.identity || "Player") : "No Player"
+                                        color: "white"
+                                        font.pixelSize: 13
+                                        font.weight: Font.DemiBold
+                                    }
+
+                                    // Small chevron to indicate menu
+                                    Text {
+                                        text: "▾"
+                                        color: Qt.rgba(1, 1, 1, 0.5)
+                                        font.pixelSize: 12
+                                        visible: Mpris.players.values.length > 1
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        if (Mpris.players.values.length > 1) {
+                                            if (playerMenu.visible) {
+                                                playerMenu.close();
+                                            } else if (!root._playerMenuJustClosed) {
+                                                playerMenu.popup(playerPill, 0, playerPill.height + 4);
+                                            }
+                                        } else if (expandedRoot.player && (expandedRoot.player.canRaise ?? false)) {
+                                            expandedRoot.player.raise();
+                                        }
+                                    }
+                                }
+
+                                AppContextMenu {
+                                    id: playerMenu
+                                    onClosed: {
+                                        root._playerMenuJustClosed = true;
+                                        menuCloseTimer.start();
+                                    }
+                                    model: {
+                                        let items = [];
+                                        for (let i = 0; i < Mpris.players.values.length; i++) {
+                                            let p = Mpris.players.values[i];
+                                            items.push({
+                                                text: p.identity,
+                                                icon: root.getAppIcon(p),
+                                                action: function () {
+                                                    root._manualPlayer = p;
+                                                }
+                                            });
+                                        }
+                                        return items;
+                                    }
+                                }
                             }
                         }
                     }
@@ -182,10 +349,18 @@ Item {
                             anchors.fill: parent
                             anchors.margins: -8
                             enabled: expandedRoot.player && (expandedRoot.player.canSeek ?? false)
-                            onClicked: function (mouse) {
+
+                            function updatePosition(mouse) {
                                 if (expandedRoot.player && expandedRoot.player.lengthSupported) {
-                                    let ratio = Math.max(0, Math.min(1.0, mouse.x / parent.width));
+                                    let ratio = Math.max(0, Math.min(1.0, mouse.x / width));
                                     expandedRoot.player.position = ratio * expandedRoot.player.length;
+                                }
+                            }
+
+                            onClicked: mouse => updatePosition(mouse)
+                            onPositionChanged: mouse => {
+                                if (pressed) {
+                                    updatePosition(mouse);
                                 }
                             }
                         }
@@ -340,86 +515,76 @@ Item {
                     Layout.preferredHeight: 8
                 }
 
-                // ── Bottom row: volume / player identity ──
+                Item {
+                    Layout.preferredHeight: 16
+                }
+
+                // ── Volume Slider ──
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 8
+                    spacing: 12
+                    visible: expandedRoot.player && (expandedRoot.player.volumeSupported ?? false)
 
-                    // Player identity pill
-                    Rectangle {
-                        height: 28
-                        width: playerIdRow.width + 20
-                        radius: 14
-                        color: Qt.rgba(1, 1, 1, 0.1)
-
-                        RowLayout {
-                            id: playerIdRow
-                            anchors.centerIn: parent
-                            spacing: 6
-
-                            Image {
-                                source: shellRoot.icon("multimedia-audio-player-symbolic")
-                                sourceSize: Qt.size(14, 14)
-                            }
-
-                            Text {
-                                text: expandedRoot.player ? (expandedRoot.player.identity || "Player") : "No Player"
-                                color: Qt.rgba(1, 1, 1, 0.7)
-                                font.pixelSize: 12
-                                font.weight: Font.Medium
-                            }
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: if (expandedRoot.player && (expandedRoot.player.canRaise ?? false))
-                                expandedRoot.player.raise()
-                        }
+                    Image {
+                        source: shellRoot.icon("audio-volume-low-symbolic")
+                        sourceSize: Qt.size(22, 22)
+                        opacity: 0.45
                     }
 
                     Item {
                         Layout.fillWidth: true
-                    }
+                        height: 6
 
-                    // Volume slider (small inline)
-                    RowLayout {
-                        spacing: 6
-                        visible: expandedRoot.player && (expandedRoot.player.volumeSupported ?? false)
-
-                        Image {
-                            source: shellRoot.icon("audio-volume-medium-symbolic")
-                            sourceSize: Qt.size(14, 14)
-                            opacity: 0.6
+                        // Background track
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 3
+                            color: Qt.rgba(1, 1, 1, 0.15)
                         }
 
-                        Item {
-                            width: 80
-                            height: 4
+                        // Progress fill
+                        Rectangle {
+                            width: expandedRoot.player ? expandedRoot.player.volume * parent.width : 0
+                            height: parent.height
+                            radius: 3
+                            color: "white"
+                            Behavior on width {
+                                NumberAnimation {
+                                    duration: 200
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+                        }
 
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: 2
-                                color: Qt.rgba(1, 1, 1, 0.15)
+                        // Interaction
+                        MouseArea {
+                            anchors.fill: parent
+                            anchors.margins: -8
+                            
+                            function updateVolume(mouse) {
+                                if (expandedRoot.player && expandedRoot.player.volumeSupported) {
+                                    expandedRoot.player.volume = Math.max(0, Math.min(1.0, mouse.x / width));
+                                }
                             }
 
-                            Rectangle {
-                                width: expandedRoot.player ? expandedRoot.player.volume * parent.width : 0
-                                height: parent.height
-                                radius: 2
-                                color: Qt.rgba(1, 1, 1, 0.6)
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                anchors.margins: -8
-                                onClicked: function (mouse) {
-                                    if (expandedRoot.player && expandedRoot.player.volumeSupported) {
-                                        expandedRoot.player.volume = Math.max(0, Math.min(1.0, mouse.x / parent.width));
-                                    }
+                            onClicked: (mouse) => updateVolume(mouse)
+                            onPositionChanged: (mouse) => {
+                                if (pressed) {
+                                    updateVolume(mouse)
                                 }
                             }
                         }
                     }
+
+                    Image {
+                        source: shellRoot.icon("audio-volume-high-symbolic")
+                        sourceSize: Qt.size(22, 22)
+                        opacity: 0.45
+                    }
+                }
+
+                Item {
+                    Layout.preferredHeight: 8
                 }
             }
 
@@ -447,16 +612,7 @@ Item {
         anchors.fill: parent
         source: compactBgImg
         radius: 64
-        visible: compactBgImg.status === Image.Ready
-    }
-
-    // Fallback when no art
-    Image {
-        anchors.centerIn: parent
-        visible: !activePlayer || !activePlayer.trackArtUrl
-        source: shellRoot.icon("multimedia-audio-player-symbolic")
-        sourceSize: Qt.size(64, 64)
-        opacity: 0.15
+        visible: compactBgImg.status === Image.Ready && shellRoot.blurEnabled
     }
 
     // Dark overlay for readability
@@ -496,13 +652,7 @@ Item {
                 }
             }
 
-            Image {
-                anchors.centerIn: parent
-                visible: parent.children[0].status !== Image.Ready
-                source: shellRoot.icon("multimedia-audio-player-symbolic")
-                sourceSize: Qt.size(24, 24)
-                opacity: 0.4
-            }
+
         }
 
         Item {
@@ -652,13 +802,7 @@ Item {
                 }
             }
 
-            Image {
-                anchors.centerIn: parent
-                visible: parent.children[0].status !== Image.Ready
-                source: shellRoot.icon("multimedia-audio-player-symbolic")
-                sourceSize: Qt.size(32, 32)
-                opacity: 0.4
-            }
+
         }
 
         // Right: Content
@@ -667,7 +811,7 @@ Item {
             Layout.fillHeight: true
             spacing: 0
 
-            // Top row: Text
+            // Top row: Text + App Icon
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
@@ -691,6 +835,23 @@ Item {
                         elide: Text.ElideRight
                         Layout.fillWidth: true
                         visible: activePlayer !== null
+                    }
+                }
+
+                // Player app icon
+                Rectangle {
+                    Layout.alignment: Qt.AlignTop | Qt.AlignRight
+                    Layout.preferredWidth: 28
+                    Layout.preferredHeight: 28
+                    radius: 14
+                    color: Qt.rgba(1, 1, 1, 0.1)
+                    visible: activePlayer !== null
+
+                    Image {
+                        anchors.centerIn: parent
+                        source: root.getAppIcon(activePlayer)
+                        sourceSize: Qt.size(16, 16)
+                        fillMode: Image.PreserveAspectFit
                     }
                 }
             }
@@ -852,10 +1013,18 @@ Item {
                         anchors.fill: parent
                         anchors.margins: -6
                         enabled: activePlayer && (activePlayer.canSeek ?? false)
-                        onClicked: function (mouse) {
+
+                        function updatePosition(mouse) {
                             if (activePlayer && activePlayer.lengthSupported) {
-                                let ratio = Math.max(0, Math.min(1.0, mouse.x / parent.width));
+                                let ratio = Math.max(0, Math.min(1.0, mouse.x / width));
                                 activePlayer.position = ratio * activePlayer.length;
+                            }
+                        }
+
+                        onClicked: mouse => updatePosition(mouse)
+                        onPositionChanged: mouse => {
+                            if (pressed) {
+                                updatePosition(mouse);
                             }
                         }
                     }

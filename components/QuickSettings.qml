@@ -179,7 +179,7 @@ PanelWindow {
                     bgBlur.source = s;
                 }
             }
-            visible: shellRoot.usePrecomputedBlur
+            visible: shellRoot.usePrecomputedBlur && shellRoot.blurEnabled
         }
 
         Rectangle {
@@ -1393,6 +1393,14 @@ PanelWindow {
                         id: flickableContent
                         width: parent.width
                         spacing: 24
+                        
+                        opacity: expandedOverlay.isExpanded ? 0.0 : 1.0
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: 250
+                                easing.type: Easing.OutCubic
+                            }
+                        }
 
                         Item {
                             id: gridWrapper
@@ -1565,7 +1573,7 @@ PanelWindow {
 
                                                 Image {
                                                     Layout.alignment: Qt.AlignCenter
-                                                    width: (model.colSpan === 1 && model.rowSpan === 1) ? 24 : 32
+                                                    width: 24
                                                     height: width
                                                     sourceSize: Qt.size(width, width)
                                                     source: (widgetLoader.item && widgetLoader.item.iconSource) || ""

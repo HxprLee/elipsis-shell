@@ -611,6 +611,7 @@ Item {
         from: 0; to: 100
         value: qs.audioNode ? qs.audioNode.volume * 100 : 50
         onMoved: {
+            if (root.holdTriggered) return;
             if (qs.audioNode) qs.audioNode.volume = value / 100.0
             holdTimer.stop()
         }
@@ -670,9 +671,16 @@ Item {
 
         onPressedChanged: {
             if (pressed) {
+                root.holdTriggered = false
                 holdTimer.restart()
             } else {
                 holdTimer.stop()
+                if (!root.holdTriggered) {
+                    // Apply volume on short tap or release
+                    if (qs.audioNode) qs.audioNode.volume = value / 100.0
+                }
+                // Restore binding so the slider tracks external volume changes again
+                slider.value = Qt.binding(function() { return qs.audioNode ? qs.audioNode.volume * 100 : 50 })
             }
         }
     }
@@ -686,6 +694,7 @@ Item {
         from: 0; to: 100
         value: qs.audioNode ? qs.audioNode.volume * 100 : 50
         onMoved: {
+            if (root.holdTriggered) return;
             if (qs.audioNode) qs.audioNode.volume = value / 100.0
             holdTimer.stop()
         }
@@ -753,18 +762,30 @@ Item {
 
         onPressedChanged: {
             if (pressed) {
+                root.holdTriggered = false
                 holdTimer.restart()
             } else {
                 holdTimer.stop()
+                if (!root.holdTriggered) {
+                    if (qs.audioNode) qs.audioNode.volume = value / 100.0
+                }
+                vSlider.value = Qt.binding(function() { return qs.audioNode ? qs.audioNode.volume * 100 : 50 })
             }
         }
     }
 
+    property bool holdTriggered: false
     Timer {
         id: holdTimer
         interval: 300
         onTriggered: {
+            root.holdTriggered = true
             root.expandRequested()
+            // Restore visual value so the slider snaps back if the user lifts their finger
+            if (qs.audioNode) {
+                slider.value = qs.audioNode.volume * 100
+                vSlider.value = qs.audioNode.volume * 100
+            }
         }
     }
 

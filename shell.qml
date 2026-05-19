@@ -292,7 +292,7 @@ ShellRoot {
                         entry: entry,
                         isRunning: true,
                         isPinned: false,
-                        address: ipc.address
+                        address: ipc ? ipc.address : ""
                     });
                     addedIds.add(entry.id);
                 }
@@ -784,6 +784,8 @@ ShellRoot {
             "system-shutdown-symbolic":            "file:///usr/share/icons/breeze-dark/actions/24/system-shutdown-symbolic.svg",
             "display-brightness-symbolic":         "file:///usr/share/icons/breeze-dark/actions/24/high-brightness-symbolic.svg",
             "audio-volume-high-symbolic":          "file:///usr/share/icons/breeze-dark/status/24/audio-volume-high-symbolic.svg",
+            "audio-volume-medium-symbolic":        "file:///usr/share/icons/breeze-dark/status/24/audio-volume-medium-symbolic.svg",
+            "audio-volume-low-symbolic":           "file:///usr/share/icons/breeze-dark/status/24/audio-volume-low-symbolic.svg",
             "audio-volume-muted-symbolic":         "file:///usr/share/icons/breeze-dark/status/24/audio-volume-muted-symbolic.svg",
             "battery-full-symbolic":               "file:///usr/share/icons/breeze-dark/status/24/battery-full-symbolic.svg",
             "battery-good-symbolic":               "file:///usr/share/icons/breeze-dark/status/24/battery-good-symbolic.svg",
@@ -796,17 +798,28 @@ ShellRoot {
             "power-profile-balanced":              "file:///usr/share/icons/breeze-dark/status/22/battery-profile-balanced-symbolic.svg",
             "power-profile-performance":           "file:///usr/share/icons/breeze-dark/status/22/battery-profile-performance-symbolic.svg",
             "system-suspend-inhibited-symbolic":   "file:///usr/share/icons/breeze-dark/status/24/system-suspend-inhibited.svg",
-        };
+            "multimedia-audio-player-symbolic":    "file:///usr/share/icons/breeze-dark/apps/48/multimedia-audio-player.svg",
+            "spotify":                             "file:///usr/share/icons/breeze-dark/apps/48/spotify-client.svg",
+            "vlc":                                 "file:///usr/share/icons/breeze-dark/apps/48/vlc.svg",
+            "elisa":                               "file:///usr/share/icons/breeze-dark/apps/48/elisa.svg",
+            "mpv":                                 "file:///usr/share/icons/breeze-dark/apps/48/mpv.svg",
+            "firefox":                             "file:///usr/share/icons/breeze-dark/apps/48/firefox.svg",
+            "chromium":                            "file:///usr/share/icons/breeze-dark/apps/48/chromium-browser.svg",
+            };
 
-        if (table[name]) return table[name];
-        if (name.startsWith("battery-")) {
+            if (table[name]) return table[name];
+
+            if (name.startsWith("battery-")) {
             return "file:///usr/share/icons/breeze-dark/status/24/" + name + ".svg";
-        }
-        
-        if (name.startsWith("media-")) {
+            }
+
+            if (name.startsWith("media-")) {
             return "file:///usr/share/icons/breeze-dark/actions/24/" + name + ".svg";
-        }
-        
+            }
+
+            if (name.startsWith("multimedia-")) {
+            return "file:///usr/share/icons/breeze-dark/apps/48/" + name.replace("-symbolic", "") + ".svg";
+            }        
         return "";
     }
 
@@ -815,6 +828,7 @@ ShellRoot {
     property int blurVersion: 0
     property string blurredWallpaperPath: "file:///tmp/elipsis_blur.png"
     property bool usePrecomputedBlur: true
+    property bool blurEnabled: true
 
     Process {
         id: wallpaperQuery
@@ -863,6 +877,11 @@ ShellRoot {
             let isEnabled = (enabled === "true" || enabled === "1" || enabled === true);
             shellRoot.usePrecomputedBlur = isEnabled;
             if (isEnabled && shellRoot.wallpaperPath !== "") blurGenerator.startBlur();
+        }
+
+        function setBlurEnabled(enabled: string) {
+            let isEnabled = (enabled === "true" || enabled === "1" || enabled === true);
+            shellRoot.blurEnabled = isEnabled;
         }
     }
 

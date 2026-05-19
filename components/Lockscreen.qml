@@ -39,6 +39,7 @@ WlSessionLockSurface {
             source: bgSource
             radius: Math.min(80, 80 * (authVisible ? 1 : Math.abs(swipeOffset) / 150))
             opacity: 1.0
+            visible: shellRoot.blurEnabled
         }
         
         // Darken overlay
