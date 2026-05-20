@@ -1,11 +1,11 @@
 [
   {
-    "source": "toggles/BluetoothToggle.qml",
-    "colSpan": 1,
+    "source": "toggles/NetworkToggle.qml",
+    "colSpan": 2,
     "rowSpan": 1
   },
   {
-    "source": "toggles/NetworkToggle.qml",
+    "source": "toggles/BluetoothToggle.qml",
     "colSpan": 2,
     "rowSpan": 1
   },

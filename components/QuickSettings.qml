@@ -168,7 +168,7 @@ PanelWindow {
             id: bgBlur
             anchors.fill: parent
             source: shellRoot.blurredWallpaperPath
-            cache: false
+            cache: true
             fillMode: Image.PreserveAspectCrop
 
             Connections {
@@ -321,7 +321,7 @@ PanelWindow {
             property string dateString: Qt.formatDate(new Date(), "dddd, MMMM d")
             Timer {
                 interval: 1000
-                running: true
+                running: qs.visible
                 repeat: true
                 onTriggered: {
                     notifPanel.timeString = Qt.formatTime(new Date(), "HH:mm");
@@ -399,7 +399,7 @@ PanelWindow {
             property int timeRefresh: 0
             Timer {
                 interval: 30000
-                running: true
+                running: qs.visible
                 repeat: true
                 onTriggered: notifPanel.timeRefresh++
             }
@@ -425,6 +425,7 @@ PanelWindow {
             property var groupedNotifications: {
                 // Depend on timeRefresh so timestamps re-evaluate
                 void notifPanel.timeRefresh;
+                if (!qs.isOpen && !qs.visible) return [];
                 let list = notificationServer.notificationList;
                 let groups = {};
                 let order = [];
@@ -1033,7 +1034,7 @@ PanelWindow {
 
             property var defaultLayout: [
                 {
-                    source: "toggles/WifiToggle.qml",
+                    source: "toggles/NetworkToggle.qml",
                     colSpan: 2,
                     rowSpan: 1
                 },
@@ -1096,7 +1097,7 @@ PanelWindow {
             Process {
                 id: fileWatcherProc
                 command: ["python3", "-c", "import time, os, sys; p=sys.argv[1]; lm=os.stat(p).st_mtime if os.path.exists(p) else 0;\nwhile True:\n time.sleep(1)\n try: m=os.stat(p).st_mtime\n except: m=0\n if m!=lm:\n  print('changed', flush=True); lm=m", Qt.resolvedUrl("../config/control_center_layout.json").toString().replace("file://", "")]
-                running: true
+                running: qs.visible
                 stdout: SplitParser {
                     onRead: data => {
                         if (data.trim() === "changed") {
@@ -1394,7 +1395,7 @@ PanelWindow {
                         width: parent.width
                         spacing: 24
                         
-                        opacity: expandedOverlay.isExpanded ? 0.0 : 1.0
+                        opacity: expandedOverlay.isExpanded ? 0.2 : 1.0
                         Behavior on opacity {
                             NumberAnimation {
                                 duration: 250
@@ -1477,6 +1478,8 @@ PanelWindow {
                                         radius: (model.colSpan >= 2 && model.rowSpan >= 2) ? 16 : Math.min(width, height) / 2
                                         color: Qt.rgba(0.15, 0.15, 0.2, 0.8)
                                         clip: true
+                                        opacity: (expandedOverlay.isExpanded && expandedOverlay.sourceItem === widgetBg) ? 0.0 : 1.0
+                                        Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
 
                                         Behavior on width { enabled: controlPanel.editMode; NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
                                         Behavior on height { enabled: controlPanel.editMode; NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
@@ -1502,7 +1505,7 @@ PanelWindow {
                                             }
                                         }
 
-                                        layer.enabled: true
+                                        layer.enabled: qs.visible
                                         layer.effect: OpacityMask {
                                             maskSource: Rectangle {
                                                 width: widgetBg.width
@@ -1524,6 +1527,8 @@ PanelWindow {
                                         Loader {
                                             id: widgetLoader
                                             anchors.fill: parent
+                                            active: qs.visible || qs.isOpen
+                                            asynchronous: true
                                             property var modelData: model
                                             source: model.source || ""
                                             onLoaded: {
@@ -2046,7 +2051,7 @@ PanelWindow {
                                                             color: Qt.rgba(0.15, 0.15, 0.2, 0.8)
                                                             clip: true
 
-                                                            layer.enabled: true
+                                                            layer.enabled: qs.visible
                                                             layer.effect: OpacityMask {
                                                                 maskSource: Rectangle {
                                                                     width: pvBg.width

@@ -216,7 +216,7 @@ Item {
                                     Image {
                                         id: appIcon
                                         source: root.getAppIcon(expandedRoot.player)
-                                        sourceSize: Qt.size(16, 16)
+                                        sourceSize: Qt.size(12, 12)
                                         fillMode: Image.PreserveAspectFit
                                     }
 
@@ -850,7 +850,7 @@ Item {
                     Image {
                         anchors.centerIn: parent
                         source: root.getAppIcon(activePlayer)
-                        sourceSize: Qt.size(16, 16)
+                        sourceSize: Qt.size(12, 12)
                         fillMode: Image.PreserveAspectFit
                     }
                 }

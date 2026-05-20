@@ -33,6 +33,7 @@ PanelWindow {
     property bool isSlim: false
     property bool isInteracting: false
     property bool isInitialized: false
+    property bool _userExpanded: false
 
     property bool mediaWidgetOpen: false
     property bool mediaWidgetAnimating: false
@@ -51,12 +52,31 @@ PanelWindow {
         interval: 410
         onTriggered: osd.mediaWidgetAnimating = false
     }
+    property var _manualPlayer: null
     property var activePlayer: {
         let players = Mpris.players.values
-        for (let i = 0; i < players.length; i++) {
-            if (players[i].isPlaying) return players[i]
+        if (players.length === 0) {
+            _manualPlayer = null
+            return null
         }
-        return players.length > 0 ? players[0] : null
+        if (_manualPlayer && players.indexOf(_manualPlayer) !== -1) {
+            return _manualPlayer
+        }
+        for (let i = 0; i < players.length; i++) {
+            if (players[i].isPlaying) {
+                _manualPlayer = null
+                return players[i]
+            }
+        }
+        return players[0]
+    }
+
+    function cyclePlayer() {
+        let players = Mpris.players.values
+        if (players.length <= 1) return
+        let idx = players.indexOf(activePlayer)
+        if (idx === -1) idx = 0
+        _manualPlayer = players[(idx + 1) % players.length]
     }
 
     onVolumeChanged: {
@@ -103,13 +123,19 @@ PanelWindow {
         onTriggered: osd.isInitialized = true
     }
 
+    Timer {
+        id: expandCooldownTimer
+        interval: 100
+        onTriggered: osd._userExpanded = false
+    }
+
     function showOSD() {
         if (!osd.visible || hideAnim.running) {
             osd.visible = true
             isSlim = false
             hideAnim.stop()
             showAnim.restart()
-        } else if (!isInteracting && !mediaWidgetOpen) {
+        } else if (!isInteracting && !mediaWidgetOpen && !_userExpanded) {
             isSlim = true
         }
         if (!mediaWidgetOpen) hideTimer.restart()
@@ -138,6 +164,7 @@ PanelWindow {
             osd.visible = false
             osd.isSlim = false
             osd.isInteracting = false
+            osd._userExpanded = false
             osd.mediaWidgetOpen = false
         }
     }
@@ -171,13 +198,13 @@ PanelWindow {
             // --- The iOS Style Pill ---
             Rectangle {
                 id: content
-                Layout.alignment: Qt.AlignVCenter
+                Layout.alignment: Qt.AlignTop
                 width: 220
-                height: isSlim ? 8 : 48
+                Layout.preferredHeight: isSlim ? 8 : 48
                 radius: height / 2
                 color: Qt.rgba(0.1, 0.1, 0.15, 0.6) // Glass background
 
-                Behavior on height { NumberAnimation { duration: 400; easing.type: Easing.OutExpo } }
+                Behavior on Layout.preferredHeight { NumberAnimation { duration: 400; easing.type: Easing.OutExpo } }
 
                 layer.enabled: true
                 layer.effect: OpacityMask {
@@ -218,10 +245,15 @@ PanelWindow {
                         }
                     }
 
-                    onPressed: (mouse) => handleVolume(mouse)
+                    onPressed: (mouse) => {
+                        if (osd.isSlim) osd._userExpanded = true
+                        osd.isSlim = false
+                        handleVolume(mouse)
+                    }
                     onPositionChanged: (mouse) => handleVolume(mouse)
                     onReleased: {
                         osd.isInteracting = false
+                        expandCooldownTimer.restart()
                         hideTimer.restart()
                     }
                 }
@@ -269,9 +301,13 @@ PanelWindow {
             Item {
                 id: circleButtonContainer
                 Layout.alignment: Qt.AlignVCenter
-                width: 48
+                Layout.preferredWidth: (osd.activePlayer && !osd.isSlim) ? 48 : 0
                 height: 48
-                visible: osd.activePlayer && !osd.isSlim
+                clip: true
+
+                Behavior on Layout.preferredWidth {
+                    NumberAnimation { duration: 350; easing.type: Easing.OutCubic }
+                }
             }
         }
         
@@ -492,6 +528,11 @@ PanelWindow {
                                     source: osd.getAppIcon(osd.activePlayer)
                                     sourceSize: Qt.size(14, 14)
                                     fillMode: Image.PreserveAspectFit
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: osd.cyclePlayer()
                                 }
                             }
                         }
