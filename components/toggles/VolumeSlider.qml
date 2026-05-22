@@ -621,7 +621,7 @@ Item {
             id: bgTrack
             anchors.fill: parent
             radius: 0
-            color: Qt.rgba(1, 1, 1, 0.15)
+            color: "transparent"
             clip: true
 
             Item {
@@ -641,11 +641,12 @@ Item {
                 }
             }
 
-            Rectangle {
+            MaterialSurface {
+                id: hSliderSurface
                 width: slider.visualPosition * bgTrack.width
                 height: bgTrack.height
                 radius: 0
-                color: Qt.rgba(0.2, 0.5, 1.0, 1.0)
+                isActive: true
                 clip: true
                 
                 Item {
@@ -661,7 +662,7 @@ Item {
                     ColorOverlay {
                         anchors.fill: fgIcon
                         source: fgIcon
-                        color: "white"
+                        color: hSliderSurface.iconColor
                     }
                 }
             }
@@ -704,7 +705,7 @@ Item {
             id: vBgTrack
             anchors.fill: parent
             radius: 0
-            color: Qt.rgba(1, 1, 1, 0.15)
+            color: "transparent"
             clip: true
 
             // Icon at the bottom of the track
@@ -729,12 +730,13 @@ Item {
             }
 
             // Filled portion (grows upward from bottom)
-            Rectangle {
+            MaterialSurface {
+                id: vSliderSurface
                 width: vBgTrack.width
                 height: (1.0 - vSlider.visualPosition) * vBgTrack.height
                 anchors.bottom: parent.bottom
                 radius: 0
-                color: Qt.rgba(0.2, 0.5, 1.0, 1.0)
+                isActive: true
                 clip: true
 
                 Item {
@@ -752,7 +754,7 @@ Item {
                     ColorOverlay {
                         anchors.fill: vFgIcon
                         source: vFgIcon
-                        color: "white"
+                        color: vSliderSurface.iconColor
                     }
                 }
             }

@@ -15,6 +15,7 @@ import "components"
 ShellRoot {
     id: shellRoot
 
+    property string materialTheme: "Acrylic"
     property bool isLocked: false
 
     WlSessionLock {
@@ -188,13 +189,14 @@ ShellRoot {
             // New pin from running app - ensure it doesn't already exist
             if (toIdx === -1) copy.push(fid);
             else copy.splice(toIdx, 0, fid);
-        } else if (toIdx !== -1 && fromIdx !== toIdx) {
+        } else if (fromIdx !== toIdx) {
             // Swap logic
             let item = copy.splice(fromIdx, 1)[0];
-            // Recalculate toIdx
-            toIdx = copy.indexOf(tid);
-            if (toIdx === -1) copy.push(item);
-            else copy.splice(toIdx, 0, item);
+            if (toIdx === -1) {
+                copy.push(item);
+            } else {
+                copy.splice(toIdx, 0, item);
+            }
         }
         
         // Remove any accidental duplicates just in case
@@ -261,6 +263,8 @@ ShellRoot {
         let addedIds = new Set();
         let runningStates = {}; // Map of entry ID -> address
         let runningIdsList = []; // List of entry IDs for App Drawer
+        let windowCounts = {}; // Map of entry ID -> number of windows
+        let focusedEntryId = ""; // Entry ID of the currently focused app
 
         // 1. Collect all running applications via heuristic lookup
         for (let i = 0; i < toplevels.length; i++) {
@@ -283,6 +287,12 @@ ShellRoot {
 
             if (entry) {
                 runningStates[entry.id] = ipc ? ipc.address : "";
+                // Count windows per app
+                windowCounts[entry.id] = (windowCounts[entry.id] || 0) + 1;
+                // Check if this toplevel is the focused (activated) one
+                if (tl.activated) {
+                    focusedEntryId = entry.id;
+                }
                 if (!addedIds.has(entry.id)) {
                     runningIdsList.push(entry.id);
                     runningApps.push({
@@ -292,11 +302,19 @@ ShellRoot {
                         entry: entry,
                         isRunning: true,
                         isPinned: false,
-                        address: ipc ? ipc.address : ""
+                        address: ipc ? ipc.address : "",
+                        windowCount: 0, // placeholder, set below
+                        isFocused: false // placeholder, set below
                     });
                     addedIds.add(entry.id);
                 }
             }
+        }
+
+        // Fill in windowCount and isFocused for running apps
+        for (let app of runningApps) {
+            app.windowCount = Math.min(windowCounts[app.id] || 1, 5);
+            app.isFocused = (app.id === focusedEntryId);
         }
         
         // Update reactive running state for App Drawer
@@ -316,7 +334,9 @@ ShellRoot {
                     entry: entry,
                     isRunning: !!runningStates[entry.id],
                     isPinned: true,
-                    address: runningStates[entry.id] || ""
+                    address: runningStates[entry.id] || "",
+                    windowCount: Math.min(windowCounts[entry.id] || 0, 5),
+                    isFocused: (entry.id === focusedEntryId)
                 });
                 pinnedAdded.add(entry.id);
             }
@@ -345,10 +365,12 @@ ShellRoot {
             if (i < dockApps.count && dockApps.get(i).id === target.id) {
                 // Just update state properties
                 let existing = dockApps.get(i);
-                if (existing.isRunning !== target.isRunning || existing.address !== target.address || existing.isPinned !== target.isPinned) {
+                if (existing.isRunning !== target.isRunning || existing.address !== target.address || existing.isPinned !== target.isPinned || existing.windowCount !== target.windowCount || existing.isFocused !== target.isFocused) {
                     dockApps.setProperty(i, "isRunning", target.isRunning);
                     dockApps.setProperty(i, "address", target.address);
                     dockApps.setProperty(i, "isPinned", target.isPinned);
+                    dockApps.setProperty(i, "windowCount", target.windowCount);
+                    dockApps.setProperty(i, "isFocused", target.isFocused);
                 }
             } else {
                 // Find target in current model
@@ -365,6 +387,8 @@ ShellRoot {
                     dockApps.setProperty(i, "isRunning", target.isRunning);
                     dockApps.setProperty(i, "address", target.address);
                     dockApps.setProperty(i, "isPinned", target.isPinned);
+                    dockApps.setProperty(i, "windowCount", target.windowCount);
+                    dockApps.setProperty(i, "isFocused", target.isFocused);
                 } else {
                     dockApps.insert(i, target);
                 }
@@ -764,6 +788,37 @@ ShellRoot {
         caffeineProc.running = true;
     }
 
+    // ── Screen Recording ──
+    property bool isScreenRecording: screenRecordProc.running
+    Process {
+        id: screenRecordProc
+        running: false
+    }
+    Process {
+        id: stopScreenRecordProc
+        command: ["pkill", "-SIGINT", "-f", "gpu-screen-recorder.*-o"]
+        running: false
+    }
+
+    function toggleScreenRecording(audioIndex, fpsIndex, encoderIndex, resIndex, bitrateIndex) {
+        if (isScreenRecording) {
+            stopScreenRecordProc.running = true
+        } else {
+            let audioOptions = ["default_output", "default_input", "default_output|default_input", "none"]
+            let fpsOptions = ["30", "45", "60"]
+            let encoderOptions = ["auto", "h264", "hevc", "av1"]
+            let resOptions = ["0x0"]
+            let bitrateOptions = ["medium", "high", "very_high", "ultra"]
+
+            let aOpt = audioOptions[audioIndex]
+            let aStr = aOpt !== "none" ? `-a "${aOpt}"` : ""
+            let cmd = `gpu-screen-recorder -w screen ${aStr} -f ${fpsOptions[fpsIndex]} -k ${encoderOptions[encoderIndex]} -s ${resOptions[resIndex]} -q ${bitrateOptions[bitrateIndex]} -o ~/Videos/ScreenRecord-$(date +%Y%m%d-%H%M%S).mp4`
+
+            screenRecordProc.command = ["sh", "-c", cmd]
+            screenRecordProc.running = true
+        }
+    }
+
     // ── Icon helper (direct lookup for breeze-dark) ──
     function icon(name) {
         let table = {
@@ -882,6 +937,14 @@ ShellRoot {
         function setBlurEnabled(enabled: string) {
             let isEnabled = (enabled === "true" || enabled === "1" || enabled === true);
             shellRoot.blurEnabled = isEnabled;
+        }
+
+        function setMaterial(material: string) {
+            if (["Solid", "Acrylic", "Frosted Glass"].includes(material)) {
+                shellRoot.materialTheme = material;
+            } else {
+                console.warn("Unknown material:", material);
+            }
         }
     }
 

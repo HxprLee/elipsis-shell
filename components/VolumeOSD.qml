@@ -202,7 +202,12 @@ PanelWindow {
                 width: 220
                 Layout.preferredHeight: isSlim ? 8 : 48
                 radius: height / 2
-                color: Qt.rgba(0.1, 0.1, 0.15, 0.6) // Glass background
+                color: "transparent"
+
+                MaterialSurface {
+                    anchors.fill: parent
+                    radius: parent.radius
+                }
 
                 Behavior on Layout.preferredHeight { NumberAnimation { duration: 400; easing.type: Easing.OutExpo } }
 
@@ -214,9 +219,6 @@ PanelWindow {
                         radius: content.radius
                     }
                 }
-
-                border.color: Qt.rgba(1, 1, 1, 0.08)
-                border.width: 1
 
                 Rectangle {
                     id: progressFill

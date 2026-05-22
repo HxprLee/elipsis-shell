@@ -9,12 +9,9 @@ Menu {
 
     padding: 8
 
-    background: Rectangle {
+    background: MaterialSurface {
         implicitWidth: 200
-        color: Qt.rgba(0.1, 0.1, 0.15, 0.95)
         radius: 12
-        border.color: Qt.rgba(1, 1, 1, 0.1)
-        border.width: 1
     }
     
     Instantiator {

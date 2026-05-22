@@ -619,6 +619,7 @@ Item {
     Rectangle {
         anchors.fill: parent
         color: Qt.rgba(0, 0, 0, 0.5)
+        visible: compactBgImg.status === Image.Ready && compactBgImg.source.toString() !== ""
     }
 
     // ── 2x2 Compact Layout ──

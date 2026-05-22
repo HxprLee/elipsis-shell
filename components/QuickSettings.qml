@@ -425,7 +425,8 @@ PanelWindow {
             property var groupedNotifications: {
                 // Depend on timeRefresh so timestamps re-evaluate
                 void notifPanel.timeRefresh;
-                if (!qs.isOpen && !qs.visible) return [];
+                if (!qs.isOpen && !qs.visible)
+                    return [];
                 let list = notificationServer.notificationList;
                 let groups = {};
                 let order = [];
@@ -1394,8 +1395,8 @@ PanelWindow {
                         id: flickableContent
                         width: parent.width
                         spacing: 24
-                        
-                        opacity: expandedOverlay.isExpanded ? 0.2 : 1.0
+
+                        opacity: expandedOverlay.isExpanded ? (shellRoot.materialTheme === "Solid" ? 0.2 : 0.0) : 1.0
                         Behavior on opacity {
                             NumberAnimation {
                                 duration: 250
@@ -1412,365 +1413,447 @@ PanelWindow {
                                 id: toggleGrid
                                 anchors.fill: parent
                                 columns: 4
-                            rowSpacing: 16
-                            columnSpacing: 16
+                                rowSpacing: 16
+                                columnSpacing: 16
 
-                            Repeater {
-                                model: togglesModel
-                                delegate: Item {
-                                    id: delegateItem
-                                    property int itemIndex: index
-                                    property bool isDragging: controlPanel.dragIndex === index
+                                Repeater {
+                                    model: togglesModel
+                                    delegate: Item {
+                                        id: delegateItem
+                                        property int itemIndex: index
+                                        property bool isDragging: controlPanel.dragIndex === index
 
-                                    // Keep the layout slot full size so it acts as a placeholder
-                                    Layout.columnSpan: model.colSpan
-                                    Layout.rowSpan: model.rowSpan
-                                    Layout.fillWidth: true
-                                    property real colWidth: Math.max(0, (toggleGrid.width - (3 * toggleGrid.columnSpacing)) / 4)
-                                    Layout.preferredWidth: (model.colSpan * colWidth) + ((model.colSpan - 1) * toggleGrid.columnSpacing)
-                                    Layout.minimumWidth: Layout.preferredWidth
-                                    Layout.maximumWidth: Layout.preferredWidth
-                                    Layout.preferredHeight: (model.rowSpan * ((400 - 48 - 48) / 4)) + ((model.rowSpan - 1) * 16)
+                                        // Keep the layout slot full size so it acts as a placeholder
+                                        Layout.columnSpan: model.colSpan
+                                        Layout.rowSpan: model.rowSpan
+                                        Layout.fillWidth: true
+                                        property real colWidth: Math.max(0, (toggleGrid.width - (3 * toggleGrid.columnSpacing)) / 4)
+                                        Layout.preferredWidth: (model.colSpan * colWidth) + ((model.colSpan - 1) * toggleGrid.columnSpacing)
+                                        Layout.minimumWidth: Layout.preferredWidth
+                                        Layout.maximumWidth: Layout.preferredWidth
+                                        Layout.preferredHeight: (model.rowSpan * ((400 - 48 - 48) / 4)) + ((model.rowSpan - 1) * 16)
 
-                                    Behavior on x {
-                                        enabled: controlPanel.editMode
-                                        NumberAnimation {
-                                            duration: 300
-                                            easing.type: Easing.OutCubic
-                                        }
-                                    }
-                                    Behavior on y {
-                                        enabled: controlPanel.editMode
-                                        NumberAnimation {
-                                            duration: 300
-                                            easing.type: Easing.OutCubic
-                                        }
-                                    }
-
-                                    Timer {
-                                        id: moveThrottle
-                                        interval: 200
-                                    }
-
-                                    DropArea {
-                                        anchors.fill: parent
-                                        keys: ["toggle"]
-                                        enabled: controlPanel.editMode && !delegateItem.isDragging
-                                        onEntered: drag => {
-                                            if (!moveThrottle.running && dragTracker.sourceDelegate && dragTracker.sourceDelegate.itemIndex !== delegateItem.itemIndex) {
-                                                let fromIdx = dragTracker.sourceDelegate.itemIndex;
-                                                let targetIdx = delegateItem.itemIndex;
-                                                togglesModel.move(fromIdx, targetIdx, 1);
-                                                controlPanel.dragIndex = targetIdx;
-                                                moveThrottle.start();
+                                        Behavior on x {
+                                            enabled: controlPanel.editMode
+                                            NumberAnimation {
+                                                duration: 300
+                                                easing.type: Easing.OutCubic
                                             }
                                         }
-                                    }
-
-                                    Rectangle {
-                                        id: widgetBg
-                                        parent: gridWrapper
-                                        property bool isCircle: model.colSpan === 1 && model.rowSpan === 1
-                                        width: delegateItem.width
-                                        height: delegateItem.height
-                                        x: delegateItem.x
-                                        y: delegateItem.y
-                                        radius: (model.colSpan >= 2 && model.rowSpan >= 2) ? 16 : Math.min(width, height) / 2
-                                        color: Qt.rgba(0.15, 0.15, 0.2, 0.8)
-                                        clip: true
-                                        opacity: (expandedOverlay.isExpanded && expandedOverlay.sourceItem === widgetBg) ? 0.0 : 1.0
-                                        Behavior on opacity { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
-
-                                        Behavior on width { enabled: controlPanel.editMode; NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
-                                        Behavior on height { enabled: controlPanel.editMode; NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
-                                        Behavior on x { enabled: controlPanel.editMode; NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
-                                        Behavior on y { enabled: controlPanel.editMode; NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
-                                        Behavior on radius { enabled: controlPanel.editMode; NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
-
-                                        property bool isItemPressed: {
-                                            if (controlPanel.editMode)
-                                                return false;
-                                            if (widgetLoader.item && widgetLoader.item.isSimpleToggle)
-                                                return simpleToggleMouse.pressed;
-                                            if (widgetLoader.item && "isPressed" in widgetLoader.item)
-                                                return widgetLoader.item.isPressed;
-                                            return complexHoldArea.pressed;
-                                        }
-
-                                        scale: widgetOverlay.dragActive ? 1.05 : (isItemPressed ? 0.95 : 1.0)
-                                        Behavior on scale {
+                                        Behavior on y {
+                                            enabled: controlPanel.editMode
                                             NumberAnimation {
-                                                duration: 150
+                                                duration: 300
                                                 easing.type: Easing.OutCubic
                                             }
                                         }
 
-                                        layer.enabled: qs.visible
-                                        layer.effect: OpacityMask {
-                                            maskSource: Rectangle {
-                                                width: widgetBg.width
-                                                height: widgetBg.height
-                                                radius: widgetBg.radius
-                                            }
+                                        Timer {
+                                            id: moveThrottle
+                                            interval: 200
                                         }
 
-                                        MouseArea {
-                                            id: complexHoldArea
+                                        DropArea {
                                             anchors.fill: parent
-                                            enabled: !controlPanel.editMode && widgetLoader.item !== null && widgetLoader.item.hasExpandedView === true && widgetLoader.item.isSimpleToggle !== true
-                                            pressAndHoldInterval: 300
-                                            onPressAndHold: {
-                                                controlPanel.openExpandedView(widgetBg, widgetLoader.item);
-                                            }
-                                        }
-
-                                        Loader {
-                                            id: widgetLoader
-                                            anchors.fill: parent
-                                            active: qs.visible || qs.isOpen
-                                            asynchronous: true
-                                            property var modelData: model
-                                            source: model.source || ""
-                                            onLoaded: {
-                                                // Connect expandRequested signal for widgets that handle their own hold detection
-                                                if (item && item.expandRequested) {
-                                                    item.expandRequested.connect(function () {
-                                                        if (!controlPanel.editMode && item.hasExpandedView) {
-                                                            controlPanel.openExpandedView(widgetBg, item);
-                                                        }
-                                                    });
+                                            keys: ["toggle"]
+                                            enabled: controlPanel.editMode && !delegateItem.isDragging
+                                            onEntered: drag => {
+                                                if (!moveThrottle.running && dragTracker.sourceDelegate && dragTracker.sourceDelegate.itemIndex !== delegateItem.itemIndex) {
+                                                    let fromIdx = dragTracker.sourceDelegate.itemIndex;
+                                                    let targetIdx = delegateItem.itemIndex;
+                                                    togglesModel.move(fromIdx, targetIdx, 1);
+                                                    controlPanel.dragIndex = targetIdx;
+                                                    moveThrottle.start();
                                                 }
                                             }
                                         }
 
-                                        // ── Shell-provided toggle chrome for simple toggles ──
-                                        // If the loaded widget has `isSimpleToggle: true`, the shell
-                                        // handles all styling (active bg, icon, label, click).
                                         Rectangle {
-                                            id: toggleChrome
-                                            anchors.fill: parent
-                                            visible: widgetLoader.item && widgetLoader.item.isSimpleToggle === true
-                                            radius: widgetBg.radius
-                                            color: {
-                                                if (!widgetLoader.item || !widgetLoader.item.isSimpleToggle)
-                                                    return "transparent";
-                                                if (model.colSpan === 2 && model.rowSpan === 2)
-                                                    return "transparent";
-                                                let w = widgetLoader.item;
-                                                return w.isActive ? (w.activeColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)) : "transparent";
-                                            }
-                                            Behavior on color {
-                                                ColorAnimation {
-                                                    duration: 200
-                                                }
-                                            }
+                                            id: widgetBg
+                                            parent: gridWrapper
+                                            property bool isCircle: model.colSpan === 1 && model.rowSpan === 1
+                                            width: delegateItem.width
+                                            height: delegateItem.height
+                                            x: delegateItem.x
+                                            y: delegateItem.y
+                                            radius: (model.colSpan >= 2 && model.rowSpan >= 2) ? 16 : Math.min(width, height) / 2
+                                            color: "transparent"
+                                            clip: true
+                                            opacity: (expandedOverlay.isExpanded && expandedOverlay.sourceItem === widgetBg) ? 0.0 : 1.0
 
-                                            // ── Layout for non-2x2 toggles (1x1 circles, 2x1 pills) ──
-                                            GridLayout {
-                                                visible: !(model.colSpan === 2 && model.rowSpan === 2)
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                x: model.colSpan > model.rowSpan ? (parent.height / 2 - 16) : 8
-                                                width: model.colSpan > model.rowSpan ? (parent.width - x - 16) : (parent.width - 16)
-
-                                                columns: model.colSpan > model.rowSpan ? 2 : 1
-                                                rowSpacing: 8
-                                                columnSpacing: 12
-
-                                                Image {
-                                                    Layout.alignment: Qt.AlignCenter
-                                                    width: 24
-                                                    height: width
-                                                    sourceSize: Qt.size(width, width)
-                                                    source: (widgetLoader.item && widgetLoader.item.iconSource) || ""
-                                                }
-
-                                                ColumnLayout {
-                                                    visible: model.colSpan > 1
-                                                    Layout.alignment: model.colSpan > model.rowSpan ? Qt.AlignVCenter | Qt.AlignLeft : Qt.AlignHCenter
-                                                    Layout.fillWidth: model.colSpan > model.rowSpan
-                                                    spacing: 0
-
-                                                    Text {
-                                                        text: (widgetLoader.item && (widgetLoader.item.titleText !== undefined ? widgetLoader.item.titleText : widgetLoader.item.toggleName)) || ""
-                                                        color: "white"
-                                                        font.pixelSize: 14
-                                                        font.bold: true
-                                                        Layout.fillWidth: true
-                                                        horizontalAlignment: model.colSpan > model.rowSpan ? Text.AlignLeft : Text.AlignHCenter
-                                                        elide: Text.ElideRight
-                                                    }
-
-                                                    Text {
-                                                        text: (widgetLoader.item && widgetLoader.item.subtitleText) || ""
-                                                        visible: text !== ""
-                                                        color: Qt.rgba(1, 1, 1, 0.6)
-                                                        font.pixelSize: 13
-                                                        font.bold: true
-                                                        Layout.fillWidth: true
-                                                        horizontalAlignment: model.colSpan > model.rowSpan ? Text.AlignLeft : Text.AlignHCenter
-                                                        elide: Text.ElideRight
-                                                    }
-                                                }
-                                            }
-
-                                            // ── Layout for 2x2 toggles ──
-                                            Item {
+                                            MaterialSurface {
+                                                id: bgSurface
                                                 anchors.fill: parent
-                                                visible: model.colSpan === 2 && model.rowSpan === 2
-
-                                                Rectangle {
-                                                    width: 48
-                                                    height: 48
-                                                    radius: 24
-                                                    anchors.top: parent.top
-                                                    anchors.topMargin: 16
-                                                    anchors.left: parent.left
-                                                    anchors.leftMargin: 16
-                                                    color: {
-                                                        if (!widgetLoader.item || !widgetLoader.item.isSimpleToggle)
-                                                            return Qt.rgba(1, 1, 1, 0.1);
-                                                        let w = widgetLoader.item;
-                                                        return w.isActive ? (w.activeColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)) : Qt.rgba(1, 1, 1, 0.1);
-                                                    }
-                                                    Behavior on color {
-                                                        ColorAnimation {
-                                                            duration: 200
-                                                        }
-                                                    }
-
-                                                    Image {
-                                                        anchors.centerIn: parent
-                                                        width: 24
-                                                        height: 24
-                                                        sourceSize: Qt.size(24, 24)
-                                                        source: (widgetLoader.item && widgetLoader.item.iconSource) || ""
-                                                    }
+                                                radius: parent.radius
+                                                isActive: {
+                                                    if (!widgetLoader.item)
+                                                        return false;
+                                                    if (widgetLoader.item.isSimpleToggle && model.colSpan >= 2)
+                                                        return false;
+                                                    return !!widgetLoader.item.isActive;
                                                 }
+                                                accentColor: (widgetLoader.item && widgetLoader.item.activeColor) ? widgetLoader.item.activeColor : (shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0))
+                                            }
+                                            Behavior on opacity {
+                                                NumberAnimation {
+                                                    duration: 250
+                                                    easing.type: Easing.OutCubic
+                                                }
+                                            }
 
-                                                ColumnLayout {
-                                                    anchors.bottom: parent.bottom
-                                                    anchors.bottomMargin: 16
-                                                    anchors.left: parent.left
-                                                    anchors.leftMargin: 16
-                                                    anchors.right: parent.right
-                                                    anchors.rightMargin: 16
-                                                    spacing: 0
+                                            Behavior on width {
+                                                enabled: controlPanel.editMode
+                                                NumberAnimation {
+                                                    duration: 300
+                                                    easing.type: Easing.OutCubic
+                                                }
+                                            }
+                                            Behavior on height {
+                                                enabled: controlPanel.editMode
+                                                NumberAnimation {
+                                                    duration: 300
+                                                    easing.type: Easing.OutCubic
+                                                }
+                                            }
+                                            Behavior on x {
+                                                enabled: controlPanel.editMode
+                                                NumberAnimation {
+                                                    duration: 300
+                                                    easing.type: Easing.OutCubic
+                                                }
+                                            }
+                                            Behavior on y {
+                                                enabled: controlPanel.editMode
+                                                NumberAnimation {
+                                                    duration: 300
+                                                    easing.type: Easing.OutCubic
+                                                }
+                                            }
+                                            Behavior on radius {
+                                                enabled: controlPanel.editMode
+                                                NumberAnimation {
+                                                    duration: 300
+                                                    easing.type: Easing.OutCubic
+                                                }
+                                            }
 
-                                                    Text {
-                                                        text: (widgetLoader.item && (widgetLoader.item.titleText !== undefined ? widgetLoader.item.titleText : widgetLoader.item.toggleName)) || ""
-                                                        color: "white"
-                                                        font.pixelSize: 14
-                                                        font.bold: true
-                                                        Layout.fillWidth: true
-                                                        elide: Text.ElideRight
-                                                    }
+                                            property bool isItemPressed: {
+                                                if (controlPanel.editMode)
+                                                    return false;
+                                                if (widgetLoader.item && widgetLoader.item.isSimpleToggle)
+                                                    return simpleToggleMouse.pressed;
+                                                if (widgetLoader.item && "isPressed" in widgetLoader.item)
+                                                    return widgetLoader.item.isPressed;
+                                                return complexHoldArea.pressed;
+                                            }
 
-                                                    Text {
-                                                        text: (widgetLoader.item && widgetLoader.item.subtitleText) || ""
-                                                        visible: text !== ""
-                                                        color: Qt.rgba(1, 1, 1, 0.6)
-                                                        font.pixelSize: 13
-                                                        font.bold: true
-                                                        Layout.fillWidth: true
-                                                        elide: Text.ElideRight
-                                                    }
+                                            scale: widgetOverlay.dragActive ? 1.05 : (isItemPressed ? 0.95 : 1.0)
+                                            Behavior on scale {
+                                                NumberAnimation {
+                                                    duration: 150
+                                                    easing.type: Easing.OutCubic
+                                                }
+                                            }
+
+                                            layer.enabled: qs.visible
+                                            layer.effect: OpacityMask {
+                                                maskSource: Rectangle {
+                                                    width: widgetBg.width
+                                                    height: widgetBg.height
+                                                    radius: widgetBg.radius
                                                 }
                                             }
 
                                             MouseArea {
-                                                id: simpleToggleMouse
+                                                id: complexHoldArea
                                                 anchors.fill: parent
-                                                enabled: !controlPanel.editMode
+                                                enabled: !controlPanel.editMode && widgetLoader.item !== null && widgetLoader.item.hasExpandedView === true && widgetLoader.item.isSimpleToggle !== true
                                                 pressAndHoldInterval: 300
-                                                onClicked: {
-                                                    if (widgetLoader.item && widgetLoader.item.toggled)
-                                                        widgetLoader.item.toggled();
-                                                }
                                                 onPressAndHold: {
-                                                    if (widgetLoader.item && widgetLoader.item.hasExpandedView) {
-                                                        controlPanel.openExpandedView(widgetBg, widgetLoader.item);
+                                                    controlPanel.openExpandedView(widgetBg, widgetLoader.item);
+                                                }
+                                            }
+
+                                            Loader {
+                                                id: widgetLoader
+                                                anchors.fill: parent
+                                                active: qs.visible || qs.isOpen
+                                                asynchronous: true
+                                                property var modelData: model
+                                                source: model.source || ""
+                                                onLoaded: {
+                                                    // Connect expandRequested signal for widgets that handle their own hold detection
+                                                    if (item && item.expandRequested) {
+                                                        item.expandRequested.connect(function () {
+                                                            if (!controlPanel.editMode && item.hasExpandedView) {
+                                                                controlPanel.openExpandedView(widgetBg, item);
+                                                            }
+                                                        });
+                                                    }
+                                                }
+                                            }
+
+                                            // ── Shell-provided toggle chrome for simple toggles ──
+                                            // If the loaded widget has `isSimpleToggle: true`, the shell
+                                            // handles all styling (active bg, icon, label, click).
+                                            Rectangle {
+                                                id: toggleChrome
+                                                anchors.fill: parent
+                                                visible: widgetLoader.item && widgetLoader.item.isSimpleToggle === true
+                                                radius: widgetBg.radius
+                                                color: "transparent"
+                                                Behavior on color {
+                                                    ColorAnimation {
+                                                        duration: 200
+                                                    }
+                                                }
+
+                                                // ── Layout for non-2x2 toggles (1x1 circles, 2x1 pills) ──
+                                                GridLayout {
+                                                    visible: !(model.colSpan === 2 && model.rowSpan === 2)
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    x: 14
+                                                    width: parent.width - x - 14
+
+                                                    columns: model.colSpan > model.rowSpan ? 2 : 1
+                                                    rowSpacing: 8
+                                                    columnSpacing: 12
+
+                                                    Rectangle {
+                                                        Layout.alignment: Qt.AlignCenter
+                                                        width: (model.colSpan > 1) ? 48 : 24
+                                                        height: (model.colSpan > 1) ? 48 : 24
+                                                        radius: width / 2
+                                                        color: "transparent"
+
+                                                        MaterialSurface {
+                                                            id: innerSurface
+                                                            anchors.fill: parent
+                                                            radius: parent.radius
+                                                            visible: model.colSpan > 1
+                                                            isToggleCircle: true
+                                                            isActive: widgetLoader.item ? !!widgetLoader.item.isActive : false
+                                                            accentColor: (widgetLoader.item && widgetLoader.item.activeColor) ? widgetLoader.item.activeColor : (shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0))
+                                                        }
+
+                                                        Item {
+                                                            anchors.centerIn: parent
+                                                            width: 28
+                                                            height: 28
+
+                                                            Image {
+                                                                id: chromeIcon
+                                                                anchors.fill: parent
+                                                                sourceSize: Qt.size(28, 28)
+                                                                source: (widgetLoader.item && widgetLoader.item.iconSource) || ""
+                                                                visible: false
+                                                            }
+                                                            ColorOverlay {
+                                                                anchors.fill: chromeIcon
+                                                                source: chromeIcon
+                                                                color: model.colSpan > 1 ? innerSurface.iconColor : bgSurface.iconColor
+                                                            }
+                                                        }
+                                                    }
+
+                                                    ColumnLayout {
+                                                        visible: model.colSpan > 1
+                                                        Layout.alignment: model.colSpan > model.rowSpan ? Qt.AlignVCenter | Qt.AlignLeft : Qt.AlignHCenter
+                                                        Layout.fillWidth: model.colSpan > model.rowSpan
+                                                        spacing: 0
+
+                                                        Text {
+                                                            text: (widgetLoader.item && (widgetLoader.item.titleText !== undefined ? widgetLoader.item.titleText : widgetLoader.item.toggleName)) || ""
+                                                            color: bgSurface.fgColor
+                                                            font.pixelSize: 14
+                                                            font.bold: true
+                                                            Layout.fillWidth: true
+                                                            horizontalAlignment: model.colSpan > model.rowSpan ? Text.AlignLeft : Text.AlignHCenter
+                                                            elide: Text.ElideRight
+                                                        }
+
+                                                        Text {
+                                                            text: (widgetLoader.item && widgetLoader.item.subtitleText) || ""
+                                                            visible: text !== ""
+                                                            color: bgSurface.fgColor
+                                                            font.pixelSize: 13
+                                                            font.bold: true
+                                                            Layout.fillWidth: true
+                                                            horizontalAlignment: model.colSpan > model.rowSpan ? Text.AlignLeft : Text.AlignHCenter
+                                                            elide: Text.ElideRight
+                                                        }
+                                                    }
+                                                }
+
+                                                // ── Layout for 2x2 toggles ──
+                                                Item {
+                                                    anchors.fill: parent
+                                                    visible: model.colSpan === 2 && model.rowSpan === 2
+
+                                                    Rectangle {
+                                                        id: toggleCircle
+                                                        width: 48
+                                                        height: 48
+                                                        radius: 24
+                                                        anchors.top: parent.top
+                                                        anchors.topMargin: 16
+                                                        anchors.left: parent.left
+                                                        anchors.leftMargin: 16
+                                                        color: "transparent"
+
+                                                        MaterialSurface {
+                                                            id: circleSurface
+                                                            anchors.fill: parent
+                                                            radius: parent.radius
+                                                            isToggleCircle: true
+                                                            isActive: widgetLoader.item ? !!widgetLoader.item.isActive : false
+                                                            accentColor: (widgetLoader.item && widgetLoader.item.activeColor) ? widgetLoader.item.activeColor : (shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0))
+                                                        }
+
+                                                        Item {
+                                                            anchors.centerIn: parent
+                                                            width: 28
+                                                            height: 28
+
+                                                            Image {
+                                                                id: circleIcon
+                                                                anchors.fill: parent
+                                                                sourceSize: Qt.size(28, 28)
+                                                                source: (widgetLoader.item && widgetLoader.item.iconSource) || ""
+                                                                visible: false
+                                                            }
+                                                            ColorOverlay {
+                                                                anchors.fill: circleIcon
+                                                                source: circleIcon
+                                                                color: circleSurface.iconColor
+                                                            }
+                                                        }
+                                                    }
+
+                                                    ColumnLayout {
+                                                        anchors.bottom: parent.bottom
+                                                        anchors.bottomMargin: 16
+                                                        anchors.left: parent.left
+                                                        anchors.leftMargin: 16
+                                                        anchors.right: parent.right
+                                                        anchors.rightMargin: 16
+                                                        spacing: 0
+
+                                                        Text {
+                                                            text: (widgetLoader.item && (widgetLoader.item.titleText !== undefined ? widgetLoader.item.titleText : widgetLoader.item.toggleName)) || ""
+                                                            color: "white"
+                                                            font.pixelSize: 14
+                                                            font.bold: true
+                                                            Layout.fillWidth: true
+                                                            elide: Text.ElideRight
+                                                        }
+
+                                                        Text {
+                                                            text: (widgetLoader.item && widgetLoader.item.subtitleText) || ""
+                                                            visible: text !== ""
+                                                            color: Qt.rgba(1, 1, 1, 0.6)
+                                                            font.pixelSize: 13
+                                                            font.bold: true
+                                                            Layout.fillWidth: true
+                                                            elide: Text.ElideRight
+                                                        }
+                                                    }
+                                                }
+
+                                                MouseArea {
+                                                    id: simpleToggleMouse
+                                                    anchors.fill: parent
+                                                    enabled: !controlPanel.editMode
+                                                    pressAndHoldInterval: 300
+                                                    onClicked: {
+                                                        if (widgetLoader.item && widgetLoader.item.toggled)
+                                                            widgetLoader.item.toggled();
+                                                    }
+                                                    onPressAndHold: {
+                                                        if (widgetLoader.item && widgetLoader.item.hasExpandedView) {
+                                                            controlPanel.openExpandedView(widgetBg, widgetLoader.item);
+                                                        }
                                                     }
                                                 }
                                             }
                                         }
+
+                                        EditOverlay {
+                                            id: widgetOverlay
+                                            parent: gridWrapper
+                                            z: 10
+                                            x: widgetBg.x
+                                            y: widgetBg.y
+                                            width: widgetBg.width
+                                            height: widgetBg.height
+                                            widgetRadius: widgetBg.radius
+                                            editMode: controlPanel.editMode
+                                            itemIndex: delegateItem.itemIndex
+                                            widgetSource: model.source || ""
+                                            currentColSpan: model.colSpan
+                                            currentRowSpan: model.rowSpan
+                                            availableSizes: widgetLoader.item ? widgetLoader.item.availableSizes : undefined
+                                            onDragStarted: (grabOffsetX, grabOffsetY) => {
+                                                // Position proxy at widgetBg's location in controlPanel coordinates
+                                                let pos = widgetBg.mapToItem(controlPanel, 0, 0);
+                                                dragProxy.x = pos.x;
+                                                dragProxy.y = pos.y;
+                                                dragProxy.width = widgetBg.width;
+                                                dragProxy.height = widgetBg.height;
+                                                dragProxy.radius = widgetBg.radius;
+                                                dragProxy.grabOffsetX = grabOffsetX;
+                                                dragProxy.grabOffsetY = grabOffsetY;
+                                                dragProxy.visible = true;
+
+                                                // Position tracker at widgetBg's center in flickable coordinates
+                                                let fPos = widgetBg.mapToItem(toggleFlickable.contentItem, widgetBg.width / 2, widgetBg.height / 2);
+                                                dragTracker.x = fPos.x - 10;
+                                                dragTracker.y = fPos.y - 10;
+                                                dragTracker.sourceDelegate = delegateItem;
+
+                                                // Ghost the original widget
+                                                widgetBg.opacity = 0.3;
+                                                controlPanel.dragIndex = delegateItem.itemIndex;
+                                            }
+
+                                            onDragMoved: (globalX, globalY) => {
+                                                // Update proxy position in controlPanel coordinates
+                                                let cp = controlPanel.mapFromItem(null, globalX, globalY);
+                                                dragProxy.x = cp.x - dragProxy.grabOffsetX;
+                                                dragProxy.y = cp.y - dragProxy.grabOffsetY;
+
+                                                // Update invisible tracker in flickable coordinates
+                                                let fp = toggleFlickable.contentItem.mapFromItem(null, globalX, globalY);
+                                                dragTracker.x = fp.x - 10;
+                                                dragTracker.y = fp.y - 10;
+                                            }
+
+                                            onDragFinished: {
+                                                // Hide proxy
+                                                dragProxy.visible = false;
+
+                                                // Drop the tracker to trigger DropArea
+                                                dragTracker.Drag.drop();
+                                                dragTracker.sourceDelegate = null;
+
+                                                // Unghost the widget
+                                                widgetBg.opacity = 1.0;
+                                                controlPanel.dragIndex = -1;
+
+                                                // Save layout after reorder
+                                                controlPanel.saveLayout();
+                                            }
+                                            onRemoved: {
+                                                togglesModel.remove(index);
+                                            }
+                                            onResized: (newColSpan, newRowSpan) => {
+                                                togglesModel.setProperty(index, "colSpan", newColSpan);
+                                                togglesModel.setProperty(index, "rowSpan", newRowSpan);
+                                            }
+                                        }
                                     }
-
-                                    EditOverlay {
-                                        id: widgetOverlay
-                                        parent: gridWrapper
-                                        z: 10
-                                        x: widgetBg.x
-                                        y: widgetBg.y
-                                        width: widgetBg.width
-                                        height: widgetBg.height
-                                        widgetRadius: widgetBg.radius
-                                        editMode: controlPanel.editMode
-                                        itemIndex: delegateItem.itemIndex
-                                        widgetSource: model.source || ""
-                                        currentColSpan: model.colSpan
-                                        currentRowSpan: model.rowSpan
-                                        availableSizes: widgetLoader.item ? widgetLoader.item.availableSizes : undefined
-                                        onDragStarted: (grabOffsetX, grabOffsetY) => {
-                                            // Position proxy at widgetBg's location in controlPanel coordinates
-                                            let pos = widgetBg.mapToItem(controlPanel, 0, 0);
-                                            dragProxy.x = pos.x;
-                                            dragProxy.y = pos.y;
-                                            dragProxy.width = widgetBg.width;
-                                            dragProxy.height = widgetBg.height;
-                                            dragProxy.radius = widgetBg.radius;
-                                            dragProxy.grabOffsetX = grabOffsetX;
-                                            dragProxy.grabOffsetY = grabOffsetY;
-                                            dragProxy.visible = true;
-
-                                            // Position tracker at widgetBg's center in flickable coordinates
-                                            let fPos = widgetBg.mapToItem(toggleFlickable.contentItem, widgetBg.width / 2, widgetBg.height / 2);
-                                            dragTracker.x = fPos.x - 10;
-                                            dragTracker.y = fPos.y - 10;
-                                            dragTracker.sourceDelegate = delegateItem;
-
-                                            // Ghost the original widget
-                                            widgetBg.opacity = 0.3;
-                                            controlPanel.dragIndex = delegateItem.itemIndex;
-                                        }
-
-                                        onDragMoved: (globalX, globalY) => {
-                                            // Update proxy position in controlPanel coordinates
-                                            let cp = controlPanel.mapFromItem(null, globalX, globalY);
-                                            dragProxy.x = cp.x - dragProxy.grabOffsetX;
-                                            dragProxy.y = cp.y - dragProxy.grabOffsetY;
-
-                                            // Update invisible tracker in flickable coordinates
-                                            let fp = toggleFlickable.contentItem.mapFromItem(null, globalX, globalY);
-                                            dragTracker.x = fp.x - 10;
-                                            dragTracker.y = fp.y - 10;
-                                        }
-
-                                        onDragFinished: {
-                                            // Hide proxy
-                                            dragProxy.visible = false;
-
-                                            // Drop the tracker to trigger DropArea
-                                            dragTracker.Drag.drop();
-                                            dragTracker.sourceDelegate = null;
-
-                                            // Unghost the widget
-                                            widgetBg.opacity = 1.0;
-                                            controlPanel.dragIndex = -1;
-
-                                            // Save layout after reorder
-                                            controlPanel.saveLayout();
-                                        }
-                                        onRemoved: {
-                                            togglesModel.remove(index);
-                                        }
-                                        onResized: (newColSpan, newRowSpan) => {
-                                            togglesModel.setProperty(index, "colSpan", newColSpan);
-                                            togglesModel.setProperty(index, "rowSpan", newRowSpan);
-                                        }
-                                    }
-                                }
-                            } // closes Repeater
-                        } // closes GridLayout
+                                } // closes Repeater
+                            } // closes GridLayout
                         } // closes gridWrapper
 
                         // ── Add a Control Button ──
@@ -1842,8 +1925,13 @@ PanelWindow {
                 id: addControlPopup
                 anchors.fill: parent
                 radius: 16
-                color: Qt.rgba(0.1, 0.1, 0.15, 0.95)
+                color: "transparent"
                 visible: opacity > 0
+
+                MaterialSurface {
+                    anchors.fill: parent
+                    radius: parent.radius
+                }
                 opacity: 0
                 z: 100
                 scale: opacity > 0.5 ? 1.0 : 0.9
@@ -2294,7 +2382,7 @@ PanelWindow {
                     expandedCard.x = targetX;
                     expandedCard.width = targetW;
 
-                    expandedOverlay.targetHeight = Qt.binding(function() {
+                    expandedOverlay.targetHeight = Qt.binding(function () {
                         let targetH = 420; // fallback
                         let implicitH = (expandedLoader.item && expandedLoader.item.implicitHeight > 0) ? expandedLoader.item.implicitHeight + 48 : 0;
                         let explicitH = (widgetItem && widgetItem.expandedHeight > 0) ? widgetItem.expandedHeight : 0;
@@ -2312,8 +2400,12 @@ PanelWindow {
                         return targetH;
                     });
 
-                    expandedCard.height = Qt.binding(function() { return expandedOverlay.targetHeight; });
-                    expandedCard.y = Qt.binding(function() { return (expandedOverlay.height - expandedOverlay.targetHeight) / 2; });
+                    expandedCard.height = Qt.binding(function () {
+                        return expandedOverlay.targetHeight;
+                    });
+                    expandedCard.y = Qt.binding(function () {
+                        return (expandedOverlay.height - expandedOverlay.targetHeight) / 2;
+                    });
 
                     expandedCard.radius = 16;
                 }
@@ -2321,7 +2413,7 @@ PanelWindow {
                 function close() {
                     isExpanded = false;
                     opacity = 0.0;
-                    
+
                     // Break bindings and morph back to original slot
                     expandedOverlay.targetHeight = 420; // Break binding
                     expandedCard.height = startHeight;
@@ -2339,8 +2431,13 @@ PanelWindow {
                 Rectangle {
                     id: expandedCard
                     property bool animationsEnabled: true
-                    color: Qt.rgba(0.15, 0.15, 0.2, 0.95)
+                    color: "transparent"
                     clip: true
+
+                    MaterialSurface {
+                        anchors.fill: parent
+                        radius: parent.radius
+                    }
 
                     Behavior on x {
                         enabled: expandedCard.animationsEnabled

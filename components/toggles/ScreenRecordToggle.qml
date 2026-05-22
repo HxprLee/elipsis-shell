@@ -69,35 +69,14 @@ Item {
     onResIndexChanged: { if (!_loading) shellRoot.setToggleSetting("ScreenRecordToggle", "resIndex", resIndex) }
     onBitrateIndexChanged: { if (!_loading) shellRoot.setToggleSetting("ScreenRecordToggle", "bitrateIndex", bitrateIndex) }
 
-    property bool isRecording: recordProc.running
+    property bool isRecording: shellRoot.isScreenRecording
 
     function toggleRecording() {
-        if (isRecording) {
-            stopProc.running = true
-        } else {
-            let aOpt = audioOptions[audioIndex]
-            let aStr = aOpt !== "none" ? `-a "${aOpt}"` : ""
-            let cmd = `gpu-screen-recorder -w screen ${aStr} -f ${fpsOptions[fpsIndex]} -k ${encoderOptions[encoderIndex]} -s ${resOptions[resIndex]} -q ${bitrateOptions[bitrateIndex]} -o ~/Videos/ScreenRecord-$(date +%Y%m%d-%H%M%S).mp4`
-
-            recordProc.command = ["sh", "-c", cmd]
-            recordProc.running = true
-        }
+        shellRoot.toggleScreenRecording(audioIndex, fpsIndex, encoderIndex, resIndex, bitrateIndex)
     }
 
     signal toggled()
     onToggled: toggleRecording()
-
-    Process {
-        id: recordProc
-        command: []
-        running: false
-    }
-
-    Process {
-        id: stopProc
-        command: ["pkill", "-SIGINT", "-f", "gpu-screen-recorder.*-o"]
-        running: false
-    }
 
     property bool hasExpandedView: true
     property Component expandedComponent: Component {
