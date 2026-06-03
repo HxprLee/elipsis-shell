@@ -19,7 +19,7 @@ Item {
     property string subtitleText: isWired ? "Connected" : (shellRoot.networkName !== "" ? "Connected" : (qs.wifiEnabled ? "Not Connected" : "Off"))
     property string iconSource: shellRoot.icon(isWired ? "network-wired-symbolic" : (qs.wifiEnabled ? "network-wireless-symbolic" : "network-wireless-offline-symbolic"))
     property bool isActive: qs.wifiEnabled || isWired
-    property color activeColor: Qt.rgba(0.2, 0.5, 1.0, 1.0)
+    property color activeColor: shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
 
     // Expanded view support
     property bool hasExpandedView: true

@@ -72,15 +72,12 @@ PanelWindow {
         id: container
         anchors.fill: parent
 
-        Rectangle {
+        MaterialSurface {
             id: pill
+            anchors.horizontalCenter: parent.horizontalCenter
             width: 460
             height: Math.max(70, textCol.implicitHeight + (appNameText.visible ? 44 : 28))
-            anchors.horizontalCenter: parent.horizontalCenter
             radius: 16
-            color: Qt.rgba(0.15, 0.15, 0.2, 0.98)
-            border.color: Qt.rgba(1, 1, 1, 0.12)
-            border.width: 1
 
             property real xOffset: 0
             property real yOffset: 0

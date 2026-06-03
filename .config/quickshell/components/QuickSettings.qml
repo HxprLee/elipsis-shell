@@ -179,7 +179,7 @@ PanelWindow {
                     bgBlur.source = s;
                 }
             }
-            visible: shellRoot.usePrecomputedBlur && shellRoot.blurEnabled
+            visible: shellRoot.usePrecomputedBlur && shellRoot.staticBlurEnabled
         }
 
         Rectangle {
@@ -508,18 +508,11 @@ PanelWindow {
                                 visible: !groupDelegate.isExpanded && group.notifications.length > 1
 
                                 // Top card (latest notification)
-                                Rectangle {
+                                MaterialSurface {
                                     id: stackedTopCard
                                     width: parent.width
                                     height: Math.max(70, stackedCardContent.implicitHeight + 28)
                                     radius: 16
-                                    color: stackedCardMouse.containsMouse ? Qt.rgba(0.18, 0.18, 0.24, 0.85) : Qt.rgba(0.15, 0.15, 0.2, 0.7)
-                                    Behavior on color {
-                                        ColorAnimation {
-                                            duration: 150
-                                        }
-                                    }
-                                    z: 10
 
                                     property var notif: group.notifications[0]
 
@@ -808,18 +801,12 @@ PanelWindow {
                                         }
                                     }
 
-                                    Rectangle {
+                                    MaterialSurface {
                                         id: notifCard
                                         width: swipeContainer.width
                                         x: swipeContainer.swipeX
                                         height: Math.max(70, cardContent.implicitHeight + 28)
                                         radius: 16
-                                        color: cardMouse.containsMouse ? Qt.rgba(0.18, 0.18, 0.24, 0.85) : Qt.rgba(0.15, 0.15, 0.2, 0.7)
-                                        Behavior on color {
-                                            ColorAnimation {
-                                                duration: 150
-                                            }
-                                        }
                                         opacity: swipeContainer.dismissed ? 0 : 1
                                         Behavior on opacity {
                                             NumberAnimation {
@@ -1091,44 +1078,38 @@ PanelWindow {
                 }
             ]
 
-            Component.onCompleted: loadLayoutProc.running = true
+            property bool layoutApplied: false
 
-            property bool ignoreNextChange: false
+            function applyLayout(items) {
+                togglesModel.clear();
+                for (let i = 0; i < items.length; i++) {
+                    togglesModel.append(items[i]);
+                }
+                controlPanel.layoutApplied = true;
+            }
 
-            Process {
-                id: fileWatcherProc
-                command: ["python3", "-c", "import time, os, sys; p=sys.argv[1]; lm=os.stat(p).st_mtime if os.path.exists(p) else 0;\nwhile True:\n time.sleep(1)\n try: m=os.stat(p).st_mtime\n except: m=0\n if m!=lm:\n  print('changed', flush=True); lm=m", Qt.resolvedUrl("../config/control_center_layout.json").toString().replace("file://", "")]
-                running: qs.visible
-                stdout: SplitParser {
-                    onRead: data => {
-                        if (data.trim() === "changed") {
-                            if (controlPanel.ignoreNextChange) {
-                                controlPanel.ignoreNextChange = false;
-                            } else {
-                                loadLayoutProc.running = true;
-                            }
-                        }
+            Connections {
+                target: shellRoot
+                function onConfigLoadCompleteChanged() {
+                    console.log("[QuickSettings] Config load complete:", shellRoot.configLoadComplete);
+                    console.log("[QuickSettings] Layout from shell:", JSON.stringify(shellRoot.controlCenterLayout));
+                    if (controlPanel.layoutApplied || !shellRoot.configLoadComplete) return;
+                    if (shellRoot.controlCenterLayout && shellRoot.controlCenterLayout.length > 0) {
+                        console.log("[QuickSettings] Applying saved layout");
+                        controlPanel.applyLayout(shellRoot.controlCenterLayout);
+                    } else {
+                        console.log("[QuickSettings] Applying default layout");
+                        controlPanel.applyLayout(controlPanel.defaultLayout);
                     }
                 }
             }
 
-            Process {
-                id: loadLayoutProc
-                command: ["cat", Qt.resolvedUrl("../config/control_center_layout.json").toString().replace("file://", "")]
-                running: false
-                stdout: StdioCollector {
-                    onStreamFinished: {
-                        try {
-                            let items = JSON.parse(text);
-                            if (Array.isArray(items) && items.length > 0) {
-                                controlPanel.applyLayout(items);
-                            } else {
-                                controlPanel.applyLayout(controlPanel.defaultLayout);
-                            }
-                        } catch (e) {
-                            console.warn("Layout load error, using defaults:", e);
-                            controlPanel.applyLayout(controlPanel.defaultLayout);
-                        }
+            Component.onCompleted: {
+                if (shellRoot.configLoadComplete && !controlPanel.layoutApplied) {
+                    if (shellRoot.controlCenterLayout && shellRoot.controlCenterLayout.length > 0) {
+                        controlPanel.applyLayout(shellRoot.controlCenterLayout);
+                    } else {
+                        controlPanel.applyLayout(controlPanel.defaultLayout);
                     }
                 }
             }
@@ -1136,13 +1117,6 @@ PanelWindow {
             Process {
                 id: saveLayoutProc
                 running: false
-            }
-
-            function applyLayout(items) {
-                togglesModel.clear();
-                for (let i = 0; i < items.length; i++) {
-                    togglesModel.append(items[i]);
-                }
             }
 
             Timer {
@@ -1190,10 +1164,8 @@ PanelWindow {
                         rowSpan: item.rowSpan
                     });
                 }
-                let path = Qt.resolvedUrl("../config/control_center_layout.json").toString().replace("file://", "");
-                controlPanel.ignoreNextChange = true;
-                saveLayoutProc.command = ["sh", "-c", "echo \"$1\" > \"$2\"", "sh", JSON.stringify(items, null, 2), path];
-                saveLayoutProc.running = true;
+                shellRoot.controlCenterLayout = items;
+                shellRoot.saveConfig();
             }
 
             function resetLayout() {

@@ -20,6 +20,43 @@ PanelWindow {
     implicitHeight: 40
     exclusionMode: ExclusionMode.Auto
 
+    // ── Single Tiled Window Detection ──
+    property bool hasSingleTiledWindow: {
+        let ws = Hyprland.focusedMonitor?.activeWorkspace;
+        if (!ws) return false;
+        let toplevels = Hyprland.toplevels?.values;
+        if (!toplevels) return false;
+        let tiledCount = 0;
+        for (let i = 0; i < toplevels.length; i++) {
+            let tl = toplevels[i];
+            if (!tl) continue;
+            let ipc = tl.lastIpcObject;
+            if (!ipc) continue;
+            if (ipc.workspace?.id === ws.id && !ipc.floating) {
+                tiledCount++;
+                if (tiledCount > 1) return false;
+            }
+        }
+        return tiledCount === 1;
+    }
+
+    // ── Background ──
+    Rectangle {
+        id: statusBarBg
+        anchors.fill: parent
+        color: Qt.rgba(0, 0, 0, 0.7)
+        opacity: hasSingleTiledWindow ? 1.0 : 0.0
+        Behavior on opacity {
+            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+        }
+    }
+
+    // Override color when blurEnabled is false
+    Binding on color {
+        when: !shellRoot.blurEnabled
+        value: Qt.rgba(0, 0, 0, 0.3)
+    }
+
     // ── Battery ──
     property int batteryPct: -1
     property string batteryStatus: ""
@@ -93,45 +130,46 @@ Timer {
 
             Repeater {
                 model: 9
-                Rectangle {
+                MaterialSurface {
                     property int wsId: index + 1
-                    property bool isActive: Hyprland.focusedMonitor
+                    property bool isWsActive: Hyprland.focusedMonitor
                                             ? (Hyprland.focusedMonitor.activeWorkspace
                                                ? Hyprland.focusedMonitor.activeWorkspace.id === wsId
                                                : false)
                                             : false
-                    property bool wsExists: {
-                        if (isActive) return true;
-                        for (let i = 0; i < Hyprland.workspaces.values.length; i++) {
-                            if (Hyprland.workspaces.values[i].id === wsId) return true;
+                    property bool wsHasWindows: {
+                        if (Hyprland.workspaces) {
+                            for (let i = 0; i < Hyprland.workspaces.values.length; i++) {
+                                if (Hyprland.workspaces.values[i].id === wsId) {
+                                    let toplevels = Hyprland.workspaces.values[i].toplevels;
+                                    return toplevels && toplevels.values && toplevels.values.length > 0;
+                                }
+                            }
                         }
                         return false;
                     }
+                    visible: wsHasWindows || isWsActive
 
-                    visible: wsExists
-                    width: isActive ? 36 : 24
+                    width: isWsActive ? 36 : 24
                     height: 20
                     radius: 10
-                    color: isActive ? statusBar.contentColor : "transparent"
-                    border.color: statusBar.contentColor
-                    border.width: 1
-                    anchors.verticalCenter: parent.verticalCenter
-
-                    Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutExpo } }
-                    Behavior on color { ColorAnimation { duration: 200 } }
+                    isActive: isWsActive
 
                     Text {
                         anchors.centerIn: parent
                         text: wsId
-                        color: parent.isActive ? (statusBar.contentColor.r + statusBar.contentColor.g + statusBar.contentColor.b < 1.5 ? "white" : "black") : statusBar.contentColor
+                        color: isWsActive ? (statusBar.contentColor.r + statusBar.contentColor.g + statusBar.contentColor.b < 1.5 ? "white" : "black") : statusBar.contentColor
                         font.pixelSize: 12
                         font.bold: true
-                        Behavior on color { ColorAnimation { duration: 400 } }
                     }
 
                     MouseArea {
                         anchors.fill: parent
                         onClicked: Hyprland.dispatch("hl.dsp.focus({ workspace = " + wsId + " })")
+                    }
+
+                    Behavior on width {
+                        NumberAnimation { duration: 200; easing.type: Easing.OutExpo }
                     }
                 }
             }

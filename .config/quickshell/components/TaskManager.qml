@@ -49,6 +49,12 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     aboveWindows: true
 
+    // --- Base Tinted Background (Always Visible) ---
+    Rectangle {
+        anchors.fill: parent
+        color: Qt.rgba(0, 0, 0, 0.05)
+    }
+
     Image {
         id: bgBlur
         anchors.fill: parent
@@ -65,7 +71,7 @@ PanelWindow {
             }
         }
         
-        visible: shellRoot.usePrecomputedBlur
+        visible: shellRoot.usePrecomputedBlur && shellRoot.staticBlurEnabled
         opacity: root.visible ? 1.0 : 0.0
         Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
         

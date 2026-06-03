@@ -28,7 +28,7 @@ Item {
     }
     property string iconSource: shellRoot.icon(qs.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
     property bool isActive: qs.bluetoothEnabled
-    property color activeColor: Qt.rgba(0.2, 0.5, 1.0, 1.0)
+    property color activeColor: shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
     
     // Expanded view support
     property bool hasExpandedView: true

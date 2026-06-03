@@ -95,7 +95,7 @@ PanelWindow {
                     bgBlur.source = s
                 }
             }
-            visible: shellRoot.usePrecomputedBlur && shellRoot.blurEnabled
+            visible: shellRoot.usePrecomputedBlur && shellRoot.staticBlurEnabled
         }
 
         Rectangle {
@@ -165,15 +165,22 @@ PanelWindow {
             spacing: 20
 
             // Search Bar
-            Rectangle {
+            MaterialSurface {
                 id: searchBar
                 Layout.alignment: Qt.AlignHCenter
                 Layout.preferredWidth: Math.min(parent.width * 0.6, 600)
                 height: 60
                 radius: 30
-                color: Qt.rgba(1, 1, 1, 0.1)
-                border.color: searchField.activeFocus ? Qt.rgba(1, 1, 1, 0.3) : Qt.rgba(1, 1, 1, 0.1)
-                border.width: 2
+
+                // Focus indicator border
+                Rectangle {
+                    anchors.fill: parent
+                    radius: parent.radius
+                    color: "transparent"
+                    border.width: 2
+                    border.color: searchField.activeFocus ? Qt.rgba(1, 1, 1, 0.3) : "transparent"
+                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                }
 
                 RowLayout {
                     anchors.fill: parent

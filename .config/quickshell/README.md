@@ -2,12 +2,6 @@
 
 An interactive, touch-oriented desktop/tablet shell built with [Quickshell](https://quickshell.outfox.dev/). Inspired by iOS, Plasma Mobile, Android and more mobile operating systems.
 
-<p align="center">
-  <img src=".images/homescreen.png" alt="Home screen">
-  <img src=".images/quicksettings.png" alt="Quick settings">
-  <img src=".images/taskswitcher.png" alt="Task switcher">
-</p>
-
 ## Available Features
 - Adaptive Dock
 - Gesture Navigation
@@ -30,43 +24,19 @@ An interactive, touch-oriented desktop/tablet shell built with [Quickshell](http
 - More navigation bar gestures
 - Localization support 
 
+### Prerequisites
+- Qt6
+- [Quickshell](https://quickshell.outfox.dev/) installed on your system (git release).
+
 ### Dependencies
+Will update soon.
 
-**Core**
-- **Hyprland** (≥ v0.55) — compositor
-- **Qt6** — `qt6-base`, `qt6-declarative`, `qt6-5compat`, `qt6-svg`, `qt6-labs-folderlistmodel`
-- **Quickshell** (git) — shell framework
-- **Breeze Icons** — icon theme
-
-**System services**
-- `NetworkManager` — networking
-- `bluez` / `bluez-utils` — Bluetooth
-- `pipewire` / `wireplumber` — audio
-- `upower` — battery
-- `hypridle` — idle management
-- `awww` — wallpaper backend
-- `gpu-screen-recorder` — screen recorder backend
-
-See more in [Arch Linux install script](install-arch.sh).
-
-## Installation
-
-**Arch Linux** — run the install script:
-
-```bash
-git clone https://github.com/HxprLee/elipsis-shell && cd elipsis-shell/
-chmod +x install-arch.sh
-./install-arch.sh
-```
-
-**Other distrobutions** — install the [dependencies](#dependencies) listed above manually and copy the .config/ dir in the project to your user directory
-
-### 3. Launch
+### Running
+Clone the repository and copy the content inside to `.config/quickshell` then simply run
 
 ```bash
 qs
 ```
-
 
 ## Creating Custom Toggles
 

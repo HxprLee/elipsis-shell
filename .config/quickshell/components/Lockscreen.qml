@@ -9,12 +9,27 @@ import Qt5Compat.GraphicalEffects
 
 WlSessionLockSurface {
     id: root
-    
+
+    // ── Security state ──
+    property bool authVisible: false
+    property real swipeOffset: 0
+    property string wallpaperPath: ""
+
+    // Brute-force protection
+    property int failedAttempts: 0
+    readonly property int maxAttempts: 10
+    property bool lockedOut: false
+    property int lockoutRemaining: 0
+
+    // PAM lifecycle
+    property bool pamReady: false
+    property bool pamActive: false
+
     // Background with conditional blur
     Rectangle {
         anchors.fill: parent
         color: "#050505"
-        
+
         Image {
             id: bgImage
             anchors.fill: parent
@@ -41,7 +56,7 @@ WlSessionLockSurface {
             opacity: 1.0
             visible: shellRoot.blurEnabled
         }
-        
+
         // Darken overlay
         Rectangle {
             anchors.fill: parent
@@ -64,15 +79,13 @@ WlSessionLockSurface {
         onReleased: (mouse) => {
             if (!authVisible && (startY - mouse.y) > 150) {
                 authVisible = true
+                startPamSession()
             }
             swipeOffset = 0
         }
     }
 
-    property bool authVisible: false
-    property real swipeOffset: 0
-    property string wallpaperPath: ""
-
+    // ── Wallpaper ──
     Process {
         id: wallpaperQuery
         command: ["awww", "query"]
@@ -90,24 +103,115 @@ WlSessionLockSurface {
         wallpaperQuery.running = true;
     }
 
-    PamContext {
-        id: pam
-        active: authVisible
-        onCompleted: (result) => {
-            if (result === PamResult.Success) {
-                shellRoot.unlock()
-            } else {
-                passwordInput.text = ""
+    // ── Lockout timer (progressive backoff) ──
+    Timer {
+        id: lockoutTimer
+        interval: 1000
+        repeat: true
+        running: lockedOut
+        onTriggered: {
+            lockoutRemaining--
+            if (lockoutRemaining <= 0) {
+                lockedOut = false
+                lockoutRemaining = 0
+                restartPamAfterLockout()
             }
         }
     }
 
-    // --- Main UI Layer (iPadOS Style) ---
+    function startPamSession() {
+        if (lockedOut) return
+        pamActive = true
+        pam.active = true
+    }
+
+    function restartPamAfterLockout() {
+        if (!authVisible) return
+        pamActive = true
+        pam.active = true
+    }
+
+    function handleFailedAttempt() {
+        failedAttempts++
+        passwordInput.text = ""
+        pamReady = false
+        pamActive = false
+
+        if (failedAttempts >= maxAttempts) {
+            lockedOut = true
+            lockoutRemaining = calculateLockoutDuration()
+            lockoutTimer.restart()
+            pam.abort()
+        } else {
+            pam.active = false
+            pam.active = true
+            pamReady = false
+        }
+    }
+
+    function calculateLockoutDuration() {
+        let excess = failedAttempts - maxAttempts + 1
+        if (excess <= 0) return 0
+        // Exponential backoff: 2^(excess-1) minutes, capped at 60 min
+        let seconds = Math.pow(2, Math.min(excess - 1, 6)) * 60
+        return Math.min(Math.round(seconds), 3600)
+    }
+
+    // ── PAM Authentication ──
+    PamContext {
+        id: pam
+        active: false
+
+        onPamMessage: {
+            if (responseRequired) {
+                pamReady = true
+            }
+        }
+
+        onCompleted: (result) => {
+            pamReady = false
+            pamActive = false
+            if (result === PamResult.Success) {
+                failedAttempts = 0
+                lockedOut = false
+                lockoutRemaining = 0
+                lockoutTimer.stop()
+                passwordInput.text = ""
+                shellRoot.unlock()
+            } else if (result === PamResult.MaxTries) {
+                pamMessage.text = "Maximum attempts exceeded"
+                pamMessage.isError = true
+                handleFailedAttempt()
+            } else {
+                handleFailedAttempt()
+            }
+        }
+    }
+
+    function submitPassword() {
+        if (lockedOut || !pamReady || passwordInput.text === "") return
+        pamReady = false
+        pam.respond(passwordInput.text)
+    }
+
+    function clearAuthState() {
+        authVisible = false
+        passwordInput.text = ""
+        failedAttempts = 0
+        lockedOut = false
+        lockoutRemaining = 0
+        lockoutTimer.stop()
+        pamReady = false
+        pamActive = false
+        pam.abort()
+    }
+
+    // ── Main UI Layer (iPadOS Style) ──
     Item {
         anchors.fill: parent
         opacity: 1 - Math.min(1, authVisible ? 1 : (Math.abs(swipeOffset) / 150))
         visible: opacity > 0
-        
+
         // Padlock Icon
         Image {
             id: padlockIcon
@@ -118,7 +222,7 @@ WlSessionLockSurface {
             anchors.horizontalCenter: parent.horizontalCenter
             sourceSize: Qt.size(32, 32)
             opacity: 0.9
-            
+
             transform: Translate {
                 y: swipeOffset * 0.5
                 Behavior on y {
@@ -135,7 +239,7 @@ WlSessionLockSurface {
             anchors.topMargin: 16
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: -15
-            
+
             transform: Translate {
                 y: swipeOffset * 1.2
                 Behavior on y {
@@ -143,7 +247,7 @@ WlSessionLockSurface {
                     NumberAnimation { duration: 400; easing.type: Easing.OutCubic }
                 }
             }
-            
+
             Text {
                 text: Qt.formatDate(new Date(), "dddd, MMMM d")
                 color: "white"
@@ -168,7 +272,7 @@ WlSessionLockSurface {
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 12
             opacity: 1 - Math.min(1, authVisible ? 1 : (Math.abs(swipeOffset) / 150))
-            
+
             transform: Translate {
                 y: swipeOffset * 0.3
                 Behavior on y {
@@ -195,13 +299,13 @@ WlSessionLockSurface {
         }
     }
 
-    // --- Auth Layer ---
+    // ── Auth Layer ──
     Item {
         id: authLayer
         anchors.fill: parent
         opacity: authVisible ? 1 : Math.min(1, Math.abs(swipeOffset) / 150)
         visible: opacity > 0
-        
+
         Behavior on opacity {
             enabled: !lockMouseArea.pressed
             NumberAnimation { duration: 400; easing.type: Easing.OutCubic }
@@ -210,27 +314,43 @@ WlSessionLockSurface {
         Column {
             anchors.centerIn: parent
             width: 320
-            spacing: 32
-            
+            spacing: 24
+            Layout.alignment: Qt.AlignCenter
+
             scale: 0.9 + (parent.opacity * 0.1)
             Behavior on scale { NumberAnimation { duration: 400; easing.type: Easing.OutBack } }
 
+            // PAM status / error message
             Text {
+                id: pamMessage
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: pam.message !== "" ? pam.message : "Enter Passcode"
-                color: pam.messageIsError ? "#ff4444" : "white"
-                font.pixelSize: 22
+                property bool isError: false
+                text: {
+                    if (lockedOut) {
+                        let m = Math.ceil(lockoutRemaining / 60)
+                        let s = lockoutRemaining % 60
+                        if (m > 0) return "Locked out. Try again in " + m + "m " + s + "s"
+                        return "Locked out. Try again in " + s + "s"
+                    }
+                    if (pam.message !== "" && pam.message !== "Password: ")
+                        return pam.message
+                    if (isError) return pam.message
+                    return "Enter Passcode"
+                }
+                color: isError ? "#ff4444" : (lockedOut ? "#ff8844" : "white")
+                font.pixelSize: isError || lockedOut ? 16 : 22
                 font.weight: Font.Medium
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                width: parent.width
             }
 
             // Password Field
-            Rectangle {
+            MaterialSurface {
                 width: parent.width
                 height: 56
                 radius: 16
-                color: Qt.rgba(1, 1, 1, 0.15)
-                border.color: Qt.rgba(1, 1, 1, 0.1)
-                border.width: 1
+                enabled: !lockedOut
 
                 TextInput {
                     id: passwordInput
@@ -242,10 +362,11 @@ WlSessionLockSurface {
                     color: "white"
                     font.pixelSize: 24
                     echoMode: pam.responseVisible ? TextInput.Normal : TextInput.Password
-                    focus: authVisible
+                    focus: authVisible && !lockedOut
+                    activeFocusOnPress: true
+                    enabled: !lockedOut
                     onAccepted: {
-                        pam.respond(text)
-                        text = ""
+                        if (!lockedOut) submitPassword()
                     }
                 }
             }
@@ -254,41 +375,58 @@ WlSessionLockSurface {
             GridLayout {
                 columns: 3
                 rowSpacing: 20
-                columnSpacing: 24
+                columnSpacing: 10
                 width: parent.width
-                Layout.alignment: Qt.AlignHCenter
+                Layout.alignment: Qt.AlignWCenter
+                enabled: !lockedOut
 
                 Repeater {
-                    model: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "Cancel", "0", "OK"]
+                    model: [
+                        "1", "2", "3",
+                        "4", "5", "6",
+                        "7", "8", "9",
+                        "Cancel", "0", "Enter"
+                    ]
                     delegate: Button {
-                        implicitWidth: 80
-                        implicitHeight: 80
+                        implicitWidth: 90
+                        implicitHeight: 90
                         flat: true
-                        
-                        background: Rectangle {
-                            radius: 40
-                            color: parent.pressed ? Qt.rgba(1, 1, 1, 0.3) : Qt.rgba(1, 1, 1, 0.15)
-                            border.color: Qt.rgba(1, 1, 1, 0.1)
-                            border.width: 1
-                            visible: modelData !== "Cancel" && modelData !== "OK"
+                        enabled: !lockedOut
+
+                        background: MaterialSurface {
+                            radius: 67
+                            isActive: parent.pressed && !lockedOut
                         }
 
-                        contentItem: Text {
-                            text: modelData
-                            color: "white"
-                            font.pixelSize: (modelData === "Cancel" || modelData === "OK") ? 18 : 32
-                            font.weight: (modelData === "Cancel" || modelData === "OK") ? Font.Medium : Font.Normal
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
+                        contentItem: Item {
+                            anchors.fill: parent
+                            Image {
+                                anchors.centerIn: parent
+                                width: 32
+                                height: 32
+                                sourceSize: Qt.size(32, 32)
+                                visible: modelData === "Cancel" || modelData === "Enter"
+                                source: modelData === "Cancel"
+                                    ? shellRoot.icon("window-close-symbolic")
+                                    : (modelData === "Enter" ? shellRoot.icon("emblem-ok-symbolic") : "")
+                            }
+                            Text {
+                                anchors.centerIn: parent
+                                text: (modelData !== "Cancel" && modelData !== "Enter") ? modelData : ""
+                                color: "white"
+                                font.pixelSize: 28
+                                font.weight: Font.Normal
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
                         }
 
                         onClicked: {
+                            if (lockedOut) return
                             if (modelData === "Cancel") {
-                                authVisible = false
-                                passwordInput.text = ""
-                            } else if (modelData === "OK") {
-                                pam.respond(passwordInput.text)
-                                passwordInput.text = ""
+                                clearAuthState()
+                            } else if (modelData === "Enter") {
+                                submitPassword()
                             } else {
                                 passwordInput.text += modelData
                             }
@@ -308,7 +446,7 @@ WlSessionLockSurface {
         anchors.margins: 16
         opacity: 1 - Math.min(1, authVisible ? 1 : (Math.abs(swipeOffset) / 150))
         visible: opacity > 0
-        
+
         Behavior on opacity {
             enabled: !lockMouseArea.pressed
             NumberAnimation { duration: 400; easing.type: Easing.OutCubic }

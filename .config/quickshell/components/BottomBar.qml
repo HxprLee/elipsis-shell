@@ -21,6 +21,40 @@ PanelWindow {
     aboveWindows: true
 
     property bool hasWindows: shellRoot.hasWindowsOnCurrentWs
+    property bool hasSingleTiledWindow: {
+        let ws = Hyprland.focusedMonitor?.activeWorkspace;
+        if (!ws) return false;
+        let toplevels = Hyprland.toplevels.values;
+        let tiledCount = 0;
+        for (let i = 0; i < toplevels.length; i++) {
+            let tl = toplevels[i];
+            if (!tl) continue;
+            let ipc = tl.lastIpcObject;
+            if (!ipc) continue;
+            if (ipc.workspace?.id === ws.id && !ipc.floating) {
+                tiledCount++;
+                if (tiledCount > 1) return false;
+            }
+        }
+        return tiledCount === 1;
+    }
+
+    Rectangle {
+        id: bottomBarBg
+        anchors.fill: parent
+        color: Qt.rgba(0, 0, 0, 0.7)
+        opacity: hasSingleTiledWindow && root.barState === "handle" ? 1.0 : 0.0
+        Behavior on opacity {
+            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+        }
+    }
+
+    // Override color when blurEnabled is false
+    Binding on color {
+        when: !shellRoot.blurEnabled
+        value: Qt.rgba(0, 0, 0, 0.3)
+    }
+
     property real swipeStartTime: 0
     property string barState: "handle"
     property bool _lockState: false

@@ -26,7 +26,7 @@ Item {
         id: slider
         anchors.fill: parent
         visible: !root.isVertical
-        from: 0; to: 100
+        from: 1; to: 100
         value: qs.brightnessValue
         onMoved: qs.setBrightness(value)
         padding: 0
@@ -91,7 +91,7 @@ Item {
         anchors.fill: parent
         visible: root.isVertical
         orientation: Qt.Vertical
-        from: 0; to: 100
+        from: 1; to: 100
         value: qs.brightnessValue
         onMoved: qs.setBrightness(value)
         padding: 0

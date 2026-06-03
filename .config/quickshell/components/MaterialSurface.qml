@@ -101,7 +101,7 @@ Item {
         gradient: Gradient {
             GradientStop {
                 position: 0.0
-                color: Qt.rgba(1.0, 1.0, 1.0, 0.4)
+                color: Qt.rgba(1.0, 1.0, 1.0, 0.3)
             }
             GradientStop {
                 position: 0.25

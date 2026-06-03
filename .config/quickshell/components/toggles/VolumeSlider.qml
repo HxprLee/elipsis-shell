@@ -114,7 +114,7 @@ Item {
                                 Rectangle {
                                     width: masterSlider.visualPosition * masterBgTrack.width
                                     height: masterBgTrack.height
-                                    color: Qt.rgba(0.2, 0.5, 1.0, 1.0)
+                                    color: shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
 
                                     Item {
                                         x: 0
@@ -464,7 +464,7 @@ Item {
                                         width: parent.parent.visualPosition * parent.width
                                         height: parent.height
                                         radius: 4
-                                        color: isDefault ? Qt.rgba(0.2, 0.5, 1.0, 1.0) : Qt.rgba(1, 1, 1, 0.4)
+                                        color: isDefault ? shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0) : Qt.rgba(1, 1, 1, 0.4)
                                     }
                                 }
 
@@ -575,7 +575,7 @@ Item {
                                         width: parent.parent.visualPosition * parent.width
                                         height: parent.height
                                         radius: 4
-                                        color: Qt.rgba(0.2, 0.5, 1.0, 1.0)
+                                        color: shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
                                     }
                                 }
 

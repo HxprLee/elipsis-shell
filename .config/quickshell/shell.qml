@@ -9,6 +9,7 @@ import Quickshell.Networking
 import Quickshell.Bluetooth
 import Quickshell.Services.Mpris
 import Quickshell.Wayland
+import Quickshell.Services.UPower
 import QtQuick
 import "components"
 
@@ -17,6 +18,7 @@ ShellRoot {
 
     property string materialTheme: "Acrylic"
     property bool isLocked: false
+    property var accentColor: null
 
     WlSessionLock {
         id: sessionLock
@@ -98,70 +100,101 @@ ShellRoot {
         objects: [Pipewire.defaultAudioSink, Pipewire.defaultAudioSource]
     }
 
-    // ── App Data & Database ──
+    // ── Unified Config ──
     property var pinnedApps: []
-    property var runningAppIds: [] // List of entry IDs currently running
-
-    Process {
-        id: loadPinnedProc
-        command: ["cat", Qt.resolvedUrl("config/pinned_apps.json").toString().replace("file://", "")]
-        running: true
-        stdout: StdioCollector {
-            onStreamFinished: {
-                try {
-                    shellRoot.pinnedApps = JSON.parse(text);
-                    shellRoot.refreshDock();
-                } catch(e) { console.error("Pinned load error:", e); }
-            }
-        }
-    }
-
-    FileView {
-        path: Qt.resolvedUrl("config/pinned_apps.json").toString().replace("file://", "")
-        watchChanges: true
-        onFileChanged: loadPinnedProc.running = true
-    }
-
-    function savePinnedApps() {
-        savePinnedProc.command = ["sh", "-c", "echo '" + JSON.stringify(pinnedApps) + "' > " + Qt.resolvedUrl("config/pinned_apps.json").toString().replace("file://", "")]
-        savePinnedProc.running = true
-    }
-
-    // ── Toggle Persistent Data ──
+    property var runningAppIds: []
     property var toggleData: ({})
     property bool toggleDataLoaded: false
+    property var controlCenterLayout: []
+    property bool configLoadComplete: false
 
     Process {
-        id: loadToggleDataProc
-        command: ["cat", Qt.resolvedUrl("config/toggle_data.json").toString().replace("file://", "")]
+        id: loadConfigProc
+        command: ["cat", Qt.resolvedUrl("config/config.json").toString().replace("file://", "")]
         running: true
         stdout: StdioCollector {
             onStreamFinished: {
+                console.log("[Config] Raw:", text);
                 try {
-                    shellRoot.toggleData = JSON.parse(text) || {};
-                } catch(e) { 
-                    console.error("Toggle data load error:", e); 
-                    shellRoot.toggleData = {};
+                    let cfg = JSON.parse(text) || {};
+                    console.log("[Config] Parsed:", JSON.stringify(cfg));
+
+                    if (cfg.pinnedApps) shellRoot.pinnedApps = cfg.pinnedApps;
+                    if (cfg.toggleData) shellRoot.toggleData = cfg.toggleData;
+                    shellRoot.toggleDataLoaded = true;
+
+                    let app = cfg.appearance || {};
+                    if (app.materialTheme !== undefined) shellRoot.materialTheme = app.materialTheme;
+                    if (app.staticBlurEnabled !== undefined) shellRoot.staticBlurEnabled = app.staticBlurEnabled;
+                    if (app.blurEnabled !== undefined) shellRoot.blurEnabled = app.blurEnabled;
+                    if (app.accentColor !== undefined && app.accentColor !== null && app.accentColor !== "") {
+                        let c = app.accentColor;
+                        if (typeof c === "string" && c.startsWith("#")) {
+                            let hex = c.slice(1);
+                            let r = parseInt(hex.slice(0, 2), 16) / 255;
+                            let g = parseInt(hex.slice(2, 4), 16) / 255;
+                            let b = parseInt(hex.slice(4, 6), 16) / 255;
+                            let a = hex.length === 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1.0;
+                            shellRoot.accentColor = Qt.rgba(r, g, b, a);
+                        } else {
+                            shellRoot.accentColor = c;
+                        }
+                    }
+                    if (app.wallpaperPath !== undefined) shellRoot.wallpaperPath = app.wallpaperPath;
+
+                    if (cfg.layout && cfg.layout.length > 0) shellRoot.controlCenterLayout = cfg.layout;
+                    console.log("[Config] Layout:", JSON.stringify(shellRoot.controlCenterLayout));
+
+                    shellRoot.refreshDock();
+                    shellRoot.configLoadComplete = true;
+                    console.log("[Config] Loaded successfully");
+                } catch (e) {
+                    console.error("Config load error:", e);
+                    shellRoot.configLoadComplete = true;
                 }
-                shellRoot.toggleDataLoaded = true;
             }
         }
     }
 
     FileView {
-        path: Qt.resolvedUrl("config/toggle_data.json").toString().replace("file://", "")
+        path: Qt.resolvedUrl("config/config.json").toString().replace("file://", "")
         watchChanges: true
-        onFileChanged: loadToggleDataProc.running = true
+        onFileChanged: loadConfigProc.running = true
     }
 
-    Process { id: saveToggleDataProc; running: false }
+    Process { id: saveConfigProc; running: false }
 
-    function saveToggleData() {
-        let path = Qt.resolvedUrl("config/toggle_data.json").toString().replace("file://", "");
-        // Use bash to pass the JSON string securely
-        saveToggleDataProc.command = ["sh", "-c", "echo \"$1\" > \"$2\"", "sh", JSON.stringify(toggleData, null, 2), path];
-        saveToggleDataProc.running = true;
+    function saveConfig() {
+        if (!shellRoot.configLoadComplete) return;
+        let accentColorHex = null;
+        if (shellRoot.accentColor) {
+            let c = shellRoot.accentColor;
+            let r = Math.round(c.r * 255).toString(16).padStart(2, '0');
+            let g = Math.round(c.g * 255).toString(16).padStart(2, '0');
+            let b = Math.round(c.b * 255).toString(16).padStart(2, '0');
+            let a = Math.round(c.a * 255).toString(16).padStart(2, '0');
+            accentColorHex = "#" + r + g + b + (a !== "ff" ? a : "");
+        }
+        let cfg = {
+            pinnedApps: shellRoot.pinnedApps,
+            toggleData: shellRoot.toggleData,
+            appearance: {
+                materialTheme: shellRoot.materialTheme,
+                staticBlurEnabled: shellRoot.staticBlurEnabled,
+                blurEnabled: shellRoot.blurEnabled,
+                accentColor: accentColorHex,
+                wallpaperPath: shellRoot.wallpaperPath || ""
+            },
+            layout: shellRoot.controlCenterLayout
+        };
+        let path = Qt.resolvedUrl("config/config.json").toString().replace("file://", "");
+        saveConfigProc.command = ["sh", "-c", "echo \"$1\" > \"$2\"", "sh", JSON.stringify(cfg, null, 2), path];
+        saveConfigProc.running = true;
     }
+
+    function savePinnedApps() { saveConfig(); }
+    function saveToggleData() { saveConfig(); }
+    function saveAppearance() { saveConfig(); }
 
     function getToggleSetting(toggleId, key, defaultValue) {
         if (!toggleData[toggleId]) return defaultValue;
@@ -173,8 +206,8 @@ ShellRoot {
         let currentData = Object.assign({}, toggleData);
         if (!currentData[toggleId]) currentData[toggleId] = {};
         currentData[toggleId][key] = value;
-        toggleData = currentData; // Trigger binding updates
-        saveToggleData();
+        toggleData = currentData;
+        saveConfig();
     }
 
     function movePinnedApp(fromId, toId) {
@@ -412,6 +445,15 @@ ShellRoot {
                 shellRoot.refreshDock()
             }
         }
+    }
+
+    // Auto-save appearance settings on change
+    Connections {
+        target: shellRoot
+        function onMaterialThemeChanged() { saveAppearance(); }
+        function onBlurEnabledChanged() { saveAppearance(); }
+        function onAccentColorChanged() { saveAppearance(); }
+        function onWallpaperPathChanged() { saveAppearance(); }
     }
 
     // ── Shared UI state ──
@@ -708,34 +750,25 @@ ShellRoot {
     Process { id: btToggleProc; running: false }
     Process { id: wifiToggleProc; running: false }
 
-    // ── Battery via sysfs ──
+    // ── Battery via UPower ──
     property int batteryPct: -1
     property string batteryStatus: ""
 
-    Process {
-        id: batteryProc
-        command: ["sh", "-c", "cat /sys/class/power_supply/BAT1/capacity 2>/dev/null; cat /sys/class/power_supply/BAT1/status 2>/dev/null"]
-        running: false
-        stdout: StdioCollector {
-            onStreamFinished: {
-                const lines = text.trim().split("\n");
-                if (lines.length >= 2) {
-                    let pct = parseInt(lines[0]);
-                    if (!isNaN(pct)) shellRoot.batteryPct = pct;
-                    shellRoot.batteryStatus = lines[1].trim();
-                }
-            }
-        }
+    Binding on batteryPct {
+        value: UPower.displayDevice && UPower.displayDevice.percentage >= 0.01
+            ? Math.round(UPower.displayDevice.percentage * 100)
+            : -1
+    }
+    Binding on batteryStatus {
+        value: UPower.displayDevice
+            ? UPowerDeviceState.toString(UPower.displayDevice.state)
+            : ""
     }
 
-    Timer {
-        interval: 10000
-        running: true
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: {
-            batteryProc.running = true;
-        }
+    Component.onCompleted: {
+        console.log("UPower displayDevice:", UPower.displayDevice);
+        console.log("UPower displayDevice percentage:", UPower.displayDevice?.percentage);
+        console.log("UPower displayDevice state:", UPower.displayDevice?.state);
     }
 
     // ── Power Profiles ──
@@ -883,6 +916,7 @@ ShellRoot {
     property int blurVersion: 0
     property string blurredWallpaperPath: "file:///tmp/elipsis_blur.png"
     property bool usePrecomputedBlur: true
+    property bool staticBlurEnabled: true
     property bool blurEnabled: true
 
     Process {

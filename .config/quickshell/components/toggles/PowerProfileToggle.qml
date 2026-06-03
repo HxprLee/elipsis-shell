@@ -16,7 +16,7 @@ Item {
     }
     property string iconSource: shellRoot.icon("power-profile-" + shellRoot.powerProfile)
     property bool isActive: true
-    property color activeColor: Qt.rgba(0.2, 0.5, 1.0, 1.0)
+    property color activeColor: shellRoot.accentColor || shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
 
     signal toggled()
     onToggled: {
@@ -107,14 +107,14 @@ Item {
                                 color: "transparent"
                                 border.width: 2
                                 border.color: shellRoot.powerProfile === "power-saver"
-                                    ? Qt.rgba(0.2, 0.5, 1.0, 1.0)
+                                    ? shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
                                     : Qt.rgba(1, 1, 1, 0.3)
                                 Behavior on border.color { ColorAnimation { duration: 200 } }
 
                                 Rectangle {
                                     anchors.centerIn: parent
                                     width: 12; height: 12; radius: 6
-                                    color: Qt.rgba(0.2, 0.5, 1.0, 1.0)
+                                    color: shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
                                     visible: shellRoot.powerProfile === "power-saver"
                                     scale: shellRoot.powerProfile === "power-saver" ? 1.0 : 0.0
                                     Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.OutBack } }
@@ -185,14 +185,14 @@ Item {
                                 color: "transparent"
                                 border.width: 2
                                 border.color: shellRoot.powerProfile === "balanced"
-                                    ? Qt.rgba(0.2, 0.5, 1.0, 1.0)
+                                    ? shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
                                     : Qt.rgba(1, 1, 1, 0.3)
                                 Behavior on border.color { ColorAnimation { duration: 200 } }
 
                                 Rectangle {
                                     anchors.centerIn: parent
                                     width: 12; height: 12; radius: 6
-                                    color: Qt.rgba(0.2, 0.5, 1.0, 1.0)
+                                    color: shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
                                     visible: shellRoot.powerProfile === "balanced"
                                     scale: shellRoot.powerProfile === "balanced" ? 1.0 : 0.0
                                     Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.OutBack } }
@@ -263,14 +263,14 @@ Item {
                                 color: "transparent"
                                 border.width: 2
                                 border.color: shellRoot.powerProfile === "performance"
-                                    ? Qt.rgba(0.2, 0.5, 1.0, 1.0)
+                                    ? shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
                                     : Qt.rgba(1, 1, 1, 0.3)
                                 Behavior on border.color { ColorAnimation { duration: 200 } }
 
                                 Rectangle {
                                     anchors.centerIn: parent
                                     width: 12; height: 12; radius: 6
-                                    color: Qt.rgba(0.2, 0.5, 1.0, 1.0)
+                                    color: shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
                                     visible: shellRoot.powerProfile === "performance"
                                     scale: shellRoot.powerProfile === "performance" ? 1.0 : 0.0
                                     Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.OutBack } }
