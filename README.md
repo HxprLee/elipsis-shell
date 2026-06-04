@@ -59,7 +59,7 @@ chmod +x install-arch.sh
 ./install-arch.sh
 ```
 
-**Other distrobutions** — install the [dependencies](#dependencies) listed above manually and copy the .config/ dir in the project to your user directory
+**Other distributions** — install the [dependencies](#dependencies) listed above manually or in [Arch Linux install script](install-arch.sh) and copy the .config/ dir in the project to your user directory
 
 ### 3. Launch
 
