@@ -20,16 +20,68 @@ PanelWindow {
     exclusiveZone: implicitHeight
     aboveWindows: true
 
-    property bool hasWindows: shellRoot.hasWindowsOnCurrentWs
-    property bool hasSingleTiledWindow: {
-        let ws = Hyprland.focusedMonitor?.activeWorkspace;
+    // ── Per-screen window tracking ──
+    property var myWorkspace: {
+        if (!root.screen) return null;
+        const screenName = root.screen.name;
+        const wsList = Hyprland.workspaces?.values;
+        if (!wsList) return null;
+        for (let i = 0; i < wsList.length; i++) {
+            const ws = wsList[i];
+            if (ws.monitor && ws.monitor.name === screenName && ws.active) return ws;
+        }
+        return null;
+    }
+    property bool hasWindows: {
+        const ws = myWorkspace;
         if (!ws) return false;
-        let toplevels = Hyprland.toplevels.values;
+
+        const toplevels = ws.toplevels.values;
+        if (toplevels.length === 0) return false;
+
+        let hasNonFloating = false;
+        let anyOverlap = false;
+
+        const dockHeight = 112;
+        const mon = root.screen;
+        if (!mon) return false;
+
+        const monitorBottom = mon.y + mon.height;
+
+        for (let i = 0; i < toplevels.length; i++) {
+            const tl = toplevels[i];
+            const ipc = tl.lastIpcObject;
+            if (!ipc) continue;
+
+            const isFloating = (tl.floating !== undefined) ? tl.floating : !!ipc.floating;
+
+            if (!isFloating) {
+                hasNonFloating = true;
+                break;
+            } else {
+                const y = (ipc.at && ipc.at.length > 1) ? ipc.at[1] : 0;
+                const h = (ipc.size && ipc.size.length > 1) ? ipc.size[1] : 0;
+                const windowBottom = y + h;
+                const hotZoneStart = monitorBottom - dockHeight - 5;
+
+                if (windowBottom > hotZoneStart) {
+                    anyOverlap = true;
+                    break;
+                }
+            }
+        }
+
+        return hasNonFloating || anyOverlap;
+    }
+    property bool hasSingleTiledWindow: {
+        const ws = myWorkspace;
+        if (!ws) return false;
+        const toplevels = ws.toplevels.values;
         let tiledCount = 0;
         for (let i = 0; i < toplevels.length; i++) {
-            let tl = toplevels[i];
+            const tl = toplevels[i];
             if (!tl) continue;
-            let ipc = tl.lastIpcObject;
+            const ipc = tl.lastIpcObject;
             if (!ipc) continue;
             if (ipc.workspace?.id === ws.id && !ipc.floating) {
                 tiledCount++;
@@ -141,8 +193,10 @@ PanelWindow {
             syncState();
         }
         function onFocusedWorkspaceChanged() {
-            forceMinimized = false;
-            syncState();
+            if (myWorkspace && Hyprland.focusedWorkspace?.id === myWorkspace.id) {
+                forceMinimized = false;
+                syncState();
+            }
         }
 
         function syncState() {

@@ -211,7 +211,7 @@ Timer {
         onReleased: (mouse) => {
             if (isDragging) {
                 if (shellRoot.panelDragOffset > 60) {
-                    shellRoot.panelOpen = true
+                    shellRoot.requestOpenPanel(screen)
                 }
                 shellRoot.panelDragOffset = 0
                 isDragging = false

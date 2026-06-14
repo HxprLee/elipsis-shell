@@ -24,10 +24,22 @@ PanelWindow {
     exclusiveZone: 0
     aboveWindows: true
 
-    WlrLayershell.keyboardFocus: (isOpen || visible) ? WlrLayershell.OnDemand : WlrLayershell.None
+    WlrLayershell.keyboardFocus: isOpen ? WlrLayershell.OnDemand : WlrLayershell.None
 
-    property bool isOpen: shellRoot.panelOpen
+    property bool isOpen: shellRoot.panelOpen && shellRoot.targetQuickSettingsScreen === screen
     property real dragOffset: shellRoot.panelDragOffset
+    property real smoothMorphProgress: 0
+    property bool morphComplete: false
+    onSmoothMorphProgressChanged: {
+        if (isOpen && smoothMorphProgress >= 1.0) {
+            morphComplete = true;
+        }
+    }
+    Behavior on smoothMorphProgress {
+        id: morphSpringBehavior
+        enabled: false
+        SpringAnimation { spring: 3; damping: 0.6; mass: 1.0 }
+    }
     property real progress: {
         if (!isOpen && dragOffset > 0)
             return Math.min(1.0, dragOffset / 60.0);
@@ -104,44 +116,54 @@ PanelWindow {
 
     // ── Drag / open animation ──
     onDragOffsetChanged: {
-        let progress = 0.0;
+        let rawProgress = 0.0;
         if (!isOpen && dragOffset > 0) {
             // Dragging down while closed
-            progress = Math.min(1.0, dragOffset / 60.0);
-            qs.visible = true;
+            rawProgress = Math.min(1.0, dragOffset / 60.0);
             panelBehavior.enabled = false;
             scaleBehavior.enabled = false;
             opacityBehavior.enabled = false;
             bgOpacityBehavior.enabled = false;
+            morphSpringBehavior.enabled = false;
+            smoothMorphProgress = rawProgress;
         } else if (isOpen && dragOffset < 0) {
             // Dragging up while open
-            progress = Math.max(0.0, 1.0 - (Math.abs(dragOffset) / 60.0));
+            rawProgress = Math.max(0.0, 1.0 - (Math.abs(dragOffset) / 60.0));
             panelBehavior.enabled = false;
             scaleBehavior.enabled = false;
             opacityBehavior.enabled = false;
             bgOpacityBehavior.enabled = false;
+            morphSpringBehavior.enabled = false;
+            smoothMorphProgress = rawProgress;
         } else if (dragOffset === 0) {
             panelBehavior.enabled = true;
             scaleBehavior.enabled = true;
             opacityBehavior.enabled = true;
             bgOpacityBehavior.enabled = true;
-            progress = isOpen ? 1.0 : 0.0;
-            if (isOpen)
-                qs.visible = true;
+            morphSpringBehavior.enabled = true;
+            rawProgress = isOpen ? 1.0 : 0.0;
+            smoothMorphProgress = rawProgress;
         }
 
         // Calculate physics values
-        panelContainer.y = 10 + (progress * 40);
-        panelContainer.bloomScale = 0.85 + (progress * 0.15);
-        panelContainer.opacity = progress > 0 ? 1.0 : 0.0; // Instant opacity for morphing elements
-        bgDim.opacity = progress;
+        panelContainer.y = 10 + (rawProgress * 40);
+        panelContainer.bloomScale = 0.85 + (rawProgress * 0.15);
+        panelContainer.opacity = rawProgress > 0 ? 1.0 : 0.0; // Instant opacity for morphing elements
+        bgDim.opacity = rawProgress;
     }
 
     onIsOpenChanged: {
+        if (isOpen) {
+            morphComplete = true;
+        } else {
+            morphComplete = false;
+        }
         panelBehavior.enabled = true;
         scaleBehavior.enabled = true;
         opacityBehavior.enabled = true;
         bgOpacityBehavior.enabled = true;
+        morphSpringBehavior.enabled = true;
+        smoothMorphProgress = isOpen ? 1.0 : 0.0;
         if (isOpen) {
             qs.visible = true;
             panelContainer.y = 50;
@@ -189,14 +211,12 @@ PanelWindow {
 
         Behavior on opacity {
             id: bgOpacityBehavior
-            NumberAnimation {
-                duration: 300
-                easing.type: Easing.OutExpo
-            }
+            SpringAnimation { spring: 3; damping: 0.6; mass: 1.0 }
         }
 
         MouseArea {
             anchors.fill: parent
+            enabled: isOpen
             property real startY: 0
             property bool isDragging: false
 
@@ -242,38 +262,23 @@ PanelWindow {
         property real bloomScale: 0.85
         opacity: 0.0
 
-        onOpacityChanged: {
-            if (opacity <= 0.01 && !isOpen && dragOffset === 0) {
-                qs.visible = false;
-            }
-        }
-
         Behavior on y {
             id: panelBehavior
-            NumberAnimation {
-                duration: 400
-                easing.type: Easing.OutExpo
-            }
+            SpringAnimation { spring: 2.5; damping: 0.65; mass: 1.0 }
         }
         Behavior on bloomScale {
             id: scaleBehavior
-            NumberAnimation {
-                duration: 400
-                easing.type: Easing.OutBack
-                easing.overshoot: 1.2
-            }
+            SpringAnimation { spring: 3; damping: 0.5; mass: 1.0 }
         }
         Behavior on opacity {
             id: opacityBehavior
-            NumberAnimation {
-                duration: 300
-                easing.type: Easing.OutExpo
-            }
+            SpringAnimation { spring: 3; damping: 0.6; mass: 1.0 }
         }
 
         MouseArea {
             anchors.fill: parent
             z: -1
+            enabled: isOpen
             property real startY: 0
             property bool isDragging: false
 
@@ -321,7 +326,7 @@ PanelWindow {
             property string dateString: Qt.formatDate(new Date(), "dddd, MMMM d")
             Timer {
                 interval: 1000
-                running: qs.visible
+                running: qs.isOpen || qs.dragOffset > 0
                 repeat: true
                 onTriggered: {
                     notifPanel.timeString = Qt.formatTime(new Date(), "HH:mm");
@@ -331,17 +336,16 @@ PanelWindow {
 
             Row {
                 id: clockArea
-                // Morphing Logic:
-                // Start: StatusBar position (x: 16, y: (40-15)/2 - panelY)
-                // End: Notification Panel position (margin 24)
+                // Morph from StatusBar clock position to notification panel clock position
+                // Uses screen-space coordinates divided by bloomScale to account for notifPanel's scale transform
 
-                property real targetX: 24
-                property real targetY: 24
-                property real startX: 16 - notifPanel.anchors.leftMargin
-                property real startY: 10 - panelContainer.y - notifPanel.anchors.topMargin // Approximate status bar y
+                property real screenStartX: 16
+                property real screenTargetX: 48
+                property real screenStartY: 12
+                property real screenTargetY: 74
 
-                x: startX + (targetX - startX) * progress
-                y: startY + (targetY - startY) * progress
+                x: (screenStartX + (screenTargetX - screenStartX) * smoothMorphProgress) / panelContainer.bloomScale - 24
+                y: (screenStartY + (screenTargetY - screenStartY) * smoothMorphProgress) / panelContainer.bloomScale - panelContainer.y
 
                 spacing: 16
 
@@ -349,14 +353,14 @@ PanelWindow {
                     id: timeText
                     text: notifPanel.timeString
                     color: "white"
-                    font.pixelSize: 15 + (56 - 15) * progress
+                    font.pixelSize: (15 + (56 - 15) * smoothMorphProgress) / panelContainer.bloomScale
                     font.bold: true
                 }
                 Text {
                     text: notifPanel.dateString
                     color: Qt.rgba(1, 1, 1, 0.7)
                     font.pixelSize: 18
-                    opacity: progress
+                    opacity: smoothMorphProgress
                     anchors.baseline: timeText.baseline
                 }
             }
@@ -399,7 +403,7 @@ PanelWindow {
             property int timeRefresh: 0
             Timer {
                 interval: 30000
-                running: qs.visible
+                running: qs.isOpen || qs.dragOffset > 0
                 repeat: true
                 onTriggered: notifPanel.timeRefresh++
             }
@@ -425,7 +429,7 @@ PanelWindow {
             property var groupedNotifications: {
                 // Depend on timeRefresh so timestamps re-evaluate
                 void notifPanel.timeRefresh;
-                if (!qs.isOpen && !qs.visible)
+                if (!qs.isOpen && qs.dragOffset <= 0)
                     return [];
                 let list = notificationServer.notificationList;
                 let groups = {};
@@ -493,7 +497,8 @@ PanelWindow {
                         delegate: ColumnLayout {
                             id: groupDelegate
                             Layout.fillWidth: true
-                            spacing: 4
+                            spacing: 2
+                            clip: true
 
                             property var group: modelData
                             property bool isExpanded: !!(notifPanel.expandedApps[group.appName])
@@ -503,9 +508,19 @@ PanelWindow {
                             // COLLAPSED: Stacked Card View
                             // ════════════════════════════════
                             Item {
+                                id: collapsedStack
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: stackedTopCard.height
-                                visible: !groupDelegate.isExpanded && group.notifications.length > 1
+                                property bool showCollapsed: !groupDelegate.isExpanded && group.notifications.length > 1
+                                Layout.preferredHeight: showCollapsed ? stackedTopCard.height : 0
+                                opacity: showCollapsed ? 1.0 : 0.0
+                                visible: opacity > 0.01 || Layout.preferredHeight > 1
+
+                                Behavior on Layout.preferredHeight {
+                                    NumberAnimation { duration: 400; easing.type: Easing.OutExpo }
+                                }
+                                Behavior on opacity {
+                                    NumberAnimation { duration: 350; easing.type: Easing.OutExpo }
+                                }
 
                                 // Top card (latest notification)
                                 MaterialSurface {
@@ -681,8 +696,16 @@ PanelWindow {
                             // Group header (only visible when expanded and multi-notification)
                             Item {
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 36
-                                visible: groupDelegate.isExpanded && group.notifications.length > 1
+                                Layout.preferredHeight: groupDelegate.isExpanded && group.notifications.length > 1 ? 36 : 0
+                                opacity: groupDelegate.isExpanded && group.notifications.length > 1 ? 1.0 : 0.0
+                                visible: opacity > 0.01
+
+                                Behavior on Layout.preferredHeight {
+                                    NumberAnimation { duration: 350; easing.type: Easing.OutExpo }
+                                }
+                                Behavior on opacity {
+                                    NumberAnimation { duration: 300; easing.type: Easing.OutExpo }
+                                }
 
                                 RowLayout {
                                     anchors.fill: parent
@@ -772,13 +795,26 @@ PanelWindow {
 
                             // Expanded individual cards
                             Repeater {
-                                model: (groupDelegate.isExpanded || group.notifications.length === 1) ? group.notifications.length : 0
+                                model: group.notifications.length
 
                                 delegate: Item {
                                     id: swipeContainer
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: notifCard.height
+                                    property bool isCardExpanded: groupDelegate.isExpanded || group.notifications.length === 1
+                                    Layout.preferredHeight: isCardExpanded ? notifCard.height : 0
+                                    opacity: isCardExpanded ? 1.0 : 0.0
+                                    scale: isCardExpanded ? 1.0 : 0.9
                                     clip: true
+
+                                    Behavior on Layout.preferredHeight {
+                                        NumberAnimation { duration: 400; easing.type: Easing.OutExpo }
+                                    }
+                                    Behavior on opacity {
+                                        NumberAnimation { duration: 250; easing.type: Easing.OutExpo }
+                                    }
+                                    Behavior on scale {
+                                        NumberAnimation { duration: 350; easing.type: Easing.OutExpo }
+                                    }
 
                                     property var notif: group.notifications[index]
                                     property real swipeX: 0
@@ -1192,12 +1228,13 @@ PanelWindow {
                     height: 32
                     opacity: progress
 
-                    // ── Status Icons Morph ──
+                    // ── Status Icons (visible once morph completes; latched to avoid spring oscillation flicker) ──
                     Row {
                         id: morphStatusIcons
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.right: parent.right
                         spacing: 12
+                        visible: qs.morphComplete
 
                         // 1. Tray Icons
                         Row {
@@ -1205,22 +1242,17 @@ PanelWindow {
                             anchors.verticalCenter: parent.verticalCenter
                             Repeater {
                                 model: SystemTray.items
-                                delegate: Item {
-                                    width: 20
-                                    height: 20
-                                    Image {
-                                        id: trayIconMorph
-                                        anchors.fill: parent
-                                        sourceSize: Qt.size(24, 24)
-                                        source: modelData.icon
-                                        visible: false
-                                    }
-                                    ColorOverlay {
-                                        anchors.fill: trayIconMorph
-                                        source: trayIconMorph
-                                        color: "white"
-                                    }
-                                }
+                    delegate: Item {
+                        width: 20
+                        height: 20
+                        Image {
+                            id: trayIconMorph
+                            anchors.fill: parent
+                            sourceSize: Qt.size(24, 24)
+                            fillMode: Image.PreserveAspectFit
+                            source: modelData.icon && modelData.icon !== "" ? (modelData.icon.startsWith("/") ? "file://" + modelData.icon : modelData.icon.startsWith("image://") || modelData.icon.startsWith("file://") ? modelData.icon : "image://icon/" + modelData.icon) : ""
+                        }
+                    }
                             }
                         }
 
@@ -1527,7 +1559,7 @@ PanelWindow {
                                                 }
                                             }
 
-                                            layer.enabled: qs.visible
+                                            layer.enabled: qs.isOpen || qs.dragOffset > 0
                                             layer.effect: OpacityMask {
                                                 maskSource: Rectangle {
                                                     width: widgetBg.width
@@ -1549,7 +1581,7 @@ PanelWindow {
                                             Loader {
                                                 id: widgetLoader
                                                 anchors.fill: parent
-                                                active: qs.visible || qs.isOpen
+                                                active: qs.isOpen || qs.dragOffset > 0
                                                 asynchronous: true
                                                 property var modelData: model
                                                 source: model.source || ""
@@ -2111,14 +2143,14 @@ PanelWindow {
                                                             color: Qt.rgba(0.15, 0.15, 0.2, 0.8)
                                                             clip: true
 
-                                                            layer.enabled: qs.visible
-                                                            layer.effect: OpacityMask {
-                                                                maskSource: Rectangle {
-                                                                    width: pvBg.width
-                                                                    height: pvBg.height
-                                                                    radius: pvBg.radius
-                                                                }
-                                                            }
+                                                             layer.enabled: qs.isOpen || qs.dragOffset > 0
+                                                             layer.effect: OpacityMask {
+                                                                 maskSource: Rectangle {
+                                                                     width: pvBg.width
+                                                                     height: pvBg.height
+                                                                     radius: pvBg.radius
+                                                                 }
+                                                             }
 
                                                             // Toggle content loader
                                                             Loader {
@@ -2465,11 +2497,130 @@ PanelWindow {
             }
         } // closes controlPanel
 
-        // Hide after close animation
+        // ── Morph Layer: Status Icons (from StatusCluster → control header) ──
+        Row {
+            id: morphStatusRow
+            anchors.right: parent.right
+            anchors.rightMargin: 16 + 32 * qs.smoothMorphProgress
+            property real startY: 0
+            property real targetY: 18
+            y: startY + (targetY - startY) * qs.smoothMorphProgress
+            spacing: 12
+            visible: !qs.morphComplete
+            opacity: 1.0
+            height: 20
+
+            // System Tray
+            Row {
+                spacing: 8
+                anchors.verticalCenter: parent.verticalCenter
+                Repeater {
+                    model: SystemTray.items
+                    delegate: Item {
+                        width: 20
+                        height: 20
+                        Image {
+                            id: morphTrayIcon
+                            anchors.fill: parent
+                            sourceSize: Qt.size(24, 24)
+                            fillMode: Image.PreserveAspectFit
+                            source: modelData.icon && modelData.icon !== "" ? (modelData.icon.startsWith("/") ? "file://" + modelData.icon : modelData.icon.startsWith("image://") || modelData.icon.startsWith("file://") ? modelData.icon : "image://icon/" + modelData.icon) : ""
+                        }
+                    }
+                }
+            }
+
+            // Bluetooth
+            Item {
+                width: (shellRoot.bluetoothEnabled && shellRoot.bluetoothConnected) ? 20 : 0
+                height: 20
+                visible: width > 0
+                anchors.verticalCenter: parent.verticalCenter
+                Image {
+                    id: morphBtIcon
+                    anchors.fill: parent
+                    source: shellRoot.icon(shellRoot.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
+                    sourceSize: Qt.size(24, 24)
+                    visible: false
+                }
+                ColorOverlay {
+                    anchors.fill: morphBtIcon
+                    source: morphBtIcon
+                    color: "white"
+                }
+            }
+
+            // Network
+            Item {
+                width: shellRoot.networkConnected ? 20 : 0
+                height: 20
+                visible: width > 0
+                anchors.verticalCenter: parent.verticalCenter
+                Image {
+                    id: morphNetIcon
+                    anchors.fill: parent
+                    source: {
+                        if (shellRoot.networkType === "ethernet")
+                            return shellRoot.icon("network-wired-symbolic");
+                        let levels = ["none", "weak", "ok", "good", "excellent"];
+                        let level = levels[shellRoot.networkSignalLevel] || "none";
+                        return shellRoot.icon("network-wireless-signal-" + level + "-symbolic");
+                    }
+                    sourceSize: Qt.size(24, 24)
+                    visible: false
+                }
+                ColorOverlay {
+                    anchors.fill: morphNetIcon
+                    source: morphNetIcon
+                    color: "white"
+                }
+            }
+
+            // Battery
+            Row {
+                spacing: 6
+                anchors.verticalCenter: parent.verticalCenter
+                Item {
+                    width: 20; height: 20
+                    anchors.verticalCenter: parent.verticalCenter
+                    Image {
+                        id: morphBattIcon
+                        anchors.fill: parent
+                        source: {
+                            let isCharging = qs.batteryStatus === "Charging";
+                            let pct = qs.batteryPct;
+                            if (pct < 0) return shellRoot.icon("battery-missing-symbolic");
+                            let level = Math.max(0, Math.min(100, Math.round(pct / 10) * 10));
+                            let sLevel = (level < 100 ? (level < 10 ? "00" : "0") : "") + level;
+                            let name = "battery-" + sLevel;
+                            if (isCharging) name += "-charging";
+                            name += "-symbolic";
+                            return shellRoot.icon(name);
+                        }
+                        sourceSize: Qt.size(24, 24)
+                        visible: false
+                    }
+                    ColorOverlay {
+                        anchors.fill: morphBattIcon
+                        source: morphBattIcon
+                        color: "white"
+                    }
+                }
+                Text {
+                    text: qs.batteryPct >= 0 ? qs.batteryPct + "%" : "—"
+                    color: "white"
+                    font.pixelSize: 15
+                    font.bold: true
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+        }
+
+        // Hide after close animation (only when not actively dragging)
         Timer {
             id: hideTimer
             interval: 400
-            running: !qs.isOpen
+            running: !qs.isOpen && qs.dragOffset === 0
             onTriggered: qs.visible = false
         }
     }

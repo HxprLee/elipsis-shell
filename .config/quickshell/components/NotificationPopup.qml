@@ -1,209 +1,167 @@
 import Quickshell
 import Quickshell.Wayland
 import QtQuick
-import QtQuick.Layouts
 
 PanelWindow {
     id: popupWindow
     visible: false
-    implicitHeight: 600
+    implicitWidth: 460
+    implicitHeight: 450
     color: "transparent"
     anchors.top: true
-    anchors.left: true
-    anchors.right: true
-    margins.top: 40
+    margins.top: slideOffset
     exclusionMode: ExclusionMode.Ignore
     aboveWindows: true
 
-    Component.onCompleted: {
-        WlrLayershell.layer = 3 // Overlay layer
+    property real slideOffset: -470
+    Behavior on slideOffset {
+        NumberAnimation { duration: 200; easing.type: Easing.OutExpo }
     }
 
-    // Auto-dismiss when Quick Settings opens or is dragged
+    SequentialAnimation {
+        id: hideAnim
+        NumberAnimation { target: contentContainer; property: "opacity"; to: 0; duration: 200; easing.type: Easing.OutExpo }
+        PropertyAction { target: popupWindow; property: "visible"; value: false }
+    }
+
+    WlrLayershell.keyboardFocus: WlrLayershell.None
+    WlrLayershell.layer: WlrLayershell.Overlay
+
     Connections {
         target: shellRoot
-        function onPanelOpenChanged() { if (shellRoot.panelOpen) popupWindow.hide() }
-        function onPanelDragOffsetChanged() { if (shellRoot.panelDragOffset > 5) popupWindow.hide() }
+        function onPanelOpenChanged() {
+            if (shellRoot.panelOpen) {
+                notificationQueue = []
+                popupWindow.finishHide()
+            }
+        }
+        function onPanelDragOffsetChanged() {
+            if (shellRoot.panelDragOffset > 5) {
+                notificationQueue = []
+                popupWindow.finishHide()
+            }
+        }
     }
 
     property bool isActive: false
-    property int nid: -1
-    property string appName: ""
-    property string appIcon: ""
-    property string summary: "Notification"
-    property string body: ""
+    property var notificationQueue: []
+    property int stackCount: 0
 
     function show(n) {
         if (shellRoot.panelOpen) return;
+        if (shellRoot.dndActive) return;
 
-        nid = n.id
-        appName = n.appName
-        appIcon = n.appIcon ?? ""
-        summary = n.summary
-        body = n.body
-        pill.xOffset = 0
-        pill.yOffset = 0
-        
-        popupWindow.visible = true
-        isActive = true
+        let copy = notificationQueue.slice()
+        copy.push(n)
+        notificationQueue = copy
+        stackCount = notificationQueue.length
+
+        if (!isActive) {
+            popupWindow.visible = true
+            contentContainer.opacity = 1.0
+            isActive = true
+            Qt.callLater(() => { slideOffset = 40 })
+        }
         autoHideTimer.restart()
-        slideOutTimer.stop()
     }
 
-    function hide() {
+    function dismissTop() {
+        if (notificationQueue.length > 0) {
+            let n = notificationQueue[0]
+            notificationServer.dismiss(n.id)
+            let copy = notificationQueue.slice(1)
+            notificationQueue = copy
+            stackCount = notificationQueue.length
+        }
+        if (notificationQueue.length === 0) {
+            finishHide()
+        }
+    }
+
+    function finishHide() {
+        slideOffset = -470
         isActive = false
         autoHideTimer.stop()
-        slideOutTimer.start()
+        hideAnim.start()
+    }
+
+    function finishImmediate() {
+        popupWindow.visible = false
+        isActive = false
+        autoHideTimer.stop()
     }
 
     Timer {
         id: autoHideTimer
         interval: 4000
-        onTriggered: hide()
+        onTriggered: {
+            if (notificationQueue.length > 0) {
+                let oldest = notificationQueue[0]
+                notificationServer.dismiss(oldest.id)
+                let copy = notificationQueue.slice(1)
+                notificationQueue = copy
+                stackCount = notificationQueue.length
+            }
+            if (notificationQueue.length === 0) {
+                finishHide()
+            } else {
+                autoHideTimer.restart()
+            }
+        }
     }
 
-    Timer {
-        id: slideOutTimer
-        interval: 600
-        onTriggered: popupWindow.visible = false
-    }
+    property int cardSpacing: 4
 
     Item {
-        id: container
+        id: contentContainer
         anchors.fill: parent
+        opacity: 1.0
 
-        MaterialSurface {
-            id: pill
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: 460
-            height: Math.max(70, textCol.implicitHeight + (appNameText.visible ? 44 : 28))
-            radius: 16
+        StackCard {
+            id: c0
+            isTopCard: true
+            y: 0
+            notifData: popupWindow.notificationQueue.length > 0 ? popupWindow.notificationQueue[0] : null
+            onDismiss: popupWindow.dismissTop()
+            onTap: popupWindow.finishHide()
+        }
+        StackCard {
+            id: c1
+            y: c0.y + c0.height + cardSpacing + c1.entranceOffset
+            notifData: popupWindow.notificationQueue.length > 1 ? popupWindow.notificationQueue[1] : null
+            onDismiss: popupWindow.dismissTop()
+            onTap: popupWindow.finishHide()
+        }
+        StackCard {
+            id: c2
+            y: c1.y + c1.height + cardSpacing + c2.entranceOffset
+            notifData: popupWindow.notificationQueue.length > 2 ? popupWindow.notificationQueue[2] : null
+            onDismiss: popupWindow.dismissTop()
+            onTap: popupWindow.finishHide()
+        }
+        StackCard {
+            id: c3
+            y: c2.y + c2.height + cardSpacing + c3.entranceOffset
+            notifData: popupWindow.notificationQueue.length > 3 ? popupWindow.notificationQueue[3] : null
+            onDismiss: popupWindow.dismissTop()
+            onTap: popupWindow.finishHide()
+        }
 
-            property real xOffset: 0
-            property real yOffset: 0
-            x: (parent.width - width) / 2 + xOffset
-            y: (popupWindow.isActive ? 20 : -height - 50) + yOffset
+        Rectangle {
+            id: overflowBadge
+            y: c3.y + c3.height + cardSpacing
+            width: parent.width
+            height: 24
+            radius: 12
+            color: Qt.rgba(0.2, 0.5, 1.0, 0.9)
+            visible: popupWindow.stackCount > 4
 
-            Behavior on y {
-                enabled: !swipeArea.isDragging
-                NumberAnimation { duration: 450; easing.type: Easing.OutBack; easing.overshoot: 1.1 }
-            }
-            Behavior on x {
-                enabled: !swipeArea.isDragging
-                NumberAnimation { duration: 300; easing.type: Easing.OutExpo }
-            }
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.margins: 14
-                spacing: 12
-
-                // Icon badge
-                Rectangle {
-                    width: 40; height: 40; radius: 8
-                    color: Qt.rgba(1, 1, 1, 0.1)
-                    Layout.alignment: Qt.AlignTop
-                    visible: popupWindow.appIcon !== "" || popupWindow.appName !== ""
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: popupWindow.appName !== "" ? popupWindow.appName.charAt(0).toUpperCase() : "!"
-                        color: "white"
-                        font.pixelSize: 18
-                        font.bold: true
-                        visible: popupWindow.appIcon === ""
-                    }
-                    Image {
-                        anchors.centerIn: parent
-                        width: 28; height: 28
-                        source: popupWindow.appIcon !== "" ? (popupWindow.appIcon.startsWith("/") ? "file://" + popupWindow.appIcon : popupWindow.appIcon) : ""
-                        fillMode: Image.PreserveAspectFit
-                        visible: source !== ""
-                    }
-                }
-
-                ColumnLayout {
-                    id: textCol
-                    Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignTop
-                    spacing: 2
-
-                    Text {
-                        id: appNameText
-                        text: popupWindow.appName
-                        color: Qt.rgba(1, 1, 1, 0.4)
-                        font.pixelSize: 11
-                        font.bold: true
-                        font.capitalization: Font.AllUppercase
-                        visible: text !== ""
-                        Layout.fillWidth: true
-                    }
-
-                    Text {
-                        id: summaryText
-                        text: popupWindow.summary
-                        color: "white"
-                        font.pixelSize: 14
-                        font.bold: true
-                        wrapMode: Text.WordWrap
-                        Layout.fillWidth: true
-                    }
-                    Text {
-                        id: bodyText
-                        text: popupWindow.body
-                        color: Qt.rgba(1, 1, 1, 0.6)
-                        font.pixelSize: 13
-                        wrapMode: Text.WordWrap
-                        Layout.fillWidth: true
-                        visible: popupWindow.body !== ""
-                    }
-                }
-            }
-
-            MouseArea {
-                id: swipeArea
-                anchors.fill: parent
-                property real startX: 0
-                property real startY: 0
-                property bool isDragging: false
-                onPressed: (mouse) => {
-                    startX = mouse.x
-                    startY = mouse.y
-                    isDragging = false
-                    autoHideTimer.stop()
-                }
-                onPositionChanged: (mouse) => {
-                    let dx = mouse.x - startX
-                    let dy = mouse.y - startY
-                    isDragging = true
-                    if (Math.abs(dx) > Math.abs(dy)) {
-                        pill.xOffset = dx * 0.8
-                    } else if (dy < 0) {
-                        pill.yOffset = dy * 0.5
-                    }
-                }
-                onReleased: (mouse) => {
-                    if (isDragging) {
-                        let dx = mouse.x - startX
-                        let dy = mouse.y - startY
-                        if (dy < -30 && Math.abs(dy) > Math.abs(dx)) {
-                            popupWindow.hide()
-                        } else if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
-                            if (popupWindow.nid !== -1) {
-                                notificationServer.dismiss(popupWindow.nid)
-                            }
-                            pill.xOffset = (dx > 0 ? 500 : -500)
-                            popupWindow.hide()
-                        } else {
-                            pill.xOffset = 0
-                            pill.yOffset = 0
-                            popupWindow.isActive = true
-                            autoHideTimer.restart()
-                        }
-                    } else {
-                        popupWindow.hide()
-                    }
-                }
+            Text {
+                anchors.centerIn: parent
+                text: "+" + (popupWindow.stackCount - 4) + " more"
+                color: "white"
+                font.pixelSize: 12
+                font.bold: true
             }
         }
     }

@@ -12,11 +12,12 @@ Item {
     property bool isControlWidget: true
     property var modelData: parent ? parent.modelData : ({})
     property var activePlayer: {
-        if (_manualPlayer && Mpris.players.values.indexOf(_manualPlayer) !== -1)
-            return _manualPlayer;
+        if (shellRoot.mediaPlayerId) {
+            let found = Mpris.players.values.find(p => p.identity === shellRoot.mediaPlayerId);
+            if (found) return found;
+        }
         return Mpris.players.values.length > 0 ? Mpris.players.values[0] : null;
     }
-    property var _manualPlayer: null
     property string toggleName: "Media Control"
     
     property bool _playerMenuJustClosed: false
@@ -265,7 +266,8 @@ Item {
                                                 text: p.identity,
                                                 icon: root.getAppIcon(p),
                                                 action: function () {
-                                                    root._manualPlayer = p;
+                                                    shellRoot.mediaPlayerId = p.identity;
+                                                    shellRoot.saveConfig();
                                                 }
                                             });
                                         }

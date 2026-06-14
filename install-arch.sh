@@ -40,7 +40,11 @@ sudo pacman -S --needed --noconfirm \
     grim \
     hyprpicker \
     xdg-desktop-portal-hyprland \
-    hyprshutdown
+    hyprshutdown \
+    python-pyudev \
+    python-dbus \
+    python-yaml \
+    python-inotify-simple
 
 echo "==> Installing AUR packages..."
 
@@ -67,6 +71,9 @@ sudo systemctl enable --now pipewire pipewire-pulse wireplumber
 sudo systemctl enable --now upower
 sudo systemctl enable --now hypridle
 systemctl enable --now --user vicinae
+
+echo "==> Enabling EventHandler user service..."
+systemctl --user enable --now eventhandler.service
 
 echo "==> Deploying configs..."
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

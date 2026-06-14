@@ -80,8 +80,8 @@ ShellRoot {
             if (!found) copy.unshift(item);
             notificationList = copy;
             
-            // Trigger iOS Popup Drop-down
-            globalToast.show(item);
+            // Trigger iOS Popup Drop-down (unless DND)
+            if (!shellRoot.dndActive) globalToast.show(item);
         }
 
         function dismiss(nid) {
@@ -106,6 +106,7 @@ ShellRoot {
     property var toggleData: ({})
     property bool toggleDataLoaded: false
     property var controlCenterLayout: []
+    property string mediaPlayerId: ""
     property bool configLoadComplete: false
 
     Process {
@@ -120,7 +121,10 @@ ShellRoot {
                     console.log("[Config] Parsed:", JSON.stringify(cfg));
 
                     if (cfg.pinnedApps) shellRoot.pinnedApps = cfg.pinnedApps;
-                    if (cfg.toggleData) shellRoot.toggleData = cfg.toggleData;
+                    if (cfg.toggleData) {
+                        shellRoot.toggleData = cfg.toggleData;
+                        if (cfg.toggleData["DndToggle"]?.active) shellRoot.dndActive = true;
+                    }
                     shellRoot.toggleDataLoaded = true;
 
                     let app = cfg.appearance || {};
@@ -143,6 +147,7 @@ ShellRoot {
                     if (app.wallpaperPath !== undefined) shellRoot.wallpaperPath = app.wallpaperPath;
 
                     if (cfg.layout && cfg.layout.length > 0) shellRoot.controlCenterLayout = cfg.layout;
+                    if (cfg.mediaPlayerId) shellRoot.mediaPlayerId = cfg.mediaPlayerId;
                     console.log("[Config] Layout:", JSON.stringify(shellRoot.controlCenterLayout));
 
                     shellRoot.refreshDock();
@@ -185,7 +190,8 @@ ShellRoot {
                 accentColor: accentColorHex,
                 wallpaperPath: shellRoot.wallpaperPath || ""
             },
-            layout: shellRoot.controlCenterLayout
+            layout: shellRoot.controlCenterLayout,
+            mediaPlayerId: shellRoot.mediaPlayerId
         };
         let path = Qt.resolvedUrl("config/config.json").toString().replace("file://", "");
         saveConfigProc.command = ["sh", "-c", "echo \"$1\" > \"$2\"", "sh", JSON.stringify(cfg, null, 2), path];
@@ -459,69 +465,26 @@ ShellRoot {
     // ── Shared UI state ──
     property bool panelOpen: false
     property real panelDragOffset: 0.0
+    property var targetQuickSettingsScreen: null
+    property var activeScreen: {
+        const mon = Hyprland.focusedMonitor;
+        if (!mon) return null;
+        const screens = Quickshell.screens;
+        for (let i = 0; i < screens.length; i++) {
+            if (screens[i].name === mon.name) return screens[i];
+        }
+        return null;
+    }
+    function requestOpenPanel(screen) {
+        targetQuickSettingsScreen = screen || activeScreen;
+        panelOpen = true;
+    }
+    onPanelOpenChanged: {
+        if (!panelOpen) targetQuickSettingsScreen = null;
+    }
     property bool switcherOpen: false
     property bool appDrawerOpen: false
     property bool powerMenuOpen: false
-
-    // ── Window tracking ──
-    property bool hasWindowsOnCurrentWs: {
-        const ws = Hyprland.focusedWorkspace;
-        if (!ws) return false;
-        
-        const toplevels = ws.toplevels.values;
-        if (toplevels.length === 0) return false;
-
-        let hasNonFloating = false;
-        let anyOverlap = false;
-
-        const dockHeight = 112; // Height of the uncollapsed dock
-        
-        // Use Quickshell.screens to find the logical height of the focused monitor
-        let mon = null;
-        const focusedMon = Hyprland.focusedMonitor;
-        if (focusedMon) {
-            for (let s of Quickshell.screens) {
-                if (s.name === focusedMon.name) {
-                    mon = s;
-                    break;
-                }
-            }
-        }
-        
-        if (!mon) mon = (Quickshell.screens.length > 0) ? Quickshell.screens[0] : null;
-        if (!mon) return false;
-        
-        const monitorBottom = mon.y + mon.height;
-
-        for (let i = 0; i < toplevels.length; i++) {
-            const tl = toplevels[i];
-            const ipc = tl.lastIpcObject;
-            if (!ipc) continue;
-            
-            // Determine floating status robustly
-            const isFloating = (tl.floating !== undefined) ? tl.floating : !!ipc.floating;
-
-            if (!isFloating) {
-                hasNonFloating = true;
-                break;
-            } else {
-                const y = (ipc.at && ipc.at.length > 1) ? ipc.at[1] : 0;
-                const h = (ipc.size && ipc.size.length > 1) ? ipc.size[1] : 0;
-                const windowBottom = y + h;
-                const hotZoneStart = monitorBottom - dockHeight - 5;
-
-                // DIAGNOSTIC LOGGING
-                // console.log(`[Dock Detect] Window: "${tl.title}" | floating: ${isFloating} | y=${y}, h=${h} (bottom=${windowBottom}) | HotZoneStart=${hotZoneStart}`);
-
-                if (windowBottom > hotZoneStart) {
-                    anyOverlap = true;
-                    break;
-                }
-            }
-        }
-
-        return hasNonFloating || anyOverlap;
-    }
 
     // Heartbeat for dock population
     Timer {
@@ -599,20 +562,6 @@ ShellRoot {
         running: true
         repeat: true
         onTriggered: netPollProc.running = true
-    }
-
-    Process {
-        id: connectWifiProc
-        running: false
-    }
-
-    function connectWifi(ssid, password) {
-        if (password && password !== "") {
-            connectWifiProc.command = ["nmcli", "device", "wifi", "connect", ssid, "password", password];
-        } else {
-            connectWifiProc.command = ["nmcli", "device", "wifi", "connect", ssid];
-        }
-        connectWifiProc.running = true;
     }
 
     Process {
@@ -807,6 +756,14 @@ ShellRoot {
         setPowerProfileProc.running = true;
     }
 
+    // ── Do Not Disturb ──
+    property bool dndActive: false
+
+    function setDnd(active) {
+        shellRoot.dndActive = active;
+        shellRoot.setToggleSetting("DndToggle", "active", active);
+    }
+
     // ── Caffeine ──
     property bool caffeineActive: false
     Process { id: caffeineProc; running: false }
@@ -998,29 +955,58 @@ ShellRoot {
     IpcHandler {
         target: "quicksettings"
         function show() {
-            shellRoot.panelOpen = true;
+            shellRoot.requestOpenPanel(shellRoot.activeScreen);
         }
         function hide() {
             shellRoot.panelOpen = false;
         }
         function toggle() {
-            shellRoot.panelOpen = !shellRoot.panelOpen;
+            if (shellRoot.panelOpen) shellRoot.panelOpen = false;
+            else shellRoot.requestOpenPanel(shellRoot.activeScreen);
         }
     }
 
-    // ── UI Components ──
-    BottomBar {}
-    StatusBar {
-        batteryPct: shellRoot.batteryPct
-        batteryStatus: shellRoot.batteryStatus
+    // ── UI Components (per-screen via Variants) ──
+    Variants {
+        model: Quickshell.screens
+        BottomBar {
+            property var modelData
+            screen: modelData
+        }
     }
-    QuickSettings {
-        batteryPct: shellRoot.batteryPct
-        batteryStatus: shellRoot.batteryStatus
+    Variants {
+        model: Quickshell.screens
+        StatusBar {
+            property var modelData
+            screen: modelData
+            batteryPct: shellRoot.batteryPct
+            batteryStatus: shellRoot.batteryStatus
+        }
+    }
+    Variants {
+        model: Quickshell.screens
+        QuickSettings {
+            property var modelData
+            screen: modelData
+            batteryPct: shellRoot.batteryPct
+            batteryStatus: shellRoot.batteryStatus
+        }
     }
     NotificationPopup { id: globalToast }
-    TaskManager {}
-    AppDrawer {}
+    Variants {
+        model: Quickshell.screens
+        TaskManager {
+            property var modelData
+            screen: modelData
+        }
+    }
+    Variants {
+        model: Quickshell.screens
+        AppDrawer {
+            property var modelData
+            screen: modelData
+        }
+    }
     VolumeOSD {}
     PowerMenu {}
 }

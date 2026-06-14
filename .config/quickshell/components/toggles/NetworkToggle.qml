@@ -30,6 +30,8 @@ Item {
             implicitHeight: contentLayout.implicitHeight
 
             property var selectedNetwork: null
+            property string pendingPassword: ""
+            onSelectedNetworkChanged: pendingPassword = ""
 
             // Enable wifi scanner while expanded view is open
             Binding {
@@ -280,15 +282,15 @@ Item {
                         }
                         iconOpacity: modelData.connected ? 1.0 : 0.6
                         showCheckmark: modelData.connected
-                        showLock: !modelData.connected && modelData.security !== 0
-                        isExpanded: expandedRoot.selectedNetwork === modelData && !modelData.connected && modelData.security !== 0 && !modelData.known
+                        showLock: !modelData.connected && modelData.security !== WifiSecurityType.Open && modelData.security !== WifiSecurityType.Unknown
+                        isExpanded: expandedRoot.selectedNetwork === modelData && !modelData.connected && modelData.security !== WifiSecurityType.Open && modelData.security !== WifiSecurityType.Unknown && !modelData.known
                         expandedComponent: passwordInputComponent
 
                         onClicked: {
                             if (modelData.connected) {
                                 modelData.disconnect();
-                            } else if (modelData.known || modelData.security === 0) {
-                                shellRoot.connectWifi(modelData.name, "");
+                            } else if (modelData.known || modelData.security === WifiSecurityType.Open || modelData.security === WifiSecurityType.Unknown) {
+                                modelData.connect();
                             } else {
                                 if (expandedRoot.selectedNetwork === modelData)
                                     expandedRoot.selectedNetwork = null;
@@ -327,9 +329,16 @@ Item {
                                 color: "white"
                                 font.pixelSize: 14
                                 background: null
+                                text: expandedRoot.pendingPassword
+                                onTextChanged: expandedRoot.pendingPassword = text
                                 focus: true
-                                onAccepted: {
-                                    shellRoot.connectWifi(modelData.name, passInput.text);
+                                Keys.onReturnPressed: maybeConnect()
+                                Keys.onEnterPressed: maybeConnect()
+                                onAccepted: maybeConnect()
+
+                                function maybeConnect() {
+                                    if (expandedRoot.selectedNetwork)
+                                        expandedRoot.selectedNetwork.connectWithPsk(passInput.text);
                                     expandedRoot.selectedNetwork = null;
                                 }
                             }
@@ -351,7 +360,8 @@ Item {
                                 id: connectArea
                                 anchors.fill: parent
                                 onClicked: {
-                                    shellRoot.connectWifi(modelData.name, passInput.text);
+                                    if (expandedRoot.selectedNetwork)
+                                        expandedRoot.selectedNetwork.connectWithPsk(passInput.text);
                                     expandedRoot.selectedNetwork = null;
                                 }
                             }
