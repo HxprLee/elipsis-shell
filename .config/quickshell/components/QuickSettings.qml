@@ -1195,16 +1195,6 @@ PanelWindow {
                 running: false
             }
 
-            Timer {
-                id: morphStartTimer
-                interval: 20
-                onTriggered: {
-                    expandedCard.state = "opening";
-                    expandedLoader.sourceComponent = expandedOverlay.widgetItem.expandedComponent;
-                    expandedOverlay.open();
-                }
-            }
-
             function openExpandedView(sourceRect, widgetItem) {
                 // Defer until the panel's bloom-scale spring has settled
                 // so the source widget's on-screen position is final when
@@ -1248,8 +1238,11 @@ PanelWindow {
                         : 24;
 
                 // Idle state disables animations so geometry snaps instantly
-                // to the source widget. The morphStartTimer then switches to
-                // "opening" which re-enables Behaviors for the actual morph.
+                // to the source widget. expandedOverlay.open() then sets
+                // state = "opening" and assigns target geometry, which
+                // the Behaviors animate. No timer needed: the snap and the
+                // open happen in the same JS call, so the QML engine
+                // processes them in order within one event tick.
                 expandedCard.state = "idle";
                 expandedCard.x = expandedOverlay.startX;
                 expandedCard.y = expandedOverlay.startY;
@@ -1257,8 +1250,7 @@ PanelWindow {
                 expandedCard.height = expandedOverlay.startHeight;
                 expandedCard.radius = expandedOverlay.sourceRadius;
 
-                // Use a Timer to ensure QML engine commits the geometry snap before re-enabling animations
-                morphStartTimer.start();
+                expandedOverlay.open();
             }
 
             // Replay a deferred open() once the panel's bloom is done.
