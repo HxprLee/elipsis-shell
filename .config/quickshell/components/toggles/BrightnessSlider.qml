@@ -28,7 +28,11 @@ Item {
         visible: !root.isVertical
         from: 1; to: 100
         value: qs.brightnessValue
-        onMoved: qs.setBrightness(value)
+        onMoved: {
+            if (root.holdTriggered) return;
+            qs.setBrightness(value);
+            holdTimer.restart();
+        }
         padding: 0
 
         background: Rectangle {
@@ -83,6 +87,20 @@ Item {
         }
         
         handle: Item {}
+
+        onPressedChanged: {
+            if (pressed) {
+                root.holdTriggered = false;
+                holdTimer.restart();
+            } else {
+                holdTimer.stop();
+                if (!root.holdTriggered) {
+                    qs.setBrightness(value);
+                }
+                // Restore binding so the slider tracks external brightness changes again
+                slider.value = Qt.binding(function() { return qs.brightnessValue });
+            }
+        }
     }
 
     // ── Vertical slider (1x2) ──
@@ -93,7 +111,11 @@ Item {
         orientation: Qt.Vertical
         from: 1; to: 100
         value: qs.brightnessValue
-        onMoved: qs.setBrightness(value)
+        onMoved: {
+            if (root.holdTriggered) return;
+            qs.setBrightness(value);
+            holdTimer.restart();
+        }
         padding: 0
 
         background: Rectangle {
@@ -156,7 +178,33 @@ Item {
         }
 
         handle: Item {}
+
+        onPressedChanged: {
+            if (pressed) {
+                root.holdTriggered = false;
+                holdTimer.restart();
+            } else {
+                holdTimer.stop();
+                if (!root.holdTriggered) {
+                    qs.setBrightness(value);
+                }
+                vSlider.value = Qt.binding(function() { return qs.brightnessValue });
+            }
+        }
     }
+
+    property bool holdTriggered: false
+    Timer {
+        id: holdTimer
+        interval: 300
+        onTriggered: {
+            root.holdTriggered = true;
+            root.expandRequested();
+            if (slider.value !== qs.brightnessValue) slider.value = qs.brightnessValue;
+            if (vSlider.value !== qs.brightnessValue) vSlider.value = qs.brightnessValue;
+        }
+    }
+    signal expandRequested()
 
     // Block slider interaction during edit mode
     MouseArea {
