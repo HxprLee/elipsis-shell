@@ -15,8 +15,8 @@ Item {
         return "Balanced";
     }
     property string iconSource: shellRoot.icon("power-profile-" + shellRoot.powerProfile)
-    property bool isActive: true
-    property color activeColor: shellRoot.accentColor || shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
+    property bool isActive: shellRoot.powerProfile !== "balanced"
+    property color activeColor: shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
 
     signal toggled()
     onToggled: {
