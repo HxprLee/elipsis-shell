@@ -1565,13 +1565,20 @@ PanelWindow {
                                             radius: (model.colSpan >= 2 && model.rowSpan >= 2) ? 16 : Math.min(width, height) / 2
                                             color: "transparent"
                                             clip: true
-                                            // Opacity change is intentionally instantaneous —
-                                            // the 250ms Behavior that used to live here caused
-                                            // a visible ghost overlay (source widget + morphed
-                                            // card both rendered) during the first 250ms of
-                                            // every open. Direct writes from the edit-mode drag
-                                            // path (0.3 ghost / 1.0 restore) also become instant.
+                                            // Opacity crosses with the shape morph (400ms),
+                                            // so the source content fades out as the expanded
+                                            // content fades in. The edit-mode guard keeps the
+                                            // drag-ghost writes (0.3 / 1.0 at lines ~1868/1893)
+                                            // instant — those would otherwise pick up the 400ms
+                                            // fade and feel laggy during a drag.
                                             opacity: (expandedOverlay.isExpanded && expandedOverlay.sourceItem === widgetBg) ? 0.0 : 1.0
+                                            Behavior on opacity {
+                                                enabled: !controlPanel.editMode
+                                                NumberAnimation {
+                                                    duration: 400
+                                                    easing.type: Easing.OutExpo
+                                                }
+                                            }
 
                                             MaterialSurface {
                                                 id: bgSurface
