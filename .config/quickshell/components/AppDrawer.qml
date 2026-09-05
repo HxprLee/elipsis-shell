@@ -6,6 +6,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
+import "reusables"
 
 PanelWindow {
     id: root
@@ -54,6 +55,10 @@ PanelWindow {
     onVisibleChanged: {
         if (visible) {
             focusTimer.restart();
+        } else {
+            // Closing the drawer should also dismiss the shared menu on
+            // our screen so a stale overlay doesn't linger.
+            shellRoot.closeContextMenu(root.screen);
         }
     }
 
@@ -109,40 +114,21 @@ PanelWindow {
         }
     }
 
-    function openMenu(item, app) {
-        let pos = item.mapToItem(root.contentItem, 0, 0)
-        
+    function buildAppMenuModel(app) {
         let menuModel = []
         let isPinned = shellRoot.pinnedApps.includes(app.id.toLowerCase())
-        
+
         // Pin/Unpin item
         menuModel.push({
             text: isPinned ? "Unpin from Dock" : "Add to Dock",
             icon: shellRoot.icon(isPinned ? "window-close-symbolic" : "view-app-grid-symbolic"), // Placeholders
             action: () => {
                 shellRoot.togglePin(app.id)
-                globalMenu.close()
+                shellRoot.closeContextMenu(root.screen)
             }
         })
-        
-        globalMenu.model = menuModel
-        
-        // Position menu above or below icon depending on screen space
-        globalMenu.x = Math.max(10, Math.min(root.width - 220, pos.x + (item.width - 200) / 2))
-        
-        if (pos.y > root.height / 2) {
-            // Place above
-            globalMenu.y = pos.y - 100 // Estimate height
-        } else {
-            // Place below
-            globalMenu.y = pos.y + item.height + 12
-        }
-        
-        globalMenu.open()
-    }
 
-    AppContextMenu {
-        id: globalMenu
+        return menuModel;
     }
 
     // --- Content Container ---
@@ -404,7 +390,11 @@ PanelWindow {
                             acceptedButtons: Qt.LeftButton | Qt.RightButton
                             onClicked: (mouse) => {
                                 if (mouse.button === Qt.RightButton) {
-                                    root.openMenu(appMouse, entry)
+                                    // Ask the compositor for the cursor
+                                    // position rather than trusting local
+                                    // MouseArea mapping, which has been
+                                    // unreliable for menu placement.
+                                    shellRoot.openContextMenuAtCursor(root.screen, buildAppMenuModel(entry))
                                 } else {
                                     entry.execute()
                                     shellRoot.appDrawerOpen = false
@@ -412,7 +402,7 @@ PanelWindow {
                                 }
                             }
                             onPressAndHold: {
-                                root.openMenu(appMouse, entry)
+                                shellRoot.openContextMenuAtCursor(root.screen, buildAppMenuModel(entry))
                             }
                         }
                     }
