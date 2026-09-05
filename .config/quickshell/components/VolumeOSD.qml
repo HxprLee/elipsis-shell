@@ -27,7 +27,7 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     aboveWindows: true
 
-    property var audioNode: Pipewire.defaultAudioSink ? Pipewire.defaultAudioSink.audio : null
+    property var audioNode: Pipewire.defaultAudioSink?.audio ?? null
     property real volume: audioNode ? audioNode.volume : 0
     property bool muted: audioNode ? audioNode.muted : false
     property bool isSlim: false
@@ -272,7 +272,7 @@ PanelWindow {
 
                     Text {
                         text: Math.round(osd.volume * 100)
-                        color: (progressFill.width > 185) ? "#111" : "white"
+                        color: (progressFill.width > content.width * 0.84) ? "#111" : "white"
                         font.pixelSize: 14
                         font.weight: Font.Bold
                         Behavior on color { ColorAnimation { duration: 200 } }
@@ -292,7 +292,7 @@ PanelWindow {
                         ColorOverlay {
                             anchors.fill: volIcon
                             source: volIcon
-                            color: (progressFill.width > 30) ? "#111" : "white" 
+                            color: (progressFill.width > content.width * 0.14) ? "#111" : "white"
                             Behavior on color { ColorAnimation { duration: 200 } }
                         }
                     }
@@ -678,7 +678,7 @@ PanelWindow {
                                 }
                                 Item { Layout.fillWidth: true }
                                 Text {
-                                    text: osd.activePlayer && osd.activePlayer.lengthSupported ? "-" + osd.formatTime(osd.activePlayer.length - osd.activePlayer.position) : "-0:00"
+                                    text: osd.activePlayer && osd.activePlayer.lengthSupported ? "-" + osd.formatTime(Math.max(0, osd.activePlayer.length - osd.activePlayer.position)) : "-0:00"
                                     color: Qt.rgba(1, 1, 1, 0.6)
                                     font.pixelSize: 11
                                 }
