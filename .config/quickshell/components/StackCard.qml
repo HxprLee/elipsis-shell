@@ -117,8 +117,9 @@ Item {
             onReleased: (mouse) => {
                 if (isDragging) {
                     let dx = mouse.x - startX
+                    let dismissDist = root.parent ? root.parent.width : 460
                     if (Math.abs(dx) > 60) {
-                        root.x = (dx > 0 ? 500 : -500)
+                        root.x = (dx > 0 ? dismissDist : -dismissDist)
                         Qt.callLater(() => root.dismiss())
                     } else {
                         root.x = 0
@@ -138,6 +139,7 @@ Item {
                 entranceAnim.start()
             }
         } else {
+            x = 0
             entranceOffset = 0
             fadeOutAnim.start()
         }

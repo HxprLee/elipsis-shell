@@ -96,8 +96,6 @@ PanelWindow {
         interval: 4000
         onTriggered: {
             if (notificationQueue.length > 0) {
-                let oldest = notificationQueue[0]
-                notificationServer.dismiss(oldest.id)
                 let copy = notificationQueue.slice(1)
                 notificationQueue = copy
                 stackCount = notificationQueue.length
