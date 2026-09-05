@@ -1206,6 +1206,24 @@ PanelWindow {
             }
 
             function openExpandedView(sourceRect, widgetItem) {
+                // Defer until the panel's bloom-scale spring has settled
+                // so the source widget's on-screen position is final when
+                // we copy its geometry. Otherwise the morph would start
+                // from a position that drifts ~15% as the panel scales
+                // from 0.85 to 1.0.
+                if (!qs.morphComplete) {
+                    expandedOverlay.pendingSourceRect = sourceRect;
+                    expandedOverlay.pendingWidgetItem = widgetItem;
+                    expandedOverlay.hasPendingOpen = true;
+                    return;
+                }
+                doOpenExpandedView(sourceRect, widgetItem);
+            }
+
+            // Helper that performs the actual snap. Public entry point is
+            // openExpandedView(); replayPendingOpen() drives it after the
+            // panel bloom finishes.
+            function doOpenExpandedView(sourceRect, widgetItem) {
                 // Map source rect into gridWrapper coordinates so the
                 // expanded card (which lives under gridWrapper during
                 // the morph) starts at the same position as the source
@@ -1231,6 +1249,19 @@ PanelWindow {
 
                 // Use a Timer to ensure QML engine commits the geometry snap before re-enabling animations
                 morphStartTimer.start();
+            }
+
+            // Replay a deferred open() once the panel's bloom is done.
+            // Wired via Connections { target: qs } inside expandedOverlay.
+            function replayPendingOpen() {
+                if (!expandedOverlay.hasPendingOpen)
+                    return;
+                let src = expandedOverlay.pendingSourceRect;
+                let wid = expandedOverlay.pendingWidgetItem;
+                expandedOverlay.pendingSourceRect = null;
+                expandedOverlay.pendingWidgetItem = null;
+                expandedOverlay.hasPendingOpen = false;
+                doOpenExpandedView(src, wid);
             }
 
             function closeExpandedView() {
@@ -2409,6 +2440,13 @@ PanelWindow {
 
                 property var sourceItem: null
                 property var widgetItem: null
+                // Deferred-open slot: if openExpandedView() is called while
+                // qs.morphComplete is false (e.g. user presses-and-holds a
+                // toggle in the same gesture that opens the panel), we stash
+                // the args here and replay them once the panel bloom settles.
+                property var pendingSourceRect: null
+                property var pendingWidgetItem: null
+                property bool hasPendingOpen: false
                 property real startX: 0
                 property real startY: 0
                 property real startWidth: 0
@@ -2500,6 +2538,18 @@ PanelWindow {
                             expandedCard.state = "idle";
                             expandedCard.parent = expandedOverlay;
                         }
+                    }
+                }
+
+                // Replay a deferred open() once the panel's bloom-scale
+                // spring has settled. Watches qs.morphComplete (set by
+                // onSmoothMorphProgressChanged when smoothMorphProgress
+                // reaches 1.0).
+                Connections {
+                    target: qs
+                    function onMorphCompleteChanged() {
+                        if (qs.morphComplete)
+                            replayPendingOpen();
                     }
                 }
 
