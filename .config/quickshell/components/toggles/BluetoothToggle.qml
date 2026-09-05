@@ -43,6 +43,14 @@ Item {
                 }
             }
 
+            Component.onDestruction: {
+                if (Bluetooth.adapter) {
+                    Bluetooth.adapter.discovering = false;
+                } else if (Bluetooth.adapters && Bluetooth.adapters.values && Bluetooth.adapters.values.length > 0) {
+                    Bluetooth.adapters.values[0].discovering = false;
+                }
+            }
+
             ColumnLayout {
                 anchors.fill: parent
                 spacing: 16
