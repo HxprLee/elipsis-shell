@@ -23,6 +23,7 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
     aboveWindows: true
+    WlrLayershell.layer: WlrLayershell.Overlay
 
     WlrLayershell.keyboardFocus: powerMenu.visible ? WlrLayershell.OnDemand : WlrLayershell.None
 
@@ -104,6 +105,8 @@ PanelWindow {
                 label: "Power Off"
                 iconName: "system-shutdown-symbolic"
                 buttonColor: Qt.rgba(0.9, 0.2, 0.2, 1.0)
+                Accessible.name: "Power Off"
+                Accessible.role: Accessible.Button
                 onClicked: {
                     shellRoot.powerMenuOpen = false
                     powerOffProc.running = true
@@ -116,6 +119,8 @@ PanelWindow {
                 label: "Restart"
                 iconName: "system-reboot-symbolic"
                 buttonColor: Qt.rgba(1.0, 0.6, 0.2, 1.0)
+                Accessible.name: "Restart"
+                Accessible.role: Accessible.Button
                 onClicked: {
                     shellRoot.powerMenuOpen = false
                     restartProc.running = true
@@ -128,6 +133,8 @@ PanelWindow {
                 label: "Suspend"
                 iconName: "system-suspend-symbolic"
                 buttonColor: Qt.rgba(0.4, 0.5, 1.0, 1.0)
+                Accessible.name: "Suspend"
+                Accessible.role: Accessible.Button
                 onClicked: {
                     shellRoot.powerMenuOpen = false
                     suspendProc.running = true
@@ -140,6 +147,8 @@ PanelWindow {
                 label: "Lock"
                 iconName: "system-lock-screen-symbolic"
                 buttonColor: Qt.rgba(0.3, 0.7, 0.4, 1.0)
+                Accessible.name: "Lock Screen"
+                Accessible.role: Accessible.Button
                 onClicked: {
                     shellRoot.powerMenuOpen = false
                     lockProc.running = true
@@ -153,6 +162,8 @@ PanelWindow {
                 Layout.preferredHeight: 56
                 radius: 16
                 color: Qt.rgba(1, 1, 1, 0.1)
+                Accessible.name: "Cancel"
+                Accessible.role: Accessible.Button
 
                 Text {
                     anchors.centerIn: parent
