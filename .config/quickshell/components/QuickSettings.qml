@@ -1195,7 +1195,7 @@ PanelWindow {
                 running: false
             }
 
-            function openExpandedView(sourceRect, widgetItem) {
+            function openExpandedView(sourceRect, widgetItem, delegateRef) {
                 // Defer until the panel's bloom-scale spring has settled
                 // so the source widget's on-screen position is final when
                 // we copy its geometry. Otherwise the morph would start
@@ -1204,21 +1204,23 @@ PanelWindow {
                 if (!qs.morphComplete) {
                     expandedOverlay.pendingSourceRect = sourceRect;
                     expandedOverlay.pendingWidgetItem = widgetItem;
+                    expandedOverlay.pendingDelegateItemRef = delegateRef || null;
                     expandedOverlay.hasPendingOpen = true;
                     return;
                 }
-                doOpenExpandedView(sourceRect, widgetItem);
+                doOpenExpandedView(sourceRect, widgetItem, delegateRef);
             }
 
             // Helper that performs the actual snap. Public entry point is
             // openExpandedView(); replayPendingOpen() drives it after the
             // panel bloom finishes.
-            function doOpenExpandedView(sourceRect, widgetItem) {
-                // Map source rect into gridWrapper coordinates so the
-                // expanded card (which lives under gridWrapper during
-                // the morph) starts at the same position as the source
-                // widget. Shares coordinate frame with widgetBg, so the
-                // panel's bloomScale transforms both consistently.
+            function doOpenExpandedView(sourceRect, widgetItem, delegateRef) {
+                // sourceRect is the widgetBg being morphed. It already
+                // lives under gridWrapper at its cell-bound position
+                // (Phase D no longer needs to reparent a separate card).
+                // We capture its current position so close() can animate
+                // back without relying on the live (animated) values,
+                // which would drift during the morph.
                 let pos = sourceRect.mapToItem(gridWrapper, 0, 0);
                 expandedOverlay.sourceItem = sourceRect;
                 expandedOverlay.widgetItem = widgetItem;
@@ -1237,19 +1239,23 @@ PanelWindow {
                         ? sourceRect.width / 2
                         : 24;
 
-                // Idle state disables animations so geometry snaps instantly
-                // to the source widget. expandedOverlay.open() then sets
-                // state = "opening" and assigns target geometry, which
-                // the Behaviors animate. No timer needed: the snap and the
-                // open happen in the same JS call, so the QML engine
-                // processes them in order within one event tick.
-                expandedCard.state = "idle";
-                expandedCard.x = expandedOverlay.startX;
-                expandedCard.y = expandedOverlay.startY;
-                expandedCard.width = expandedOverlay.startWidth;
-                expandedCard.height = expandedOverlay.startHeight;
-                expandedCard.radius = expandedOverlay.sourceRadius;
+                // Capture the repeating-delegateItem reference at open time so
+                // morphCompleteTimer (declared outside the Repeater) can
+                // rebuild the cell-bound geometry bindings on the
+                // morphed widgetBg after close. The Timer's onTriggered
+                // runs in expandedOverlay scope and has no access to
+                // delegateItem directly, so we explicitly capture it via
+                // argument threading from the Repeater-delegate call
+                // sites (see controlPanel.openExpandedView above).
+                expandedOverlay.delegateItemRef = delegateRef || null;
 
+                // Drive the morph on the actual widgetBg. open() writes
+                // target geometry directly; the Behaviors on widgetBg
+                // (gated on isMorphing) animate. The assignments in
+                // open() break widgetBg's cell-bound x/y/width/height/
+                // radius bindings for the duration of the morph; the
+                // morphCompleteTimer restores them when the close
+                // animation lands.
                 expandedOverlay.open();
             }
 
@@ -1260,10 +1266,12 @@ PanelWindow {
                     return;
                 let src = expandedOverlay.pendingSourceRect;
                 let wid = expandedOverlay.pendingWidgetItem;
+                let del = expandedOverlay.pendingDelegateItemRef;
                 expandedOverlay.pendingSourceRect = null;
                 expandedOverlay.pendingWidgetItem = null;
+                expandedOverlay.pendingDelegateItemRef = null;
                 expandedOverlay.hasPendingOpen = false;
-                doOpenExpandedView(src, wid);
+                doOpenExpandedView(src, wid, del);
             }
 
             function closeExpandedView() {
@@ -1557,7 +1565,28 @@ PanelWindow {
                                         Rectangle {
                                             id: widgetBg
                                             parent: gridWrapper
+                                            // ── Phase D: widgetBg IS the morph container. ──
+                                            // (Previously a separate `expandedCard` Rectangle was
+                                            // reparented to gridWrapper and duplicated the visual
+                                            // surface during the morph. The user rejected that
+                                            // pattern — they want the actual toggle to morph into
+                                            // the expanded view, not be hidden while a duplicate
+                                            // container grows in its place. Now widgetBg itself
+                                            // animates geometry/radius while widgetLoader content
+                                            // fades out and the new expandedLoader content fades
+                                            // in inside this same widget.)
                                             property bool isCircle: model.colSpan === 1 && model.rowSpan === 1
+                                            // True only when this widgetBg is the current
+                                            // morph target. Used to gate the morph-tuned
+                                            // Behaviors below so they don't fire spuriously.
+                                            property bool isMorphing: expandedOverlay.isExpanded && expandedOverlay.sourceItem === widgetBg
+                                            // 4-state geometry-animation machine (lives on the
+                                            // morph container now, not on a separate card).
+                                            //   idle      - geometry assignments instant (default)
+                                            //   opening   - Behaviors animating toward expanded bounds
+                                            //   open      - holding expanded geometry; animations idle
+                                            //   closing   - Behaviors animating back to source bounds
+                                            property string morphState: "idle"
                                             width: delegateItem.width
                                             height: delegateItem.height
                                             x: delegateItem.x
@@ -1565,20 +1594,11 @@ PanelWindow {
                                             radius: (model.colSpan >= 2 && model.rowSpan >= 2) ? 16 : Math.min(width, height) / 2
                                             color: "transparent"
                                             clip: true
-                                            // Opacity crosses with the shape morph (400ms),
-                                            // so the source content fades out as the expanded
-                                            // content fades in. The edit-mode guard keeps the
-                                            // drag-ghost writes (0.3 / 1.0 at lines ~1868/1893)
-                                            // instant — those would otherwise pick up the 400ms
-                                            // fade and feel laggy during a drag.
-                                            opacity: (expandedOverlay.isExpanded && expandedOverlay.sourceItem === widgetBg) ? 0.0 : 1.0
-                                            Behavior on opacity {
-                                                enabled: !controlPanel.editMode
-                                                NumberAnimation {
-                                                    duration: 400
-                                                    easing.type: Easing.OutExpo
-                                                }
-                                            }
+                                            // Container opacity is NOT animated — the container
+                                            // stays at full opacity so the user sees the toggle
+                                            // actually morph. Only the inner content
+                                            // (widgetLoader + toggleChrome) fades out, while
+                                            // expandedLoader fades in.
 
                                             MaterialSurface {
                                                 id: bgSurface
@@ -1594,11 +1614,25 @@ PanelWindow {
                                                 accentColor: (widgetLoader.item && widgetLoader.item.activeColor) ? widgetLoader.item.activeColor : (shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0))
                                             }
 
+                                            // ── Geometry Behaviors ──
+                                            // Two parallel sets per property: one for edit-mode
+                                            // drag-reorder (300ms OutCubic), one for the morph
+                                            // (400ms OutExpo). Both are gated by disjoint
+                                            // conditions so they never fire simultaneously.
+                                            // Only one Behavior's animation runs for any given
+                                            // property change; the other is no-op'd by `enabled:`.
                                             Behavior on width {
                                                 enabled: controlPanel.editMode
                                                 NumberAnimation {
                                                     duration: 300
                                                     easing.type: Easing.OutCubic
+                                                }
+                                            }
+                                            Behavior on width {
+                                                enabled: widgetBg.isMorphing
+                                                NumberAnimation {
+                                                    duration: 400
+                                                    easing.type: Easing.OutExpo
                                                 }
                                             }
                                             Behavior on height {
@@ -1608,11 +1642,25 @@ PanelWindow {
                                                     easing.type: Easing.OutCubic
                                                 }
                                             }
+                                            Behavior on height {
+                                                enabled: widgetBg.isMorphing
+                                                NumberAnimation {
+                                                    duration: 400
+                                                    easing.type: Easing.OutExpo
+                                                }
+                                            }
                                             Behavior on x {
                                                 enabled: controlPanel.editMode
                                                 NumberAnimation {
                                                     duration: 300
                                                     easing.type: Easing.OutCubic
+                                                }
+                                            }
+                                            Behavior on x {
+                                                enabled: widgetBg.isMorphing
+                                                NumberAnimation {
+                                                    duration: 400
+                                                    easing.type: Easing.OutExpo
                                                 }
                                             }
                                             Behavior on y {
@@ -1622,11 +1670,25 @@ PanelWindow {
                                                     easing.type: Easing.OutCubic
                                                 }
                                             }
+                                            Behavior on y {
+                                                enabled: widgetBg.isMorphing
+                                                NumberAnimation {
+                                                    duration: 400
+                                                    easing.type: Easing.OutExpo
+                                                }
+                                            }
                                             Behavior on radius {
                                                 enabled: controlPanel.editMode
                                                 NumberAnimation {
                                                     duration: 300
                                                     easing.type: Easing.OutCubic
+                                                }
+                                            }
+                                            Behavior on radius {
+                                                enabled: widgetBg.isMorphing
+                                                NumberAnimation {
+                                                    duration: 400
+                                                    easing.type: Easing.OutExpo
                                                 }
                                             }
 
@@ -1663,10 +1725,19 @@ PanelWindow {
                                                 enabled: !controlPanel.editMode && widgetLoader.item !== null && widgetLoader.item.hasExpandedView === true && widgetLoader.item.isSimpleToggle !== true
                                                 pressAndHoldInterval: 300
                                                 onPressAndHold: {
-                                                    controlPanel.openExpandedView(widgetBg, widgetLoader.item);
+                                                    controlPanel.openExpandedView(widgetBg, widgetLoader.item, delegateItem);
                                                 }
                                             }
 
+                                            // ── Toggle's own content (the compact view) ──
+                                            // Fades out during the morph so the expanded view's
+                                            // content can fade in inside the same widgetBg.
+                                            // Edit-mode guard keeps edit-mode direct opacity
+                                            // writes instant (the drag-ghost sets opacity on
+                                            // widgetBg directly, not on widgetLoader, so this
+                                            // Behavior isn't actually triggered by the ghost,
+                                            // but the guard is kept for symmetry with the
+                                            // earlier phases' pattern).
                                             Loader {
                                                 id: widgetLoader
                                                 anchors.fill: parent
@@ -1674,12 +1745,20 @@ PanelWindow {
                                                 asynchronous: true
                                                 property var modelData: model
                                                 source: model.source || ""
+                                                opacity: (expandedOverlay.isExpanded && expandedOverlay.sourceItem === widgetBg) ? 0.0 : 1.0
+                                                Behavior on opacity {
+                                                    enabled: !controlPanel.editMode
+                                                    NumberAnimation {
+                                                        duration: 400
+                                                        easing.type: Easing.OutExpo
+                                                    }
+                                                }
                                                 onLoaded: {
                                                     // Connect expandRequested signal for widgets that handle their own hold detection
                                                     if (item && item.expandRequested) {
                                                         item.expandRequested.connect(function () {
                                                             if (!controlPanel.editMode && item.hasExpandedView) {
-                                                                controlPanel.openExpandedView(widgetBg, item);
+                                                                controlPanel.openExpandedView(widgetBg, item, delegateItem);
                                                             }
                                                         });
                                                     }
@@ -1689,12 +1768,22 @@ PanelWindow {
                                             // ── Shell-provided toggle chrome for simple toggles ──
                                             // If the loaded widget has `isSimpleToggle: true`, the shell
                                             // handles all styling (active bg, icon, label, click).
+                                            // Same opacity-crossfade as widgetLoader: chrome fades
+                                            // out during the morph, expandedView fades in on top.
                                             Rectangle {
                                                 id: toggleChrome
                                                 anchors.fill: parent
                                                 visible: widgetLoader.item && widgetLoader.item.isSimpleToggle === true
                                                 radius: widgetBg.radius
                                                 color: "transparent"
+                                                opacity: (expandedOverlay.isExpanded && expandedOverlay.sourceItem === widgetBg) ? 0.0 : 1.0
+                                                Behavior on opacity {
+                                                    enabled: !controlPanel.editMode
+                                                    NumberAnimation {
+                                                        duration: 400
+                                                        easing.type: Easing.OutExpo
+                                                    }
+                                                }
                                                 Behavior on color {
                                                     ColorAnimation {
                                                         duration: 200
@@ -1866,8 +1955,32 @@ PanelWindow {
                                                     }
                                                     onPressAndHold: {
                                                         if (widgetLoader.item && widgetLoader.item.hasExpandedView) {
-                                                            controlPanel.openExpandedView(widgetBg, widgetLoader.item);
+                                                            controlPanel.openExpandedView(widgetBg, widgetLoader.item, delegateItem);
                                                         }
+                                                    }
+                                                }
+                                            }
+
+                                            // ── Expanded view content (Phase D) ──
+                                            // Lives INSIDE widgetBg (same parent as widgetLoader +
+                                            // toggleChrome), so the expanded view appears inside
+                                            // the morphing widget rather than in a separate
+                                            // container. Opacity stays asymmetric on purpose:
+                                            // 200ms in (fast arrival) vs the 400ms toggle
+                                            // content fade-out (slow absorption), biasing the
+                                            // read toward "the expanded view has arrived" while
+                                            // the toggle is still bleeding out.
+                                            Loader {
+                                                id: expandedLoader
+                                                anchors.fill: parent
+                                                anchors.margins: 24
+                                                focus: true
+                                                asynchronous: true
+                                                sourceComponent: (expandedOverlay.isExpanded && expandedOverlay.widgetItem) ? expandedOverlay.widgetItem.expandedComponent : null
+                                                opacity: expandedOverlay.isExpanded ? 1.0 : 0.0
+                                                Behavior on opacity {
+                                                    NumberAnimation {
+                                                        duration: 200
                                                     }
                                                 }
                                             }
@@ -2441,7 +2554,18 @@ PanelWindow {
                 }
             }
 
-            // ── Expanded View Overlay ──
+            // ── Expanded View Overlay (Phase D slimmed) ──
+            // Only two responsibilities remain:
+            //   1. Click-to-close backdrop (this Item itself, full-overlay,
+            //      with a MouseArea that catches outside-click to close).
+            //   2. State owner: isExpanded, deferred-open slot, per-open
+            //      geometry parameters (startX/Y/Width/Height, sourceRadius,
+            //      computedTargetHeight), and open()/close() that drive the
+            //      morph on `sourceItem` (which is now widgetBg itself,
+            //      reparented into gridWrapper since Phase B).
+            //
+            // No morph container lives here anymore. expandedCard is gone;
+            // expandedLoader lives inside widgetBg.
             Item {
                 id: expandedOverlay
                 anchors.fill: parent
@@ -2457,6 +2581,7 @@ PanelWindow {
                 // the args here and replay them once the panel bloom settles.
                 property var pendingSourceRect: null
                 property var pendingWidgetItem: null
+                property var pendingDelegateItemRef: null
                 property bool hasPendingOpen: false
                 property real startX: 0
                 property real startY: 0
@@ -2472,6 +2597,13 @@ PanelWindow {
                 // geometry change and produced visible first-frame jumps.
                 property real computedTargetHeight: 0
                 property bool isExpanded: false
+                // Captured at open() time so the morphCompleteTimer
+                // (declared outside the Repeater delegate) can restore
+                // the cell-bound geometry bindings on the morphed
+                // widgetBg after the close animation. Without this,
+                // the Timer's onTriggered can't reference `delegateItem`
+                // because it lives outside the Repeater's scope.
+                property var delegateItemRef: null
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -2480,26 +2612,21 @@ PanelWindow {
                     }
                 }
 
+                // Drive the morph on `sourceItem` (widgetBg itself). The
+                // geometry Behaviors on widgetBg (gated on isMorphing)
+                // animate the geometry changes written here.
                 function open() {
                     isExpanded = true;
                     opacity = 1.0;
 
-                    // Reparent the morph card into gridWrapper so it
-                    // shares a coordinate frame with widgetBg. Stays
-                    // there for the duration of the morph; close()
-                    // reparents it back.
-                    expandedCard.parent = gridWrapper;
-
-                    expandedLoader.sourceComponent = widgetItem.expandedComponent;
-
-                    // Compute target height once. Prefer the expanded
-                    // component's implicitHeight (with 48px chrome
-                    // padding), then widgetItem.expandedHeight, then the
-                    // 420px fallback. Clamp to the overlay height with
-                    // 40px headroom and 680px ceiling.
-                    let implicitH = (expandedLoader.item && expandedLoader.item.implicitHeight > 0) ? expandedLoader.item.implicitHeight + 48 : 0;
-                    let explicitH = (widgetItem && widgetItem.expandedHeight > 0) ? widgetItem.expandedHeight : 0;
-
+                    // Resolve the expanded component (already lives inside
+                    // widgetBg now, so no sourceComponent assignment is
+                    // needed here — expandedLoader reads widgetItem directly
+                    // via its binding). Still compute target height so the
+                    // morph lands at the right final bounds.
+                    let w = widgetItem;
+                    let implicitH = (w && w.implicitHeight > 0) ? w.implicitHeight + 48 : 0;
+                    let explicitH = (w && w.expandedHeight > 0) ? w.expandedHeight : 0;
                     let targetH = implicitH > 0 ? implicitH : (explicitH > 0 ? explicitH : 420);
 
                     let maxH = Math.min(expandedOverlay.height - 40, 680);
@@ -2508,18 +2635,26 @@ PanelWindow {
                     }
                     expandedOverlay.computedTargetHeight = targetH;
 
-                    expandedCard.state = "opening";
-                    expandedCard.x = 0;
-                    expandedCard.width = expandedOverlay.width;
-                    expandedCard.height = computedTargetHeight;
-                    expandedCard.y = (expandedOverlay.height - computedTargetHeight) / 2;
-                    expandedCard.radius = 16;
+                    // Drive the actual toggle's geometry morph. sourceItem
+                    // is widgetBg; it's already a child of gridWrapper, so
+                    // no reparenting is needed (Phase D change).
+                    if (sourceItem) {
+                        sourceItem.morphState = "opening";
+                        sourceItem.x = 0;
+                        sourceItem.y = (expandedOverlay.height - targetH) / 2;
+                        sourceItem.width = expandedOverlay.width;
+                        sourceItem.height = targetH;
+                        sourceItem.radius = 16;
+                        // Cancel any residual press-scale so the morph
+                        // geometry isn't composed with a 0.95 scale.
+                        sourceItem.scale = 1.0;
+                    }
 
                     // After the open morph lands, latch into "open" so any
                     // minor geometry tweaks don't re-trigger Behaviors.
                     Qt.callLater(() => {
-                        if (expandedCard.state === "opening")
-                            expandedCard.state = "open";
+                        if (sourceItem && sourceItem.morphState === "opening")
+                            sourceItem.morphState = "open";
                     });
                 }
 
@@ -2527,35 +2662,59 @@ PanelWindow {
                     isExpanded = false;
                     opacity = 0.0;
 
-                    // Snap back to source widget bounds. No bindings to
-                    // break (PR2 removed the Qt.binding chain). radius
-                    // uses the captured sourceRadius (PR6) so 1x1 circles
-                    // don't overshoot during the morph.
-                    expandedCard.state = "closing";
-                    expandedCard.height = startHeight;
-                    expandedCard.y = startY;
-                    expandedCard.x = startX;
-                    expandedCard.width = startWidth;
-                    expandedCard.radius = sourceRadius > 0 ? sourceRadius : 24;
+                    // Animate the actual toggle back to its source bounds.
+                    // radius uses captured sourceRadius so 1x1 circles don't
+                    // overshoot during the morph.
+                    if (sourceItem) {
+                        sourceItem.morphState = "closing";
+                        sourceItem.x = startX;
+                        sourceItem.y = startY;
+                        sourceItem.width = startWidth;
+                        sourceItem.height = startHeight;
+                        sourceItem.radius = sourceRadius > 0 ? sourceRadius : 24;
+                    }
 
-                    // After the close morph lands, return to idle so the
-                    // next open's snap-to-source assignments are instant.
+                    // After the close morph lands, snap the widgetBg
+                    // geometry bindings back to the cell-bound form. Using
+                    // Qt.binding() restores the original conditional
+                    // bindings (lines ~1563-1565) so the toggle reappears
+                    // with its natural radius (auto-computed from cell
+                    // size for 1x1 circles, fixed 16 for 2x2+).
                     morphCompleteTimer.restart();
                 }
 
-                // Reparent the morph card back under expandedOverlay
-                // once the close animation has finished, so it stays
-                // hidden inside the overlay (opacity: 0) until the
-                // next open re-roots it into gridWrapper.
+                // Restore the cell-bound geometry bindings on the morphed
+                // widgetBg once the close animation has finished.
+                // Reads dimension values from expandedOverlay.delegateItemRef
+                // (the Repeater delegate) and expands them into
+                // bindings via Qt.binding(), since this Timer runs in
+                // expandedOverlay scope and doesn't have direct access
+                // to either `delegateItem` or `model`.
                 Timer {
                     id: morphCompleteTimer
                     interval: 400
                     repeat: false
                     onTriggered: {
-                        if (expandedCard.state === "closing") {
-                            expandedCard.state = "idle";
-                            expandedCard.parent = expandedOverlay;
-                        }
+                        let s = expandedOverlay.sourceItem;
+                        if (!s || s.morphState !== "closing")
+                            return;
+                        let del = expandedOverlay.delegateItemRef;
+                        let cs = 0;
+                        let rs = 0;
+                        try {
+                            cs = del && del.model ? del.model.colSpan : (del && del.Layout ? del.Layout.columnSpan : 0);
+                            rs = del && del.model ? del.model.rowSpan : (del && del.Layout ? del.Layout.rowSpan : 0);
+                        } catch (e) {}
+                        s.morphState = "idle";
+                        s.x = Qt.binding(function() { return del ? del.x : 0; });
+                        s.y = Qt.binding(function() { return del ? del.y : 0; });
+                        s.width = Qt.binding(function() { return del ? del.width : 0; });
+                        s.height = Qt.binding(function() { return del ? del.height : 0; });
+                        s.radius = Qt.binding(function() {
+                            return (cs >= 2 && rs >= 2)
+                                ? 16 : Math.min(width, height) / 2;
+                        });
+                        expandedOverlay.delegateItemRef = null;
                     }
                 }
 
@@ -2574,75 +2733,6 @@ PanelWindow {
                 MouseArea {
                     anchors.fill: parent
                     onClicked: expandedOverlay.close()
-                }
-
-                Rectangle {
-                    id: expandedCard
-                    // Morph animation state machine:
-                    //   idle      - geometry assignments are instant (default)
-                    //   opening   - geometry animates from source widget to expanded bounds
-                    //   open      - holding final geometry; animations disabled to avoid jitter
-                    //   closing   - geometry animating back to source widget bounds
-                    property string state: "idle"
-                    readonly property bool animationsEnabled: state !== "idle"
-                    color: "transparent"
-                    clip: true
-
-                    MaterialSurface {
-                        anchors.fill: parent
-                        radius: parent.radius
-                    }
-
-                    Behavior on x {
-                        enabled: expandedCard.animationsEnabled
-                        NumberAnimation {
-                            duration: 400
-                            easing.type: Easing.OutExpo
-                        }
-                    }
-                    Behavior on y {
-                        enabled: expandedCard.animationsEnabled
-                        NumberAnimation {
-                            duration: 400
-                            easing.type: Easing.OutExpo
-                        }
-                    }
-                    Behavior on width {
-                        enabled: expandedCard.animationsEnabled
-                        NumberAnimation {
-                            duration: 400
-                            easing.type: Easing.OutExpo
-                        }
-                    }
-                    Behavior on height {
-                        enabled: expandedCard.animationsEnabled
-                        NumberAnimation {
-                            duration: 400
-                            easing.type: Easing.OutExpo
-                        }
-                    }
-                    Behavior on radius {
-                        enabled: expandedCard.animationsEnabled
-                        NumberAnimation {
-                            duration: 400
-                            easing.type: Easing.OutExpo
-                        }
-                    }
-
-                    // Only show loader content when fully expanded to avoid layout jumping during morph
-                    Loader {
-                        id: expandedLoader
-                        anchors.fill: parent
-                        anchors.margins: 24
-                        focus: true
-                        asynchronous: true
-                        opacity: expandedOverlay.isExpanded ? 1.0 : 0.0
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 200
-                            }
-                        }
-                    }
                 }
             }
         } // closes controlPanel
