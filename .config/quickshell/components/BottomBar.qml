@@ -1,128 +1,80 @@
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
+import Quickshell.Wayland
 import QtQuick
 import QtQuick.Controls
 import Qt5Compat.GraphicalEffects
 
+// Dock handle + content. Implemented as a bottom-anchored, horizontally
+// centered PanelWindow on the Top layer (no exclusive zone, input masked
+// to the visible dock). The Top layer keeps the dock above regular
+// windows while letting Overlay-layer full-screen panels (QuickSettings,
+// TaskManager, PowerMenu, AppDrawer) cover it. mainBar morphs between
+// 140×8 (handle) and content+48 × 96 (dock/overlay) inside the fixed
+// surface, so the dock never appears off-center while it animates.
 PanelWindow {
     id: root
+    visible: true
     color: "transparent"
 
+    // Layered surface (Top), not a popup: Hyprland renders layer-shell
+    // popups above ALL layers, so a popup dock would draw over
+    // Overlay-level full-screen panels. Top layer sits below Overlay.
+    exclusionMode: ExclusionMode.Ignore
+    exclusiveZone: 0
+    aboveWindows: true
+    WlrLayershell.layer: WlrLayershell.Top
+    WlrLayershell.keyboardFocus: WlrLayershell.None
+
+    // Bottom edge only — the layer-shell protocol centers the surface
+    // horizontally on the unanchored axis.
     anchors {
         bottom: true
-        left: true
-        right: true
-    }
-    implicitHeight: 24   // 8px top + 8px bar + 8px bottom
-
-    exclusionMode: ExclusionMode.Normal
-    exclusiveZone: implicitHeight
-    aboveWindows: true
-
-    // ── Per-screen window tracking ──
-    property var myWorkspace: {
-        if (!root.screen) return null;
-        const screenName = root.screen.name;
-        const wsList = Hyprland.workspaces?.values;
-        if (!wsList) return null;
-        for (let i = 0; i < wsList.length; i++) {
-            const ws = wsList[i];
-            if (ws.monitor && ws.monitor.name === screenName && ws.active) return ws;
-        }
-        return null;
-    }
-    property bool hasWindows: {
-        const ws = myWorkspace;
-        if (!ws) return false;
-
-        const toplevels = ws.toplevels.values;
-        if (toplevels.length === 0) return false;
-
-        let hasNonFloating = false;
-        let anyOverlap = false;
-
-        const dockHeight = 112;
-        const mon = root.screen;
-        if (!mon) return false;
-
-        const monitorBottom = mon.y + mon.height;
-
-        for (let i = 0; i < toplevels.length; i++) {
-            const tl = toplevels[i];
-            const ipc = tl.lastIpcObject;
-            if (!ipc) continue;
-
-            const isFloating = (tl.floating !== undefined) ? tl.floating : !!ipc.floating;
-
-            if (!isFloating) {
-                hasNonFloating = true;
-                break;
-            } else {
-                const y = (ipc.at && ipc.at.length > 1) ? ipc.at[1] : 0;
-                const h = (ipc.size && ipc.size.length > 1) ? ipc.size[1] : 0;
-                const windowBottom = y + h;
-                const hotZoneStart = monitorBottom - dockHeight - 5;
-
-                if (windowBottom > hotZoneStart) {
-                    anyOverlap = true;
-                    break;
-                }
-            }
-        }
-
-        return hasNonFloating || anyOverlap;
-    }
-    property bool hasSingleTiledWindow: {
-        const ws = myWorkspace;
-        if (!ws) return false;
-        const toplevels = ws.toplevels.values;
-        let tiledCount = 0;
-        for (let i = 0; i < toplevels.length; i++) {
-            const tl = toplevels[i];
-            if (!tl) continue;
-            const ipc = tl.lastIpcObject;
-            if (!ipc) continue;
-            if (ipc.workspace?.id === ws.id && !ipc.floating) {
-                tiledCount++;
-                if (tiledCount > 1) return false;
-            }
-        }
-        return tiledCount === 1;
     }
 
-    Rectangle {
-        id: bottomBarBg
-        anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, 0.7)
-        opacity: hasSingleTiledWindow && root.barState === "handle" ? 1.0 : 0.0
-        Behavior on opacity {
-            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
-        }
-    }
+    // The surface is fixed at the largest dock geometry. Keeping it stable
+    // across state transitions means the dock never appears off-center
+    // while mainBar morphs between handle and dock sizes.
+    implicitWidth: dockContent.implicitWidth + 48
+    implicitHeight: 112
 
-    // Override color when blurEnabled is false
-    Binding on color {
-        when: !shellRoot.blurEnabled
-        value: Qt.rgba(0, 0, 0, 0.3)
-    }
+    // Input mask: only the visible dock surface (mainBar) intercepts input.
+    // The surface itself stays fixed at the maximum dock geometry for every
+    // state, so without this mask its transparent area would swallow
+    // clicks across the whole bottom band even when collapsed to the
+    // 140×8 handle pill.
+    mask: Region { item: mainBar }
 
-    property real swipeStartTime: 0
-    property string barState: "handle"
+    // swipeDelta is forwarded from BackgroundBar's edge-touch MouseArea.
+    // BackgroundBar is a PanelWindow whose surface reaches the true screen
+    // bottom edge, so it captures edge swipes that this window's masked
+    // input cannot reach. BottomBar applies the delta to animate the dock
+    // along with the finger at half-travel.
+    property point swipeDelta: Qt.point(0, 0)
+    property bool isSwiping: false
+
+    // Proportional scale factor applied when swiping down on an open dock.
+    // 1.0 = full size, 0.5 = half size. Set by onSwipeDeltaChanged during
+    // swipe; reset to 1.0 by State PropertyActions when the dock collapses.
+    property real shrinkFactor: 1.0
+
+    property bool hasWindows: shellRoot.hasWindowsOnCurrentWs
+
     property bool _lockState: false
     property bool forceMinimized: false
-    property bool _switcherTriggered: false
 
-    onBarStateChanged: if (globalMenu.opened)
-        globalMenu.close()
+    // barState lives on shellRoot so BackgroundBar.qml can react to it.
+    // "handle" | "dock" | "overlay".
+    property string barState: shellRoot.barState
 
-    Timer {
-        id: switcherHoldTimer
-        interval: 80
-        onTriggered: {
-            if (touchArea.pressed && internal.isSwipe) {
-                shellRoot.switcherOpen = true;
-                _switcherTriggered = true;
+    // Close any open context menu when the bar state changes (e.g. user
+    // swipes down to overlay state from inside a right-click menu).
+    Connections {
+        target: shellRoot
+        function onBarStateChanged() {
+            if (root.screen) {
+                shellRoot.closeContextMenu(root.screen);
             }
         }
     }
@@ -139,29 +91,22 @@ PanelWindow {
     }
 
     function setBarState(newState, lock = false) {
-        barState = newState;
+        // Reset any in-flight swipe translate so the spring/snaps don't
+        // fight the morphing animation.
+        barTranslate.x = 0;
+        barTranslate.y = 0;
+        shrinkFactor = 1.0;
+        isSwiping = false;
+
+        // Exclusive zone is owned by BackgroundBar.qml (24px always). This
+        // window floats above it and never reserves space.
+        shellRoot.barState = newState;
 
         // Manage force minimized state
         if (newState === "handle" && !hasWindows && lock) {
             forceMinimized = true;
         } else if (newState !== "handle") {
             forceMinimized = false;
-        }
-
-        // Update window geometry
-        switch (newState) {
-        case "handle":
-            root.implicitHeight = 24;
-            root.exclusiveZone = 24;
-            break;
-        case "dock":
-            root.implicitHeight = 112;
-            root.exclusiveZone = 112;
-            break;
-        case "overlay":
-            root.implicitHeight = 112;
-            root.exclusiveZone = 0;
-            break;
         }
 
         if (newState === "overlay")
@@ -193,10 +138,8 @@ PanelWindow {
             syncState();
         }
         function onFocusedWorkspaceChanged() {
-            if (myWorkspace && Hyprland.focusedWorkspace?.id === myWorkspace.id) {
-                forceMinimized = false;
-                syncState();
-            }
+            forceMinimized = false;
+            syncState();
         }
 
         function syncState() {
@@ -220,99 +163,45 @@ PanelWindow {
         }
     }
 
-    QtObject {
-        id: internal
-        property bool isSwipe: false
-    }
+    // Responds to swipeDelta forwarded from BackgroundBar's MouseArea (which
+    // sits on the true screen-bottom surface and captures edge swipes).
+    Connections {
+        target: root
+        function onSwipeDeltaChanged() {
+            let dx = root.swipeDelta.x;
+            let dy = root.swipeDelta.y;
 
-    MultiPointTouchArea {
-        id: touchArea
-        anchors.fill: parent
-        property real startX: 0
-        property real startY: 0
-        property bool pressed: false
+            isSwiping = (Math.abs(dx) > 5 || Math.abs(dy) > 5);
 
-        onPressed: touchPoints => {
-            if (touchPoints.length > 0) {
-                startX = touchPoints[0].x;
-                startY = touchPoints[0].y;
-                swipeStartTime = Date.now();
-                internal.isSwipe = false;
+            // Horizontal swipe feedback — only in handle state; dock/overlay
+            // reserve horizontal for workspace switching (BackgroundBar).
+            if (barState === "handle") {
+                barTranslate.x = dx * 0.6;
+            } else {
+                barTranslate.x = 0;
             }
-        }
+            barTranslate.y = dy * 0.5;
 
-        onUpdated: touchPoints => {
-            if (touchPoints.length > 0) {
-                let point = touchPoints[0];
-                let dx = point.x - startX;
-                let dy = point.y - startY;
-
-                if (!internal.isSwipe && (Math.abs(dx) > 15 || Math.abs(dy) > 15)) {
-                    internal.isSwipe = true;
-                    pressed = true;
-                }
-
-                if (internal.isSwipe) {
-                    if (barState === "handle")
-                        barTranslate.x = dx * 0.6;
-                    else
-                        barTranslate.x = 0;
-
-                    if (barState !== "handle" && dy > 40 && !root._lockState) {
-                        root.setBarState("handle", true);
-                    }
-
-                    if (dy < -100 && !switcherHoldTimer.running && !_switcherTriggered) {
-                        switcherHoldTimer.start();
-                    } else if (dy > -60) {
-                        switcherHoldTimer.stop();
-                    }
-                }
+            // Scale the dock down proportionally to swipe depth (dy > 0 = swipe down).
+            // Clamp to [0.5, 1.0]. The State's scale PropertyChanges won't fight
+            // this because State changes don't touch mainBar.scale directly.
+            if (barState !== "handle") {
+                shrinkFactor = Math.max(0.5, Math.min(1.0, 1.0 - (dy / 400)));
             }
-        }
-
-        onReleased: touchPoints => {
-            pressed = false;
-            barTranslate.x = 0;
-            if (touchPoints.length > 0) {
-                let point = touchPoints[0];
-                let dx = point.x - startX;
-                let dy = point.y - startY;
-                let duration = Date.now() - swipeStartTime;
-                let velocity = Math.abs(dy) / Math.max(1, duration);
-
-                if (internal.isSwipe) {
-                    // Horizontal swipe → switch workspace
-                    if (Math.abs(dx) > 100) {
-                        Hyprland.dispatch("hl.dsp.focus({ workspace = '" + (dx < 0 ? "+1" : "-1") + "' })");
-                    }
-
-                    if (dy < -30 && !_switcherTriggered) {
-                        if (velocity > 0.8) {
-                            Hyprland.dispatch("hl.dsp.window.close()");
-                            root.setBarState("handle", true);
-                        } else if (barState !== "overlay") {
-                            root.setBarState("overlay");
-                        }
-                    }
-                }
-            }
-            internal.isSwipe = false;
-            switcherHoldTimer.stop();
-            _switcherTriggered = false;
         }
     }
 
     function openMenu(item, app) {
         let pos = item.mapToItem(root.contentItem, 0, 0);
+        let globalX = root.x + pos.x + item.width / 2;
+        let globalY = root.y + pos.y - 12;
 
         let menuModel = [];
 
         // Pin/Unpin item
         menuModel.push({
             text: app.isPinned ? "Unpin app from dock" : "Pin app to dock",
-            icon: shellRoot.icon(app.isPinned ? "window-close-symbolic" : "view-app-grid-symbolic") // Placeholders
-            ,
+            icon: shellRoot.icon(app.isPinned ? "window-close-symbolic" : "view-app-grid-symbolic"),
             action: () => shellRoot.togglePin(app.id)
         });
 
@@ -326,32 +215,52 @@ PanelWindow {
             });
         }
 
-        globalMenu.model = menuModel;
-
-        globalMenu.x = pos.x + (item.width - 200) / 2;
-        globalMenu.y = pos.y - globalMenu.height - 12;
-        globalMenu.open();
+        if (root.screen) {
+            shellRoot.openContextMenuAtCursor(root.screen, menuModel);
+        }
     }
 
-    AppContextMenu {
-        id: globalMenu
-    }
-
+    // Invisible grab-area expander. The visible dock (mainBar) is only
+    // 8 px tall in handle state, which is awkward to grab on touch.
+    // The hitbox matches the dock's widest content width and extends from
+    // the popup bottom (== screen bottom) up past mainBar, so swipes that
+    // start on the very bottom edge of the screen — like a smartphone
+    // home-indicator gesture — are captured immediately. Without anchoring
+    // to parent.bottom, the bottom 12 px of the popup sit outside the
+    // mask and the touch falls through to whatever's underneath.
+    //
     Rectangle {
         id: mainBar
         anchors.bottom: parent.bottom
         anchors.horizontalCenter: parent.horizontalCenter
-        // clip: true -- removed to avoid clipping shadow if added later, but Popup solves main issue
+        transformOrigin: Item.Center
+        scale: shrinkFactor
 
         transform: Translate {
             id: barTranslate
             x: 0
+            y: 0
+
+            // Horizontal swipe feedback uses a spring so the dock can
+            // overshoot and settle (matches the workspace-switch gesture).
+            // Disabled during active swipes so the explicit dx assignment
+            // isn't fighting the spring.
             Behavior on x {
-                enabled: !touchArea.pressed
+                enabled: !isSwiping
                 SpringAnimation {
                     spring: 3
                     damping: 0.4
                     epsilon: 0.5
+                }
+            }
+
+            // Vertical swipe snaps back when the swipe ends (swipeDelta → 0).
+            // Disabled during swipes so the explicit dy tracking isn't overridden.
+            Behavior on y {
+                enabled: !isSwiping
+                NumberAnimation {
+                    duration: 220
+                    easing.type: Easing.OutQuart
                 }
             }
         }
@@ -373,7 +282,7 @@ PanelWindow {
                     width: 140
                     height: 8
                     radius: 4
-                    anchors.bottomMargin: 8
+                    anchors.bottomMargin: 4
                     color: "white"
                 }
                 PropertyChanges {
@@ -390,7 +299,7 @@ PanelWindow {
                     width: (root.hasWindows || root.forceMinimized) ? 140 : (dockContent.implicitWidth + 48)
                     height: 96
                     radius: 48
-                    anchors.bottomMargin: 12
+                    anchors.bottomMargin: 8
                     color: "transparent"
                 }
                 PropertyChanges {
@@ -407,7 +316,7 @@ PanelWindow {
                     width: dockContent.implicitWidth + 48
                     height: 96
                     radius: 48
-                    anchors.bottomMargin: 12
+                    anchors.bottomMargin: 8
                     color: "transparent"
                 }
                 PropertyChanges {
@@ -424,7 +333,7 @@ PanelWindow {
                 from: "*"
                 to: "*"
                 NumberAnimation {
-                    properties: "width,height,radius,anchors.bottomMargin,opacity,scale"
+                    properties: "width,height,radius,opacity,scale"
                     duration: 500
                     easing.type: Easing.OutExpo
                 }
@@ -465,7 +374,12 @@ PanelWindow {
                     }
                 }
                 onClicked: {
-                    shellRoot.appDrawerOpen = !shellRoot.appDrawerOpen;
+                    if (shellRoot.appDrawerOpen) {
+                        shellRoot.appDrawerOpen = false;
+                    } else {
+                        shellRoot.closeOtherOverlays("drawer");
+                        shellRoot.appDrawerOpen = !shellRoot.appDrawerOpen;
+                    }
                 }
                 ToolTip.visible: hovered
                 ToolTip.text: "Menu"
@@ -684,42 +598,21 @@ PanelWindow {
                                 }
                             }
 
-                            Text {
-                                anchors.centerIn: parent
-                                visible: appIcon.status !== Image.Ready
-                                font.pixelSize: 36
-                                color: "white"
-                                enabled: false
-                                text: {
-                                    let iconName = model.icon.toLowerCase();
-                                    let appName = model.name.toLowerCase();
-                                    if (iconName.includes("firefox") || appName.includes("firefox") || iconName.includes("browser"))
-                                        return "🌐";
-                                    if (iconName.includes("folder") || appName.includes("files") || iconName.includes("nautilus"))
-                                        return "📂";
-                                    if (iconName.includes("terminal") || appName.includes("terminal"))
-                                        return "📟";
-                                    if (iconName.includes("code") || appName.includes("code"))
-                                        return "📝";
-                                    if (iconName.includes("settings"))
-                                        return "⚙️";
-                                    return model.name.charAt(0).toUpperCase();
-                                }
-                            }
+                
                         }
 
                         onClicked: {
                             console.log("Dock button clicked: " + model.name);
-                            if (globalMenu.opened) {
-                                globalMenu.close();
-                                return;
+                            if (root.screen) {
+                                shellRoot.closeContextMenu(root.screen);
                             }
                             if (model.isRunning && model.address) {
-                                Hyprland.dispatch("hl.dsp.focus({ window = 'address:" + model.address + "' })");
+                                let safeAddr = model.address.replace(/[^0-9a-fA-Fx]/g, "");
+                                Hyprland.dispatch("hl.dsp.focus({ window = 'address:" + safeAddr + "' })");
                             } else if (model.entry) {
                                 model.entry.execute();
-                            } else {
-                                launchProcess.command = ["sh", "-c", model.exec + " &"];
+                            } else if (model.exec) {
+                                launchProcess.command = ["sh", "-c", model.exec];
                                 launchProcess.running = true;
                             }
                         }
@@ -776,8 +669,9 @@ PanelWindow {
 
                                 if (!dragging && didLongPress && (mouse.buttons & Qt.LeftButton)) {
                                     if (didSwipe) {
-                                        if (globalMenu.opened)
-                                            globalMenu.close();
+                                        if (root.screen) {
+                                            shellRoot.closeContextMenu(root.screen);
+                                        }
 
                                         let rawX = startItemGlobalX + (p.x - startMouseX);
                                         let maxX = Math.max(0, dockListView.width - dockButton.width);
@@ -830,7 +724,7 @@ PanelWindow {
                             }
                         }
 
-                        ToolTip.visible: dragHandler.containsMouse && !globalMenu.opened && !dragHandler.dragging
+                        ToolTip.visible: dragHandler.containsMouse && !dragHandler.dragging
                         ToolTip.text: model.name
                         ToolTip.delay: 500
                     }
@@ -845,9 +739,29 @@ PanelWindow {
         }
 
         MouseArea {
+            id: collapseArea
+            // Covers the MaterialSurface and empty dock space. Dock buttons
+            // (icon + menu) have their own MouseAreas with onClicked handlers
+            // that don't call setBarState, so they take priority here.
+            // Collapse only fires on tap — if isSwiping is true or the finger
+            // moved significantly, it's a swipe, not a tap.
             anchors.fill: parent
             enabled: barState !== "handle"
-            onClicked: root.setBarState("handle", true)
+            property real pressX: 0
+            property real pressY: 0
+
+            onPressed: mouse => {
+                pressX = mouse.x;
+                pressY = mouse.y;
+            }
+
+            onClicked: mouse => {
+                let dx = mouse.x - pressX;
+                let dy = mouse.y - pressY;
+                // Ignore if the pointer moved more than 15px — it's a swipe.
+                if (Math.abs(dx) <= 15 && Math.abs(dy) <= 15 && !isSwiping)
+                    root.setBarState("handle", true);
+            }
             z: -1
         }
     }
