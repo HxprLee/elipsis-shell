@@ -108,6 +108,7 @@ ShellRoot {
     property var controlCenterLayout: []
     property string mediaPlayerId: ""
     property bool configLoadComplete: false
+    property bool _loadingConfig: false
 
     Process {
         id: loadConfigProc
@@ -115,6 +116,7 @@ ShellRoot {
         running: true
         stdout: StdioCollector {
             onStreamFinished: {
+                shellRoot._loadingConfig = true;
                 console.log("[Config] Raw:", text);
                 try {
                     let cfg = JSON.parse(text) || {};
@@ -123,7 +125,7 @@ ShellRoot {
                     if (cfg.pinnedApps) shellRoot.pinnedApps = cfg.pinnedApps;
                     if (cfg.toggleData) {
                         shellRoot.toggleData = cfg.toggleData;
-                        if (cfg.toggleData["DndToggle"]?.active) shellRoot.dndActive = true;
+                        shellRoot.dndActive = !!cfg.toggleData["DndToggle"]?.active;
                     }
                     shellRoot.toggleDataLoaded = true;
 
@@ -135,11 +137,18 @@ ShellRoot {
                         let c = app.accentColor;
                         if (typeof c === "string" && c.startsWith("#")) {
                             let hex = c.slice(1);
-                            let r = parseInt(hex.slice(0, 2), 16) / 255;
-                            let g = parseInt(hex.slice(2, 4), 16) / 255;
-                            let b = parseInt(hex.slice(4, 6), 16) / 255;
-                            let a = hex.length === 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1.0;
-                            shellRoot.accentColor = Qt.rgba(r, g, b, a);
+                            // Validate hex string is 6 or 8 hex chars and all parseable
+                            if (/^[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(hex)) {
+                                // Round to 8-bit precision to match saveConfig() output
+                                // and avoid triggering a save→reload cycle
+                                let r = Math.round(parseInt(hex.slice(0, 2), 16) / 255 * 255) / 255;
+                                let g = Math.round(parseInt(hex.slice(2, 4), 16) / 255 * 255) / 255;
+                                let b = Math.round(parseInt(hex.slice(4, 6), 16) / 255 * 255) / 255;
+                                let a = hex.length === 8 ? Math.round(parseInt(hex.slice(6, 8), 16) / 255 * 255) / 255 : 1.0;
+                                if (!isNaN(r) && !isNaN(g) && !isNaN(b) && !isNaN(a)) {
+                                    shellRoot.accentColor = Qt.rgba(r, g, b, a);
+                                }
+                            }
                         } else {
                             shellRoot.accentColor = c;
                         }
@@ -157,6 +166,7 @@ ShellRoot {
                     console.error("Config load error:", e);
                     shellRoot.configLoadComplete = true;
                 }
+                shellRoot._loadingConfig = false;
             }
         }
     }
@@ -164,13 +174,15 @@ ShellRoot {
     FileView {
         path: Qt.resolvedUrl("config/config.json").toString().replace("file://", "")
         watchChanges: true
-        onFileChanged: loadConfigProc.running = true
+        onFileChanged: {
+            if (!loadConfigProc.running) loadConfigProc.running = true
+        }
     }
 
     Process { id: saveConfigProc; running: false }
 
     function saveConfig() {
-        if (!shellRoot.configLoadComplete) return;
+        if (!shellRoot.configLoadComplete || shellRoot._loadingConfig) return;
         let accentColorHex = null;
         if (shellRoot.accentColor) {
             let c = shellRoot.accentColor;
@@ -194,7 +206,7 @@ ShellRoot {
             mediaPlayerId: shellRoot.mediaPlayerId
         };
         let path = Qt.resolvedUrl("config/config.json").toString().replace("file://", "");
-        saveConfigProc.command = ["sh", "-c", "echo \"$1\" > \"$2\"", "sh", JSON.stringify(cfg, null, 2), path];
+        saveConfigProc.command = ["sh", "-c", "echo \"$1\" > \"$2.tmp\" && mv \"$2.tmp\" \"$2\"", "sh", JSON.stringify(cfg, null, 2), path];
         saveConfigProc.running = true;
     }
 
@@ -229,12 +241,14 @@ ShellRoot {
             if (toIdx === -1) copy.push(fid);
             else copy.splice(toIdx, 0, fid);
         } else if (fromIdx !== toIdx) {
-            // Swap logic
+            // Move logic - adjust toIdx after removal if needed
             let item = copy.splice(fromIdx, 1)[0];
-            if (toIdx === -1) {
+            // After splice, items after fromIdx shifted left by 1
+            let adjustedToIdx = toIdx === -1 ? -1 : (toIdx > fromIdx ? toIdx - 1 : toIdx);
+            if (adjustedToIdx === -1) {
                 copy.push(item);
             } else {
-                copy.splice(toIdx, 0, item);
+                copy.splice(adjustedToIdx, 0, item);
             }
         }
         
@@ -277,16 +291,10 @@ ShellRoot {
             }
             
             if (match) {
-                Hyprland.dispatch("hl.dsp.window.close({ window = 'address:" + ipc.address + "' })");
+                let safeAddr = ipc.address.toString().replace(/[^0-9a-fA-Fx]/g, "");
+                Hyprland.dispatch("hl.dsp.window.close({ window = 'address:" + safeAddr + "' })");
             }
         }
-    }
-
-    Process { id: killProc; running: false }
-
-    Process {
-        id: savePinnedProc
-        running: false
     }
 
     // ── Dock Logic ──
@@ -460,35 +468,111 @@ ShellRoot {
         function onBlurEnabledChanged() { saveAppearance(); }
         function onAccentColorChanged() { saveAppearance(); }
         function onWallpaperPathChanged() { saveAppearance(); }
+        function onStaticBlurEnabledChanged() { saveAppearance(); }
     }
 
     // ── Shared UI state ──
     property bool panelOpen: false
     property real panelDragOffset: 0.0
-    property var targetQuickSettingsScreen: null
-    property var activeScreen: {
-        const mon = Hyprland.focusedMonitor;
-        if (!mon) return null;
-        const screens = Quickshell.screens;
-        for (let i = 0; i < screens.length; i++) {
-            if (screens[i].name === mon.name) return screens[i];
-        }
-        return null;
-    }
-    function requestOpenPanel(screen) {
-        targetQuickSettingsScreen = screen || activeScreen;
-        panelOpen = true;
-    }
-    onPanelOpenChanged: {
-        if (!panelOpen) targetQuickSettingsScreen = null;
-    }
     property bool switcherOpen: false
     property bool appDrawerOpen: false
     property bool powerMenuOpen: false
 
+    function closeOtherOverlays(except) {
+        if (except !== "panel") shellRoot.panelOpen = false;
+        if (except !== "power") shellRoot.powerMenuOpen = false;
+        if (except !== "drawer") shellRoot.appDrawerOpen = false;
+        if (except !== "switcher") shellRoot.switcherOpen = false;
+    }
+
+    // ── Window tracking ──
+    property bool hasWindowsOnCurrentWs: {
+        const ws = Hyprland.focusedWorkspace;
+        if (!ws) return false;
+        
+        const toplevels = ws.toplevels.values;
+        if (toplevels.length === 0) return false;
+
+        let hasNonFloating = false;
+        let anyOverlap = false;
+
+        const dockHeight = 112; // Height of the uncollapsed dock
+        
+        // Use Quickshell.screens to find the logical height of the focused monitor
+        let mon = null;
+        const focusedMon = Hyprland.focusedMonitor;
+        if (focusedMon) {
+            for (let s of Quickshell.screens) {
+                if (s.name === focusedMon.name) {
+                    mon = s;
+                    break;
+                }
+            }
+        }
+        
+        if (!mon) mon = (Quickshell.screens.length > 0) ? Quickshell.screens[0] : null;
+        if (!mon) return false;
+        
+        const monitorBottom = mon.y + mon.height;
+
+        for (let i = 0; i < toplevels.length; i++) {
+            const tl = toplevels[i];
+            const ipc = tl.lastIpcObject;
+            if (!ipc) continue;
+            
+            // Determine floating status robustly
+            const isFloating = (tl.floating !== undefined) ? tl.floating : !!ipc.floating;
+
+            if (!isFloating) {
+                hasNonFloating = true;
+                break;
+            } else {
+                const y = (ipc.at && ipc.at.length > 1) ? ipc.at[1] : 0;
+                const h = (ipc.size && ipc.size.length > 1) ? ipc.size[1] : 0;
+                const windowBottom = y + h;
+                const hotZoneStart = monitorBottom - dockHeight - 5;
+
+                // DIAGNOSTIC LOGGING
+                // console.log(`[Dock Detect] Window: "${tl.title}" | floating: ${isFloating} | y=${y}, h=${h} (bottom=${windowBottom}) | HotZoneStart=${hotZoneStart}`);
+
+                if (windowBottom > hotZoneStart) {
+                    anyOverlap = true;
+                    break;
+                }
+            }
+        }
+
+        return hasNonFloating || anyOverlap;
+    }
+
+    // True when the focused workspace has exactly one tiled (non-floating)
+    // window. Used by BackgroundBar.qml to drive the dim layer.
+    property bool hasSingleTiledWindow: {
+        let ws = Hyprland.focusedMonitor?.activeWorkspace;
+        if (!ws) return false;
+        let toplevels = Hyprland.toplevels.values;
+        let tiledCount = 0;
+        for (let i = 0; i < toplevels.length; i++) {
+            let tl = toplevels[i];
+            if (!tl) continue;
+            let ipc = tl.lastIpcObject;
+            if (!ipc) continue;
+            if (ipc.workspace?.id === ws.id && !ipc.floating) {
+                tiledCount++;
+                if (tiledCount > 1) return false;
+            }
+        }
+        return tiledCount === 1;
+    }
+
+    // Dock state machine: "handle" (collapsed pill), "dock" (expanded),
+    // "overlay" (expanded + auto-hide). Written by BottomBar.qml's gesture
+    // and lock timers; read by BackgroundBar.qml for the dim trigger.
+    property string barState: "handle"
+
     // Heartbeat for dock population
     Timer {
-        interval: 200
+        interval: 1500
         running: true
         repeat: true
         onTriggered: {
@@ -766,7 +850,6 @@ ShellRoot {
 
     // ── Caffeine ──
     property bool caffeineActive: false
-    Process { id: caffeineProc; running: false }
 
     function setCaffeine(active) {
         shellRoot.caffeineActive = active;
@@ -776,6 +859,18 @@ ShellRoot {
             caffeineProc.command = ["pkill", "-CONT", "hypridle"];
         }
         caffeineProc.running = true;
+    }
+
+    Process {
+        id: caffeineProc
+        running: false
+        onExited: (code) => {
+            // If pkill failed (e.g., hypridle not running), revert the optimistic update
+            if (code !== 0) {
+                shellRoot.caffeineActive = !shellRoot.caffeineActive;
+                console.warn("[Caffeine] pkill exited with code", code, "- reverted state");
+            }
+        }
     }
 
     // ── Screen Recording ──
@@ -800,9 +895,16 @@ ShellRoot {
             let resOptions = ["0x0"]
             let bitrateOptions = ["medium", "high", "very_high", "ultra"]
 
-            let aOpt = audioOptions[audioIndex]
+            // Clamp indices to valid range to defend against corrupted persisted state
+            let aIdx = Math.max(0, Math.min(audioOptions.length - 1, parseInt(audioIndex) || 0));
+            let fIdx = Math.max(0, Math.min(fpsOptions.length - 1, parseInt(fpsIndex) || 0));
+            let eIdx = Math.max(0, Math.min(encoderOptions.length - 1, parseInt(encoderIndex) || 0));
+            let rIdx = Math.max(0, Math.min(resOptions.length - 1, parseInt(resIndex) || 0));
+            let bIdx = Math.max(0, Math.min(bitrateOptions.length - 1, parseInt(bitrateIndex) || 0));
+
+            let aOpt = audioOptions[aIdx]
             let aStr = aOpt !== "none" ? `-a "${aOpt}"` : ""
-            let cmd = `gpu-screen-recorder -w screen ${aStr} -f ${fpsOptions[fpsIndex]} -k ${encoderOptions[encoderIndex]} -s ${resOptions[resIndex]} -q ${bitrateOptions[bitrateIndex]} -o ~/Videos/ScreenRecord-$(date +%Y%m%d-%H%M%S).mp4`
+            let cmd = `gpu-screen-recorder -w screen ${aStr} -f ${fpsOptions[fIdx]} -k ${encoderOptions[eIdx]} -s ${resOptions[rIdx]} -q ${bitrateOptions[bIdx]} -o ~/Videos/ScreenRecord-$(date +%Y%m%d-%H%M%S).mp4`
 
             screenRecordProc.command = ["sh", "-c", cmd]
             screenRecordProc.running = true
@@ -832,13 +934,18 @@ ShellRoot {
             "audio-volume-medium-symbolic":        "file:///usr/share/icons/breeze-dark/status/24/audio-volume-medium-symbolic.svg",
             "audio-volume-low-symbolic":           "file:///usr/share/icons/breeze-dark/status/24/audio-volume-low-symbolic.svg",
             "audio-volume-muted-symbolic":         "file:///usr/share/icons/breeze-dark/status/24/audio-volume-muted-symbolic.svg",
-            "battery-full-symbolic":               "file:///usr/share/icons/breeze-dark/status/24/battery-full-symbolic.svg",
-            "battery-good-symbolic":               "file:///usr/share/icons/breeze-dark/status/24/battery-good-symbolic.svg",
-            "battery-low-symbolic":                "file:///usr/share/icons/breeze-dark/status/24/battery-low-symbolic.svg",
-            "battery-charging-symbolic":           "file:///usr/share/icons/breeze-dark/status/24/battery-080-charging-symbolic.svg",
             "battery-missing-symbolic":            "file:///usr/share/icons/breeze-dark/status/24/battery-missing-symbolic.svg",
             "window-close-symbolic":               "file:///usr/share/icons/breeze-dark/actions/24/window-close-symbolic.svg",
             "view-app-grid-symbolic":              "file:///usr/share/icons/breeze-dark/actions/24/view-grid-symbolic.svg",
+            "go-up-symbolic":                      "file:///usr/share/icons/breeze-dark/actions/24/go-up-symbolic.svg",
+            "edit-clear-all-symbolic":             "file:///usr/share/icons/breeze-dark/actions/24/edit-clear-all-symbolic.svg",
+            "go-next-symbolic":                    "file:///usr/share/icons/breeze-dark/actions/24/go-next-symbolic.svg",
+            "view-refresh-symbolic":               "file:///usr/share/icons/breeze-dark/actions/24/view-refresh-symbolic.svg",
+            "object-select-symbolic":              "file:///usr/share/icons/breeze-dark/actions/16/object-select-symbolic.svg",
+            "notifications-disabled-symbolic":     "file:///usr/share/icons/breeze-dark/actions/24/notifications-disabled-symbolic.svg",
+            "emblem-ok-symbolic":                  "file:///usr/share/icons/breeze-dark/emblems/16/emblem-ok-symbolic.svg",
+            "system-reboot-symbolic":              "file:///usr/share/icons/breeze-dark/actions/24/system-reboot-symbolic.svg",
+            "system-suspend-symbolic":             "file:///usr/share/icons/breeze-dark/actions/24/system-suspend-symbolic.svg",
             "power-profile-power-saver":           "file:///usr/share/icons/breeze-dark/status/22/battery-profile-powersave-symbolic.svg",
             "power-profile-balanced":              "file:///usr/share/icons/breeze-dark/status/22/battery-profile-balanced-symbolic.svg",
             "power-profile-performance":           "file:///usr/share/icons/breeze-dark/status/22/battery-profile-performance-symbolic.svg",
@@ -920,17 +1027,20 @@ ShellRoot {
     IpcHandler {
         target: "appearance"
         function setPrecomputedBlur(enabled: string) {
-            let isEnabled = (enabled === "true" || enabled === "1" || enabled === true);
+            let s = String(enabled).toLowerCase();
+            let isEnabled = (s === "true" || s === "1" || s === "yes" || s === "on");
             shellRoot.usePrecomputedBlur = isEnabled;
             if (isEnabled && shellRoot.wallpaperPath !== "") blurGenerator.startBlur();
         }
 
         function setBlurEnabled(enabled: string) {
-            let isEnabled = (enabled === "true" || enabled === "1" || enabled === true);
+            let s = String(enabled).toLowerCase();
+            let isEnabled = (s === "true" || s === "1" || s === "yes" || s === "on");
             shellRoot.blurEnabled = isEnabled;
         }
 
         function setMaterial(material: string) {
+            if (typeof material !== "string") return;
             if (["Solid", "Acrylic", "Frosted Glass"].includes(material)) {
                 shellRoot.materialTheme = material;
             } else {
@@ -942,36 +1052,76 @@ ShellRoot {
     IpcHandler {
         target: "power"
         function show() {
+            shellRoot.closeOtherOverlays("power");
             shellRoot.powerMenuOpen = true;
         }
         function hide() {
             shellRoot.powerMenuOpen = false;
         }
         function toggle() {
-            shellRoot.powerMenuOpen = !shellRoot.powerMenuOpen;
+            if (shellRoot.powerMenuOpen) {
+                shellRoot.powerMenuOpen = false;
+            } else {
+                shellRoot.closeOtherOverlays("power");
+                shellRoot.powerMenuOpen = true;
+            }
         }
     }
 
     IpcHandler {
         target: "quicksettings"
         function show() {
-            shellRoot.requestOpenPanel(shellRoot.activeScreen);
+            shellRoot.closeOtherOverlays("panel");
+            shellRoot.panelOpen = true;
         }
         function hide() {
             shellRoot.panelOpen = false;
         }
         function toggle() {
-            if (shellRoot.panelOpen) shellRoot.panelOpen = false;
-            else shellRoot.requestOpenPanel(shellRoot.activeScreen);
+            if (shellRoot.panelOpen) {
+                shellRoot.panelOpen = false;
+            } else {
+                shellRoot.closeOtherOverlays("panel");
+                shellRoot.panelOpen = true;
+            }
+        }
+    }
+
+    IpcHandler {
+        target: "task_manager"
+        function toggle() {
+            if (shellRoot.switcherOpen) {
+                shellRoot.switcherOpen = false;
+            } else {
+                shellRoot.closeOtherOverlays("switcher");
+                shellRoot.switcherOpen = true;
+            }
+        }
+        function open() {
+            shellRoot.closeOtherOverlays("switcher");
+            shellRoot.switcherOpen = true;
+        }
+        function close() {
+            shellRoot.switcherOpen = false;
         }
     }
 
     // ── UI Components (per-screen via Variants) ──
     Variants {
         model: Quickshell.screens
-        BottomBar {
-            property var modelData
-            screen: modelData
+        Item {
+            id: barStack
+            required property var modelData
+            // BackgroundBar is declared first so its z-order is below BottomBar.
+            BackgroundBar {
+                id: backgroundBar
+                screen: barStack.modelData
+                dockControl: bottomBar
+            }
+            BottomBar {
+                id: bottomBar
+                screen: barStack.modelData
+            }
         }
     }
     Variants {
@@ -1009,4 +1159,57 @@ ShellRoot {
     }
     VolumeOSD {}
     PowerMenu {}
+
+    // ── Context Menu Helpers ──
+    // Per-screen context menu windows keyed by screen name
+    property var _contextMenus: ({})
+
+    // Open a context menu at the cursor position on the given screen
+    function openContextMenuAtCursor(screen, model) {
+        closeContextMenu(screen);
+
+        // Get cursor position from Hyprland
+        let cursor = Hyprland.cursorPosition;
+        let x = cursor ? cursor.x : (screen ? screen.x + screen.width / 2 : 0);
+        let y = cursor ? cursor.y : (screen ? screen.y + screen.height / 2 : 0);
+
+        let menuComponent = Qt.createComponent("components/reusables/ContextMenu.qml");
+        if (menuComponent.status === Component.Ready) {
+            let menuWindow = menuComponent.createObject(shellRoot, {
+                "targetScreen": screen,
+                "autoDestroy": true,
+                "model": model,
+                "menuX": x,
+                "menuY": y
+            });
+
+            if (menuWindow) {
+                _contextMenus[screen ? screen.name : "default"] = menuWindow;
+                menuWindow.open(screen, model, x, y);
+            } else {
+                console.error("[ShellRoot] Failed to create context menu:", menuComponent.errorString());
+            }
+        } else {
+            console.error("[ShellRoot] Failed to load ContextMenu.qml:", menuComponent.errorString());
+        }
+    }
+
+    // Close the context menu on the given screen
+    function closeContextMenu(screen) {
+        let key = screen ? screen.name : "default";
+        if (_contextMenus[key]) {
+            _contextMenus[key].close();
+            delete _contextMenus[key];
+        }
+    }
+
+    // Close all open context menus
+    function closeAllContextMenus() {
+        for (let key in _contextMenus) {
+            if (_contextMenus[key]) {
+                _contextMenus[key].close();
+            }
+        }
+        _contextMenus = ({});
+    }
 }
