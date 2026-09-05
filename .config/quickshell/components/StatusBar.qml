@@ -51,8 +51,10 @@ PanelWindow {
         }
     }
 
-    // Override color when blurEnabled is false
-    Binding on color {
+    // Override background color when blurEnabled is false
+    Binding {
+        target: statusBarBg
+        property: "color"
         when: !shellRoot.blurEnabled
         value: Qt.rgba(0, 0, 0, 0.3)
     }
@@ -205,13 +207,13 @@ Timer {
             let dy = mouse.y - startY
             if (!shellRoot.panelOpen && dy > 10) {
                 isDragging = true
-                shellRoot.panelDragOffset = dy * 0.8
+                shellRoot.panelDragOffset = dy
             }
         }
         onReleased: (mouse) => {
             if (isDragging) {
                 if (shellRoot.panelDragOffset > 60) {
-                    shellRoot.requestOpenPanel(screen)
+                    shellRoot.panelOpen = true
                 }
                 shellRoot.panelDragOffset = 0
                 isDragging = false

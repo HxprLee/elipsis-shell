@@ -34,7 +34,7 @@ Row {
 
     // 3. Network
     Item {
-        width: shellRoot.networkEnabled ? 20 : 0
+        width: shellRoot.networkConnected ? 20 : 0
         height: 20
         visible: width > 0
         anchors.verticalCenter: parent.verticalCenter
