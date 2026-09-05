@@ -1,2 +1,4 @@
 TouchComboBox 1.0 TouchComboBox.qml
 ToggleListItem 1.0 ToggleListItem.qml
+ContextMenu 1.0 ContextMenu.qml
+BatteryIcon 1.0 BatteryIcon.qml
