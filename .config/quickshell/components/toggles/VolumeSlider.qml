@@ -291,13 +291,13 @@ Item {
                                 model: {
                                     let nodes = Pipewire.nodes ? Pipewire.nodes.values : [];
                                     return nodes.filter(function(n) {
-                                        return n && n.isSink && !n.isStream && !n.audio;
+                                        return n && !n.isSink && !n.isStream && n.audio;
                                     });
                                 }
                                 delegate: deviceDelegate
                             }
 
-                            // Fallback: if the above filter produces nothing, try isSource
+                            // Fallback: if the above filter produces nothing, try without audio check
                             Repeater {
                                 id: inputRepeaterAlt
                                 visible: inputRepeater.count === 0
