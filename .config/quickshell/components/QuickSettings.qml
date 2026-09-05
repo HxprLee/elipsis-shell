@@ -1480,13 +1480,15 @@ PanelWindow {
                         width: parent.width
                         spacing: 24
 
-                        opacity: expandedOverlay.isExpanded ? (shellRoot.materialTheme === "Solid" ? 0.2 : 0.0) : 1.0
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 250
-                                easing.type: Easing.OutCubic
-                            }
-                        }
+                        // Stay at full opacity while the expanded view is
+                        // open. The source widget's per-instance opacity
+                        // binding (line ~1572) still fades it out cleanly,
+                        // and the expanded card's z: 200 + MaterialSurface
+                        // background covers everything underneath.
+                        // The previous binding (which dropped to 0 / 0.2
+                        // when expanded) made the entire panel "dissolve"
+                        // instead of the toggle "morph".
+                        opacity: 1.0
 
                         Item {
                             id: gridWrapper
