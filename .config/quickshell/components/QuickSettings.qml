@@ -1614,83 +1614,50 @@ PanelWindow {
                                                 accentColor: (widgetLoader.item && widgetLoader.item.activeColor) ? widgetLoader.item.activeColor : (shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0))
                                             }
 
-                                            // ── Geometry Behaviors ──
-                                            // Two parallel sets per property: one for edit-mode
-                                            // drag-reorder (300ms OutCubic), one for the morph
-                                            // (400ms OutExpo). Both are gated by disjoint
-                                            // conditions so they never fire simultaneously.
-                                            // Only one Behavior's animation runs for any given
-                                            // property change; the other is no-op'd by `enabled:`.
-                                            Behavior on width {
-                                                enabled: controlPanel.editMode
-                                                NumberAnimation {
-                                                    duration: 300
-                                                    easing.type: Easing.OutCubic
-                                                }
-                                            }
-                                            Behavior on width {
-                                                enabled: widgetBg.isMorphing
-                                                NumberAnimation {
-                                                    duration: 400
-                                                    easing.type: Easing.OutExpo
-                                                }
-                                            }
-                                            Behavior on height {
-                                                enabled: controlPanel.editMode
-                                                NumberAnimation {
-                                                    duration: 300
-                                                    easing.type: Easing.OutCubic
-                                                }
-                                            }
-                                            Behavior on height {
-                                                enabled: widgetBg.isMorphing
-                                                NumberAnimation {
-                                                    duration: 400
-                                                    easing.type: Easing.OutExpo
-                                                }
-                                            }
-                                            Behavior on x {
-                                                enabled: controlPanel.editMode
-                                                NumberAnimation {
-                                                    duration: 300
-                                                    easing.type: Easing.OutCubic
-                                                }
-                                            }
-                                            Behavior on x {
-                                                enabled: widgetBg.isMorphing
-                                                NumberAnimation {
-                                                    duration: 400
-                                                    easing.type: Easing.OutExpo
-                                                }
-                                            }
-                                            Behavior on y {
-                                                enabled: controlPanel.editMode
-                                                NumberAnimation {
-                                                    duration: 300
-                                                    easing.type: Easing.OutCubic
-                                                }
-                                            }
-                                            Behavior on y {
-                                                enabled: widgetBg.isMorphing
-                                                NumberAnimation {
-                                                    duration: 400
-                                                    easing.type: Easing.OutExpo
-                                                }
-                                            }
-                                            Behavior on radius {
-                                                enabled: controlPanel.editMode
-                                                NumberAnimation {
-                                                    duration: 300
-                                                    easing.type: Easing.OutCubic
-                                                }
-                                            }
-                                            Behavior on radius {
-                                                enabled: widgetBg.isMorphing
-                                                NumberAnimation {
-                                                    duration: 400
-                                                    easing.type: Easing.OutExpo
-                                                }
-                                            }
+// ── Geometry Behaviors (Phase E consolidated) ──
+// One Behavior per property, gated on the disjunction of morph and
+// edit-mode. Animation duration/easing picks based on which mode is
+// active (morph wins if both). Phase D's dual-block pattern (one
+// Behavior gated on editMode, a parallel one gated on isMorphing) had
+// a QML gotcha where the parallel Behaviors' enabled conditions could
+// briefly read stale at the moment of property change, causing the
+// animation to be skipped. A single Behavior with conditional
+// animation params avoids that interaction.
+Behavior on width {
+    enabled: widgetBg.isMorphing || controlPanel.editMode
+    NumberAnimation {
+        duration: widgetBg.isMorphing ? 400 : 300
+        easing.type: widgetBg.isMorphing ? Easing.OutExpo : Easing.OutCubic
+    }
+}
+Behavior on height {
+    enabled: widgetBg.isMorphing || controlPanel.editMode
+    NumberAnimation {
+        duration: widgetBg.isMorphing ? 400 : 300
+        easing.type: widgetBg.isMorphing ? Easing.OutExpo : Easing.OutCubic
+    }
+}
+Behavior on x {
+    enabled: widgetBg.isMorphing || controlPanel.editMode
+    NumberAnimation {
+        duration: widgetBg.isMorphing ? 400 : 300
+        easing.type: widgetBg.isMorphing ? Easing.OutExpo : Easing.OutCubic
+    }
+}
+Behavior on y {
+    enabled: widgetBg.isMorphing || controlPanel.editMode
+    NumberAnimation {
+        duration: widgetBg.isMorphing ? 400 : 300
+        easing.type: widgetBg.isMorphing ? Easing.OutExpo : Easing.OutCubic
+    }
+}
+Behavior on radius {
+    enabled: widgetBg.isMorphing || controlPanel.editMode
+    NumberAnimation {
+        duration: widgetBg.isMorphing ? 400 : 300
+        easing.type: widgetBg.isMorphing ? Easing.OutExpo : Easing.OutCubic
+    }
+}
 
                                             property bool isItemPressed: {
                                                 if (controlPanel.editMode)
@@ -1976,8 +1943,16 @@ PanelWindow {
                                                 anchors.margins: 24
                                                 focus: true
                                                 asynchronous: true
-                                                sourceComponent: (expandedOverlay.isExpanded && expandedOverlay.widgetItem) ? expandedOverlay.widgetItem.expandedComponent : null
-                                                opacity: expandedOverlay.isExpanded ? 1.0 : 0.0
+                                                // Phase E: only the morph-target cell
+                                                // instantiates the expanded view. Phase D
+                                                // moved this Loader from a singleton (inside
+                                                // the deleted expandedCard) into per-cell
+                                                // widgetBg but forgot to gate active/opacity
+                                                // on the source check, so every cell ended
+                                                // up showing the expanded view simultaneously.
+                                                active: expandedOverlay.sourceItem === widgetBg
+                                                sourceComponent: (expandedOverlay.isExpanded && widgetLoader.item) ? widgetLoader.item.expandedComponent : null
+                                                opacity: (expandedOverlay.isExpanded && expandedOverlay.sourceItem === widgetBg) ? 1.0 : 0.0
                                                 Behavior on opacity {
                                                     NumberAnimation {
                                                         duration: 200
@@ -2629,20 +2604,24 @@ PanelWindow {
                     let explicitH = (w && w.expandedHeight > 0) ? w.expandedHeight : 0;
                     let targetH = implicitH > 0 ? implicitH : (explicitH > 0 ? explicitH : 420);
 
-                    let maxH = Math.min(expandedOverlay.height - 40, 680);
+                    let maxH = Math.min(gridWrapper.height - 40, 680);
                     if (maxH > 0) {
                         targetH = Math.min(targetH, maxH);
                     }
                     expandedOverlay.computedTargetHeight = targetH;
 
-                    // Drive the actual toggle's geometry morph. sourceItem
-                    // is widgetBg; it's already a child of gridWrapper, so
-                    // no reparenting is needed (Phase D change).
+                    // Drive the actual toggle's geometry morph. Use
+                    // gridWrapper bounds (the parent of widgetBg) so the
+                    // morphed card doesn't overflow the Flickable's 24px
+                    // left/right margins. Phase D used expandedOverlay.width
+                    // (= controlPanel.width = 400) which overflowed
+                    // gridWrapper (= 352) by 48px and rendered past the
+                    // panel's right edge.
                     if (sourceItem) {
                         sourceItem.morphState = "opening";
                         sourceItem.x = 0;
-                        sourceItem.y = (expandedOverlay.height - targetH) / 2;
-                        sourceItem.width = expandedOverlay.width;
+                        sourceItem.y = (gridWrapper.height - targetH) / 2;
+                        sourceItem.width = gridWrapper.width;
                         sourceItem.height = targetH;
                         sourceItem.radius = 16;
                         // Cancel any residual press-scale so the morph
