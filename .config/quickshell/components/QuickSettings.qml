@@ -23,10 +23,11 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
     aboveWindows: true
+    WlrLayershell.layer: WlrLayershell.Overlay
 
     WlrLayershell.keyboardFocus: isOpen ? WlrLayershell.OnDemand : WlrLayershell.None
 
-    property bool isOpen: shellRoot.panelOpen && shellRoot.targetQuickSettingsScreen === screen
+    property bool isOpen: shellRoot.panelOpen
     property real dragOffset: shellRoot.panelDragOffset
     property real smoothMorphProgress: 0
     property bool morphComplete: false
@@ -52,7 +53,7 @@ PanelWindow {
     PwObjectTracker {
         objects: [Pipewire.defaultAudioSink]
     }
-    property var audioNode: Pipewire.defaultAudioSink ? Pipewire.defaultAudioSink.audio : null
+    property var audioNode: Pipewire.defaultAudioSink?.audio ?? null
 
     // ── Connectivity ──
     property bool wifiEnabled: shellRoot.wifiEnabled
@@ -71,11 +72,37 @@ PanelWindow {
     // ── Brightness ──
     property int brightnessValue: 50
     property int maxBrightness: 100
-    property string backlightDevice: "intel_backlight"
+    property string backlightDevice: ""
+    property var backlightCandidates: ["intel_backlight", "amdgpu_bl0", "acpi_video0", "nv_backlight", "apple_backlight", "panasonic_backlight", "sony_backlight"]
+    property int backlightProbeIndex: 0
+
+    function detectBacklightDevice() {
+        if (qs.backlightDevice !== "") return;
+        if (qs.backlightProbeIndex >= qs.backlightCandidates.length) return;
+        let d = qs.backlightCandidates[qs.backlightProbeIndex];
+        testDeviceProc.command = ["test", "-r", "/sys/class/backlight/" + d + "/brightness"];
+        testDeviceProc.deviceName = d;
+        testDeviceProc.running = true;
+    }
 
     Component.onCompleted: {
-        maxBrightnessProc.running = true;
-        brightnessProc.running = true;
+        detectBacklightDevice();
+    }
+
+    Process {
+        id: testDeviceProc
+        property string deviceName: ""
+        running: false
+        onExited: (code) => {
+            if (code === 0) {
+                qs.backlightDevice = qs.testDeviceProc.deviceName;
+                qs.maxBrightnessProc.running = true;
+                qs.brightnessProc.running = true;
+            } else {
+                qs.backlightProbeIndex++;
+                qs.detectBacklightDevice();
+            }
+        }
     }
 
     Process {
@@ -1118,8 +1145,21 @@ PanelWindow {
 
             function applyLayout(items) {
                 togglesModel.clear();
+                if (!Array.isArray(items)) {
+                    console.warn("[QuickSettings] Layout is not an array, using default");
+                    items = controlPanel.defaultLayout;
+                }
                 for (let i = 0; i < items.length; i++) {
-                    togglesModel.append(items[i]);
+                    let entry = items[i];
+                    // Validate entry: must be object with source string
+                    if (!entry || typeof entry !== "object" || typeof entry.source !== "string" || entry.source === "") {
+                        console.warn("[QuickSettings] Skipping invalid layout entry at index", i);
+                        continue;
+                    }
+                    // Clamp span values to valid range
+                    let colSpan = Math.max(1, Math.min(4, parseInt(entry.colSpan) || 1));
+                    let rowSpan = Math.max(1, Math.min(4, parseInt(entry.rowSpan) || 1));
+                    togglesModel.append({ source: entry.source, colSpan: colSpan, rowSpan: rowSpan });
                 }
                 controlPanel.layoutApplied = true;
             }
@@ -1266,7 +1306,7 @@ PanelWindow {
                             Image {
                                 id: btIconMorph
                                 anchors.fill: parent
-                                source: shellRoot.icon(shellRoot.bluetoothEnabled ? "network-bluetooth" : "bluetooth-disabled-symbolic")
+                                source: shellRoot.icon(shellRoot.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
                                 sourceSize: Qt.size(24, 24)
                                 visible: false
                             }
@@ -1769,6 +1809,8 @@ PanelWindow {
                                                     anchors.fill: parent
                                                     enabled: !controlPanel.editMode
                                                     pressAndHoldInterval: 300
+                                                    Accessible.name: (widgetLoader.item && widgetLoader.item.toggleName) || "Toggle"
+                                                    Accessible.role: Accessible.Button
                                                     onClicked: {
                                                         if (widgetLoader.item && widgetLoader.item.toggled)
                                                             widgetLoader.item.toggled();
