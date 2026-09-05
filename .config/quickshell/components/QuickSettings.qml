@@ -1236,6 +1236,16 @@ PanelWindow {
                 expandedOverlay.startY = pos.y;
                 expandedOverlay.startWidth = sourceRect.width;
                 expandedOverlay.startHeight = sourceRect.height;
+                // Capture the source widget's natural radius so close()
+                // animates back to the source's actual shape. For 1x1
+                // toggles this is the circle radius (width/height/2);
+                // for 2x2 toggles the source uses a 16px rounded square,
+                // so we fall back to 24px (the slightly tighter inner
+                // card radius) to avoid a visible flatten-then-pop.
+                expandedOverlay.sourceRadius =
+                    (sourceRect.width === sourceRect.height)
+                        ? sourceRect.width / 2
+                        : 24;
 
                 // Idle state disables animations so geometry snaps instantly
                 // to the source widget. The morphStartTimer then switches to
@@ -1245,7 +1255,7 @@ PanelWindow {
                 expandedCard.y = expandedOverlay.startY;
                 expandedCard.width = expandedOverlay.startWidth;
                 expandedCard.height = expandedOverlay.startHeight;
-                expandedCard.radius = (expandedOverlay.startWidth === expandedOverlay.startHeight) ? expandedOverlay.startWidth / 2 : 24;
+                expandedCard.radius = expandedOverlay.sourceRadius;
 
                 // Use a Timer to ensure QML engine commits the geometry snap before re-enabling animations
                 morphStartTimer.start();
@@ -2451,6 +2461,11 @@ PanelWindow {
                 property real startY: 0
                 property real startWidth: 0
                 property real startHeight: 0
+                // Source widget's natural radius captured at open() time.
+                // Used by close() to animate back to the source's actual
+                // shape without depending on the live (animated) width/
+                // height values, which would drift during the morph.
+                property real sourceRadius: 0
                 // Target height computed once per open() — replaces the
                 // previous Qt.binding() chain that re-evaluated on every
                 // geometry change and produced visible first-frame jumps.
@@ -2512,13 +2527,15 @@ PanelWindow {
                     opacity = 0.0;
 
                     // Snap back to source widget bounds. No bindings to
-                    // break (PR2 removed the Qt.binding chain).
+                    // break (PR2 removed the Qt.binding chain). radius
+                    // uses the captured sourceRadius (PR6) so 1x1 circles
+                    // don't overshoot during the morph.
                     expandedCard.state = "closing";
                     expandedCard.height = startHeight;
                     expandedCard.y = startY;
                     expandedCard.x = startX;
                     expandedCard.width = startWidth;
-                    expandedCard.radius = (startWidth === startHeight) ? startWidth / 2 : 24;
+                    expandedCard.radius = sourceRadius > 0 ? sourceRadius : 24;
 
                     // After the close morph lands, return to idle so the
                     // next open's snap-to-source assignments are instant.
