@@ -11,27 +11,36 @@ PanelWindow {
     id: root
     visible: shellRoot.switcherOpen
     color: "transparent"
-    
-    property real monitorRatio: Quickshell.screens.length > 0 ? Quickshell.screens[0].width / Quickshell.screens[0].height : 1.778
 
-    IpcHandler {
-        target: "task_manager"
+    function sanitizeAddr(addr) {
+        if (!addr) return "";
+        return addr.toString().replace(/[^0-9a-fA-Fx]/g, "");
+    }
 
-        function toggle() {
-            shellRoot.switcherOpen = !shellRoot.switcherOpen;
-        }
+    function getScreen() {
+        return root.screen || (Quickshell.screens.length > 0 ? Quickshell.screens[0] : null);
+    }
 
-        function open() {
-            shellRoot.switcherOpen = true;
-        }
+    property var screenDimensions: {
+        let s = root.getScreen();
+        return s ? { width: s.width, height: s.height } : { width: 1920, height: 1080 };
+    }
 
-        function close() {
-            shellRoot.switcherOpen = false;
-        }
+    property real monitorRatio: {
+        let d = screenDimensions;
+        return d.height > 0 ? d.width / d.height : 1.778;
     }
 
     property int viewMode: 0 // 0: Windows, 1: Workspaces
     signal forceResetDrag()
+    onScreenChanged: refreshScreenDims()
+    property bool _screenRefreshQueued: false
+    function refreshScreenDims() {
+        // Force re-evaluation of screenDimensions when screen changes
+        if (_screenRefreshQueued) return;
+        _screenRefreshQueued = true;
+        Qt.callLater(() => { _screenRefreshQueued = false; screenDimensions = ({}); });
+    }
     Connections {
         target: shellRoot
         function onSwitcherOpenChanged() {
@@ -48,6 +57,7 @@ PanelWindow {
 
     exclusionMode: ExclusionMode.Ignore
     aboveWindows: true
+    WlrLayershell.layer: WlrLayershell.Overlay
 
     // --- Base Tinted Background (Always Visible) ---
     Rectangle {
@@ -202,8 +212,8 @@ PanelWindow {
                             anchors.fill: parent
                             anchors.margins: 6
 
-                            property real monW: Quickshell.screens.length > 0 ? Quickshell.screens[0].width : 1920
-                            property real monH: Quickshell.screens.length > 0 ? Quickshell.screens[0].height : 1080
+                            property real monW: root.screenDimensions.width
+                            property real monH: root.screenDimensions.height
                             property real scale: Math.min(width / monW, height / monH)
 
                             Rectangle {
@@ -271,10 +281,10 @@ PanelWindow {
                             if (!finalAddr.startsWith("address:")) {
                                 finalAddr = "address:" + finalAddr;
                             }
+                            let safeAddr = root.sanitizeAddr(finalAddr);
                             
-                            console.log("SUCCESS: Moving window " + finalAddr + " to workspace " + workspace.id);
-                            // Using window key for the selector and follow=false for silent move
-                            Hyprland.dispatch("hl.dsp.window.move({ workspace = " + workspace.id + ", window = '" + finalAddr + "', follow = false })");
+                            console.log("SUCCESS: Moving window " + safeAddr + " to workspace " + workspace.id);
+                            Hyprland.dispatch("hl.dsp.window.move({ workspace = " + workspace.id + ", window = '" + safeAddr + "', follow = false })");
                             drop.accept(Qt.MoveAction);
                         } else {
                             console.log("ERROR: Drop had no payload. Source exists: " + !!drop.source);
@@ -496,7 +506,8 @@ PanelWindow {
                         if (Math.abs(cardTranslate.y) < 20 && !drag.active) {
                             let addr = toplevel.lastIpcObject ? toplevel.lastIpcObject.address : toplevel.address;
                             if (addr) {
-                                Hyprland.dispatch("hl.dsp.focus({ window = 'address:" + addr + "' })")
+                                let safeAddr = root.sanitizeAddr(addr);
+                                Hyprland.dispatch("hl.dsp.focus({ window = 'address:" + safeAddr + "' })")
                                 closeTimer.restart()
                             }
                         }
@@ -584,7 +595,10 @@ PanelWindow {
                         ScriptAction {
                             script: {
                                 let addr = toplevel.lastIpcObject ? toplevel.lastIpcObject.address : toplevel.address;
-                                if (addr) Hyprland.dispatch("hl.dsp.window.close({ window = 'address:" + addr + "' })")
+                                if (addr) {
+                                    let safeAddr = root.sanitizeAddr(addr);
+                                    Hyprland.dispatch("hl.dsp.window.close({ window = 'address:" + safeAddr + "' })")
+                                }
                             }
                         }
                     }
@@ -640,7 +654,10 @@ PanelWindow {
                                 }
                                 onClicked: {
                                     let addr = toplevel.lastIpcObject ? toplevel.lastIpcObject.address : toplevel.address;
-                                    if (addr) Hyprland.dispatch("hl.dsp.window.close({ window = 'address:" + addr + "' })")
+                                    if (addr) {
+                                        let safeAddr = root.sanitizeAddr(addr);
+                                        Hyprland.dispatch("hl.dsp.window.close({ window = 'address:" + safeAddr + "' })")
+                                    }
                                 }
                             }
                         }
@@ -837,8 +854,8 @@ PanelWindow {
                                     anchors.fill: parent
                                     anchors.margins: 4
 
-                                    property real monW: Quickshell.screens.length > 0 ? Quickshell.screens[0].width : 1920
-                                    property real monH: Quickshell.screens.length > 0 ? Quickshell.screens[0].height : 1080
+                                    property real monW: root.screenDimensions.width
+                                    property real monH: root.screenDimensions.height
                                     property real scale: Math.min(width / monW, height / monH)
 
                                     Rectangle {
@@ -865,6 +882,7 @@ PanelWindow {
                                                     clip: true
 
                                                     ScreencopyView {
+                                                        id: workspaceThumb
                                                         anchors.fill: parent
                                                         captureSource: modelData.wayland
                                                         live: true
@@ -884,7 +902,7 @@ PanelWindow {
                                                             return "";
                                                         }
                                                         fillMode: Image.PreserveAspectFit
-                                                        visible: !parent.children[0].hasContent
+                                                        visible: !workspaceThumb.hasContent
                                                     }
                                                 }
                                             }
