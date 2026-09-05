@@ -240,6 +240,18 @@ WlSessionLockSurface {
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: -15
 
+            property string timeString: Qt.formatTime(new Date(), "h:mm")
+            property string dateString: Qt.formatDate(new Date(), "dddd, MMMM d")
+            Timer {
+                interval: 1000
+                running: true
+                repeat: true
+                onTriggered: {
+                    clockContainer.timeString = Qt.formatTime(new Date(), "h:mm");
+                    clockContainer.dateString = Qt.formatDate(new Date(), "dddd, MMMM d");
+                }
+            }
+
             transform: Translate {
                 y: swipeOffset * 1.2
                 Behavior on y {
@@ -249,7 +261,7 @@ WlSessionLockSurface {
             }
 
             Text {
-                text: Qt.formatDate(new Date(), "dddd, MMMM d")
+                text: clockContainer.dateString
                 color: "white"
                 font.pixelSize: 22
                 font.weight: Font.DemiBold
@@ -257,7 +269,7 @@ WlSessionLockSurface {
             }
 
             Text {
-                text: Qt.formatTime(new Date(), "h:mm")
+                text: clockContainer.timeString
                 color: "white"
                 font.pixelSize: 100
                 font.weight: Font.Bold
@@ -377,7 +389,7 @@ WlSessionLockSurface {
                 rowSpacing: 20
                 columnSpacing: 10
                 width: parent.width
-                Layout.alignment: Qt.AlignWCenter
+                Layout.alignment: Qt.AlignHCenter
                 enabled: !lockedOut
 
                 Repeater {
@@ -392,6 +404,8 @@ WlSessionLockSurface {
                         implicitHeight: 90
                         flat: true
                         enabled: !lockedOut
+                        Accessible.name: modelData === "Cancel" ? "Cancel" : (modelData === "Enter" ? "Enter" : "Number " + modelData)
+                        Accessible.role: Accessible.Button
 
                         background: MaterialSurface {
                             radius: 67
