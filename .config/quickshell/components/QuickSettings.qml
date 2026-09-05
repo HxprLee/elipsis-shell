@@ -1199,7 +1199,7 @@ PanelWindow {
                 id: morphStartTimer
                 interval: 20
                 onTriggered: {
-                    expandedCard.animationsEnabled = true;
+                    expandedCard.state = "opening";
                     expandedLoader.sourceComponent = expandedOverlay.widgetItem.expandedComponent;
                     expandedOverlay.open();
                 }
@@ -1214,8 +1214,10 @@ PanelWindow {
                 expandedOverlay.startWidth = sourceRect.width;
                 expandedOverlay.startHeight = sourceRect.height;
 
-                // Disable animations to instantly snap to the source toggle
-                expandedCard.animationsEnabled = false;
+                // Idle state disables animations so geometry snaps instantly
+                // to the source widget. The morphStartTimer then switches to
+                // "opening" which re-enables Behaviors for the actual morph.
+                expandedCard.state = "idle";
                 expandedCard.x = expandedOverlay.startX;
                 expandedCard.y = expandedOverlay.startY;
                 expandedCard.width = expandedOverlay.startWidth;
@@ -2425,6 +2427,7 @@ PanelWindow {
                     let targetW = expandedOverlay.width;
                     let targetX = 0;
 
+                    expandedCard.state = "opening";
                     expandedCard.x = targetX;
                     expandedCard.width = targetW;
 
@@ -2454,6 +2457,13 @@ PanelWindow {
                     });
 
                     expandedCard.radius = 16;
+
+                    // After the open morph lands, latch into "open" so any
+                    // minor geometry tweaks don't re-trigger Behaviors.
+                    Qt.callLater(() => {
+                        if (expandedCard.state === "opening")
+                            expandedCard.state = "open";
+                    });
                 }
 
                 function close() {
@@ -2462,11 +2472,26 @@ PanelWindow {
 
                     // Break bindings and morph back to original slot
                     expandedOverlay.targetHeight = 420; // Break binding
+                    expandedCard.state = "closing";
                     expandedCard.height = startHeight;
                     expandedCard.y = startY;
                     expandedCard.x = startX;
                     expandedCard.width = startWidth;
                     expandedCard.radius = (startWidth === startHeight) ? startWidth / 2 : 24;
+
+                    // After the close morph lands, return to idle so the
+                    // next open's snap-to-source assignments are instant.
+                    morphCompleteTimer.restart();
+                }
+
+                Timer {
+                    id: morphCompleteTimer
+                    interval: 400
+                    repeat: false
+                    onTriggered: {
+                        if (expandedCard.state === "closing")
+                            expandedCard.state = "idle";
+                    }
                 }
 
                 MouseArea {
@@ -2476,7 +2501,13 @@ PanelWindow {
 
                 Rectangle {
                     id: expandedCard
-                    property bool animationsEnabled: true
+                    // Morph animation state machine:
+                    //   idle      - geometry assignments are instant (default)
+                    //   opening   - geometry animates from source widget to expanded bounds
+                    //   open      - holding final geometry; animations disabled to avoid jitter
+                    //   closing   - geometry animating back to source widget bounds
+                    property string state: "idle"
+                    readonly property bool animationsEnabled: state !== "idle"
                     color: "transparent"
                     clip: true
 
