@@ -1206,7 +1206,12 @@ PanelWindow {
             }
 
             function openExpandedView(sourceRect, widgetItem) {
-                let pos = sourceRect.mapToItem(controlPanel, 0, 0);
+                // Map source rect into gridWrapper coordinates so the
+                // expanded card (which lives under gridWrapper during
+                // the morph) starts at the same position as the source
+                // widget. Shares coordinate frame with widgetBg, so the
+                // panel's bloomScale transforms both consistently.
+                let pos = sourceRect.mapToItem(gridWrapper, 0, 0);
                 expandedOverlay.sourceItem = sourceRect;
                 expandedOverlay.widgetItem = widgetItem;
                 expandedOverlay.startX = pos.x;
@@ -2425,6 +2430,12 @@ PanelWindow {
                     isExpanded = true;
                     opacity = 1.0;
 
+                    // Reparent the morph card into gridWrapper so it
+                    // shares a coordinate frame with widgetBg. Stays
+                    // there for the duration of the morph; close()
+                    // reparents it back.
+                    expandedCard.parent = gridWrapper;
+
                     expandedLoader.sourceComponent = widgetItem.expandedComponent;
 
                     // Compute target height once. Prefer the expanded
@@ -2476,13 +2487,19 @@ PanelWindow {
                     morphCompleteTimer.restart();
                 }
 
+                // Reparent the morph card back under expandedOverlay
+                // once the close animation has finished, so it stays
+                // hidden inside the overlay (opacity: 0) until the
+                // next open re-roots it into gridWrapper.
                 Timer {
                     id: morphCompleteTimer
                     interval: 400
                     repeat: false
                     onTriggered: {
-                        if (expandedCard.state === "closing")
+                        if (expandedCard.state === "closing") {
                             expandedCard.state = "idle";
+                            expandedCard.parent = expandedOverlay;
+                        }
                     }
                 }
 
