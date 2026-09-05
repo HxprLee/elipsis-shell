@@ -151,9 +151,10 @@ Item {
 
                 if (!isDraggingSize) return;
 
-                // toggleGrid cell step size is ~92px
-                let stepX = 92
-                let stepY = 92
+                // Grid cell step size is derived: (panel width - margins) / cols + spacing
+                // We approximate by parent.width / 4 since the grid is 4 columns
+                let stepX = (editOverlay.parent ? editOverlay.parent.width : 400) / 4 + 16
+                let stepY = stepX
 
                 let targetCs = startColSpan + dx / stepX
                 let targetRs = startRowSpan + dy / stepY
