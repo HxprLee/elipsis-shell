@@ -2408,7 +2408,10 @@ PanelWindow {
                 property real startY: 0
                 property real startWidth: 0
                 property real startHeight: 0
-                property real targetHeight: 420
+                // Target height computed once per open() — replaces the
+                // previous Qt.binding() chain that re-evaluated on every
+                // geometry change and produced visible first-frame jumps.
+                property real computedTargetHeight: 0
                 property bool isExpanded: false
 
                 Behavior on opacity {
@@ -2424,38 +2427,27 @@ PanelWindow {
 
                     expandedLoader.sourceComponent = widgetItem.expandedComponent;
 
-                    let targetW = expandedOverlay.width;
-                    let targetX = 0;
+                    // Compute target height once. Prefer the expanded
+                    // component's implicitHeight (with 48px chrome
+                    // padding), then widgetItem.expandedHeight, then the
+                    // 420px fallback. Clamp to the overlay height with
+                    // 40px headroom and 680px ceiling.
+                    let implicitH = (expandedLoader.item && expandedLoader.item.implicitHeight > 0) ? expandedLoader.item.implicitHeight + 48 : 0;
+                    let explicitH = (widgetItem && widgetItem.expandedHeight > 0) ? widgetItem.expandedHeight : 0;
+
+                    let targetH = implicitH > 0 ? implicitH : (explicitH > 0 ? explicitH : 420);
+
+                    let maxH = Math.min(expandedOverlay.height - 40, 680);
+                    if (maxH > 0) {
+                        targetH = Math.min(targetH, maxH);
+                    }
+                    expandedOverlay.computedTargetHeight = targetH;
 
                     expandedCard.state = "opening";
-                    expandedCard.x = targetX;
-                    expandedCard.width = targetW;
-
-                    expandedOverlay.targetHeight = Qt.binding(function () {
-                        let targetH = 420; // fallback
-                        let implicitH = (expandedLoader.item && expandedLoader.item.implicitHeight > 0) ? expandedLoader.item.implicitHeight + 48 : 0;
-                        let explicitH = (widgetItem && widgetItem.expandedHeight > 0) ? widgetItem.expandedHeight : 0;
-
-                        if (implicitH > 0) {
-                            targetH = implicitH;
-                        } else if (explicitH > 0) {
-                            targetH = explicitH;
-                        }
-
-                        let maxH = Math.min(expandedOverlay.height - 40, 680);
-                        if (maxH > 0) {
-                            targetH = Math.min(targetH, maxH);
-                        }
-                        return targetH;
-                    });
-
-                    expandedCard.height = Qt.binding(function () {
-                        return expandedOverlay.targetHeight;
-                    });
-                    expandedCard.y = Qt.binding(function () {
-                        return (expandedOverlay.height - expandedOverlay.targetHeight) / 2;
-                    });
-
+                    expandedCard.x = 0;
+                    expandedCard.width = expandedOverlay.width;
+                    expandedCard.height = computedTargetHeight;
+                    expandedCard.y = (expandedOverlay.height - computedTargetHeight) / 2;
                     expandedCard.radius = 16;
 
                     // After the open morph lands, latch into "open" so any
@@ -2470,8 +2462,8 @@ PanelWindow {
                     isExpanded = false;
                     opacity = 0.0;
 
-                    // Break bindings and morph back to original slot
-                    expandedOverlay.targetHeight = 420; // Break binding
+                    // Snap back to source widget bounds. No bindings to
+                    // break (PR2 removed the Qt.binding chain).
                     expandedCard.state = "closing";
                     expandedCard.height = startHeight;
                     expandedCard.y = startY;
