@@ -4,6 +4,7 @@ import Qt5Compat.GraphicalEffects
 import Quickshell
 import Quickshell.Services.Mpris
 import ".."
+import "../reusables"
 
 // MediaWidget.qml — MPRIS media player with album art, playback controls,
 
@@ -252,7 +253,7 @@ Item {
                                     }
                                 }
 
-                                AppContextMenu {
+                                ContextMenu {
                                     id: playerMenu
                                     onClosed: {
                                         root._playerMenuJustClosed = true;
