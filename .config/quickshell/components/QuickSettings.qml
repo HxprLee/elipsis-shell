@@ -1977,6 +1977,44 @@ Behavior on radius {
                                                         duration: 200
                                                     }
                                                 }
+                                                // Phase G: re-measure the loaded expanded
+                                                // component and resize the card if its
+                                                // implicitHeight differs from the first-pass
+                                                // morph target (expandedHeight). Components
+                                                // without implicitHeight (Bluetooth) early-
+                                                // return and stay at expandedHeight.
+                                                onLoaded: {
+                                                    if (expandedOverlay.sourceItem !== widgetBg)
+                                                        return;
+                                                    let implH = item.implicitHeight || 0;
+                                                    if (implH <= 0)
+                                                        return;
+                                                    // +48 matches expandedLoader's
+                                                    // anchors.margins: 24 top + 24 bottom.
+                                                    let desired = implH + 48;
+                                                    let maxH = Math.min(gridWrapper.height - 40, 680);
+                                                    if (maxH > 0)
+                                                        desired = Math.min(desired, maxH);
+                                                    // Skip the tween if we're already there
+                                                    // (e.g. PowerProfile: expandedHeight=320,
+                                                    // implH+48=320, no resize needed).
+                                                    if (Math.abs(desired - widgetBg.height) < 4)
+                                                        return;
+                                                    // Flip morphState back to "opening" so the
+                                                    // Behavior on height re-enables for the
+                                                    // resize tween, recenter, and write the new
+                                                    // height. The Qt.callLater below restores
+                                                    // the latched "open" state once the tween
+                                                    // is in flight.
+                                                    widgetBg.morphState = "opening";
+                                                    widgetBg.y = (gridWrapper.height - desired) / 2;
+                                                    widgetBg.height = desired;
+                                                    expandedOverlay.computedTargetHeight = desired;
+                                                    Qt.callLater(() => {
+                                                        if (widgetBg.morphState === "opening")
+                                                            widgetBg.morphState = "open";
+                                                    });
+                                                }
                                             }
                                         }
 
@@ -2616,12 +2654,18 @@ Behavior on radius {
                     // Resolve the expanded component (already lives inside
                     // widgetBg now, so no sourceComponent assignment is
                     // needed here — expandedLoader reads widgetItem directly
-                    // via its binding). Still compute target height so the
-                    // morph lands at the right final bounds.
+                    // via its binding). Phase G: first-pass target uses
+                    // expandedHeight (a fixed per-toggle property) so the
+                    // morph has a stable target. expandedLoader.onLoaded
+                    // re-measures the loaded component's implicitHeight and
+                    // tweens to that size if it differs from expandedHeight.
+                    // Dropped the previous `w.implicitHeight` branch — it
+                    // always read 0 because `w` is the toggle widget root
+                    // (an Item with no implicitHeight), not the expanded
+                    // component.
                     let w = widgetItem;
-                    let implicitH = (w && w.implicitHeight > 0) ? w.implicitHeight + 48 : 0;
                     let explicitH = (w && w.expandedHeight > 0) ? w.expandedHeight : 0;
-                    let targetH = implicitH > 0 ? implicitH : (explicitH > 0 ? explicitH : 420);
+                    let targetH = explicitH > 0 ? explicitH : 420;
 
                     let maxH = Math.min(gridWrapper.height - 40, 680);
                     if (maxH > 0) {
