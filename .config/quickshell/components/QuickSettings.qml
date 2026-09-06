@@ -1687,6 +1687,24 @@ Behavior on radius {
                                                     return widgetLoader.item.isPressed;
                                                 return complexHoldArea.pressed;
                                             }
+                                            // Phase G3 hotfix: alias the
+                                            // EditOverlay id so
+                                            // morphCompleteTimer (declared
+                                            // in expandedOverlay scope,
+                                            // outside the Repeater) can
+                                            // read dragActive when
+                                            // restoring the scale binding
+                                            // after a close. widgetOverlay
+                                            // is a Repeater-child id and
+                                            // is not hoisted into the
+                                            // Timer's scope; this property
+                                            // re-exports it from widgetBg
+                                            // (whose reference is already
+                                            // stored in
+                                            // expandedOverlay.sourceItem,
+                                            // so any code with `s` can do
+                                            // `s.dragOverlay.dragActive`).
+                                            property var dragOverlay: widgetOverlay
 
                                             scale: widgetOverlay.dragActive ? 1.05 : (isItemPressed ? 0.95 : 1.0)
                                             Behavior on scale {
@@ -2737,13 +2755,15 @@ Behavior on radius {
                         // animation directly. The static sourceItem.radius
                         // write below stays as a fallback: either the
                         // animation lands or the static value renders.
-                        // Build via NumberAnimation component + JS
-                        // assignment — `property:` is a QML reserved
-                        // keyword, so use bracket-string access; and
-                        // QML's JS doesn't accept the empty-object
-                        // NumberAnimation{} shorthand inside imperative
-                        // code, so instantiate then assign.
-                        let radiusAnim = numberAnimationComponent.createObject(sourceItem);
+                        // Create + assign target in one go. Property
+                        // name keys in the createObject() literal must
+                        // not be QML reserved words; `target` is fine,
+                        // `property` is not. So we pass target here and
+                        // assign `property`/to/duration/easing via
+                        // bracket access below.
+                        let radiusAnim = numberAnimationComponent.createObject(sourceItem, {
+                            target: sourceItem
+                        });
                         if (radiusAnim) {
                             radiusAnim["property"] = "radius";
                             radiusAnim.to = sourceRadius > 0 ? sourceRadius : 24;
@@ -2778,15 +2798,23 @@ Behavior on radius {
                     morphCompleteTimer.restart();
                 }
 
-                // Phase G3: factory used by close() to drive the
-                // deterministic radius corner-rounding animation.
-                // `property:` is a QML reserved keyword, so we declare
-                // the animation declaratively here and assign properties
-                // via JS bracket access from close().
+                // Phase G3 hotfix: factory for the deterministic
+                // close-radius NumberAnimation. Earlier this declared
+                // `target: sourceItem` in the NumberAnimation body,
+                // but sourceItem is a property on the grandparent
+                // expandedOverlay, not a QML id in the new object's
+                // scope chain — QML's JS resolver returned a
+                // ReferenceError at load time, the Component
+                // instantiation silently failed, and createObject()
+                // returned null in close(). Hence no animation.
+                // Fix: leave target unset in the factory; pass it
+                // imperatively from close() via
+                // createObject(sourceItem, { target: sourceItem }).
                 Component {
                     id: numberAnimationComponent
                     NumberAnimation {
-                        target: sourceItem
+                        duration: 400
+                        easing.type: Easing.OutExpo
                     }
                 }
 
@@ -2829,9 +2857,19 @@ Behavior on radius {
                         // the binding and subsequent presses can never
                         // animate the 1.0 -> 0.95 -> 1.0 shrink.
                         s.scale = Qt.binding(function() {
-                            return widgetOverlay.dragActive
+                            // Phase G3 hotfix: use s.dragOverlay /
+                            // s.isItemPressed instead of the bare
+                            // widgetOverlay / isItemPressed ids. The
+                            // bare ids are Repeater-child ids and not
+                            // hoisted into expandedOverlay's scope, so
+                            // the original binding threw ReferenceError
+                            // when re-evaluated. Re-binding through
+                            // `s` (a captured local = widgetBg) goes
+                            // through widgetBg.dragOverlay / isItemPressed
+                            // properties, which always resolve.
+                            return s.dragOverlay.dragActive
                                 ? 1.05
-                                : (isItemPressed ? 0.95 : 1.0);
+                                : (s.isItemPressed ? 0.95 : 1.0);
                         });
                         expandedOverlay.delegateItemRef = null;
                     }
