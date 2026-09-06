@@ -1230,32 +1230,26 @@ PanelWindow {
                 expandedOverlay.startHeight = sourceRect.height;
                 // Capture the source widget's natural radius so close()
                 // animates back to a value that EXACTLY matches the
-                // cell-bound binding at line 1598:
+                // cell-bound binding at line 1616:
                 //   radius: (model.colSpan >= 2 && model.rowSpan >= 2)
                 //       ? 16 : Math.min(width, height) / 2
-                // Without this alignment, morphCompleteTimer's binding
-                // restore forces a one-frame snap from the close-
-                // animation target (24 or 84) to the natural value (38
-                // or 16), which the user reads as the toggle "popping"
-                // back into place. With alignment, the close animation
-                // lands on the natural value and the binding restore
-                // produces the same number — no snap.
                 //
-                // delegateRef is the Repeater delegate (`delegateItem`),
-                // which carries model.colSpan / model.rowSpan as
-                // Repeater-delegate properties. (model.colSpan/rowSpan
-                // is also accessible directly from widgetBg because
-                // widgetBg is also inside the Repeater delegate, but
-                // doOpenExpandedView is called from the touch layer
-                // which is outside the Repeater and only has delegateRef.)
-                // Falling back to (1, 1) keeps the previous behavior
-                // (Math.min(w,h)/2) for any future caller that passes null.
-                let cs = delegateRef && delegateRef.model ? delegateRef.model.colSpan : 1;
-                let rs = delegateRef && delegateRef.model ? delegateRef.model.rowSpan : 1;
-                expandedOverlay.sourceRadius =
-                    (cs >= 2 && rs >= 2)
-                        ? 16
-                        : Math.min(sourceRect.width, sourceRect.height) / 2;
+                // At the moment doOpenExpandedView runs, open() (line ~2700)
+                // hasn't been called yet, so the cell-bound radius binding
+                // is still active. sourceRect.radius therefore evaluates to
+                // the binding's natural value — for 2x2 / 4x2 cells it's
+                // 16, for 2x1 / 1x2 / 1x1 it's Math.min(width, height) / 2
+                // (the pill-cap radius). Reading the binding's current value
+                // here is simpler and more reliable than recomputing the
+                // formula from the Repeater-delegate context (delegateRef
+                // .model.colSpan). The previous Phase G4 formula depended
+                // on accessing `model` as a JS property on the captured
+                // delegateItem from outside the Repeater scope; that depends
+                // on Qt's exposure of Repeater context properties as
+                // JS-accessible fields, which is not guaranteed across
+                // Quickshell's underlying Qt versions and produced wrong
+                // fallback values for 2x2+ cells in some configurations.
+                expandedOverlay.sourceRadius = sourceRect.radius;
 
                 // Capture the repeating-delegateItem reference at open time so
                 // morphCompleteTimer (declared outside the Repeater) can
