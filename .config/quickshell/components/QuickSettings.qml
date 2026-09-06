@@ -1195,35 +1195,95 @@ PanelWindow {
                 running: false
             }
 
-            Timer {
-                id: morphStartTimer
-                interval: 20
-                onTriggered: {
-                    expandedCard.animationsEnabled = true;
-                    expandedLoader.sourceComponent = expandedOverlay.widgetItem.expandedComponent;
-                    expandedOverlay.open();
+            function openExpandedView(sourceRect, widgetItem, delegateRef) {
+                // Defer until the panel's bloom-scale spring has settled
+                // so the source widget's on-screen position is final when
+                // we copy its geometry. Otherwise the morph would start
+                // from a position that drifts ~15% as the panel scales
+                // from 0.85 to 1.0.
+                if (!qs.morphComplete) {
+                    expandedOverlay.pendingSourceRect = sourceRect;
+                    expandedOverlay.pendingWidgetItem = widgetItem;
+                    expandedOverlay.pendingDelegateItemRef = delegateRef || null;
+                    expandedOverlay.hasPendingOpen = true;
+                    return;
                 }
+                doOpenExpandedView(sourceRect, widgetItem, delegateRef);
             }
 
-            function openExpandedView(sourceRect, widgetItem) {
-                let pos = sourceRect.mapToItem(controlPanel, 0, 0);
+            // Helper that performs the actual snap. Public entry point is
+            // openExpandedView(); replayPendingOpen() drives it after the
+            // panel bloom finishes.
+            function doOpenExpandedView(sourceRect, widgetItem, delegateRef) {
+                // sourceRect is the widgetBg being morphed. It already
+                // lives under gridWrapper at its cell-bound position
+                // (Phase D no longer needs to reparent a separate card).
+                // We capture its current position so close() can animate
+                // back without relying on the live (animated) values,
+                // which would drift during the morph.
+                let pos = sourceRect.mapToItem(gridWrapper, 0, 0);
                 expandedOverlay.sourceItem = sourceRect;
                 expandedOverlay.widgetItem = widgetItem;
                 expandedOverlay.startX = pos.x;
                 expandedOverlay.startY = pos.y;
                 expandedOverlay.startWidth = sourceRect.width;
                 expandedOverlay.startHeight = sourceRect.height;
+                // Capture the source widget's natural radius so close()
+                // animates back to a value that EXACTLY matches the
+                // cell-bound binding at line 1616:
+                //   radius: (model.colSpan >= 2 && model.rowSpan >= 2)
+                //       ? 16 : Math.min(width, height) / 2
+                //
+                // At the moment doOpenExpandedView runs, open() (line ~2700)
+                // hasn't been called yet, so the cell-bound radius binding
+                // is still active. sourceRect.radius therefore evaluates to
+                // the binding's natural value — for 2x2 / 4x2 cells it's
+                // 16, for 2x1 / 1x2 / 1x1 it's Math.min(width, height) / 2
+                // (the pill-cap radius). Reading the binding's current value
+                // here is simpler and more reliable than recomputing the
+                // formula from the Repeater-delegate context (delegateRef
+                // .model.colSpan). The previous Phase G4 formula depended
+                // on accessing `model` as a JS property on the captured
+                // delegateItem from outside the Repeater scope; that depends
+                // on Qt's exposure of Repeater context properties as
+                // JS-accessible fields, which is not guaranteed across
+                // Quickshell's underlying Qt versions and produced wrong
+                // fallback values for 2x2+ cells in some configurations.
+                expandedOverlay.sourceRadius = sourceRect.radius;
 
-                // Disable animations to instantly snap to the source toggle
-                expandedCard.animationsEnabled = false;
-                expandedCard.x = expandedOverlay.startX;
-                expandedCard.y = expandedOverlay.startY;
-                expandedCard.width = expandedOverlay.startWidth;
-                expandedCard.height = expandedOverlay.startHeight;
-                expandedCard.radius = (expandedOverlay.startWidth === expandedOverlay.startHeight) ? expandedOverlay.startWidth / 2 : 24;
+                // Capture the repeating-delegateItem reference at open time so
+                // morphCompleteTimer (declared outside the Repeater) can
+                // rebuild the cell-bound geometry bindings on the
+                // morphed widgetBg after close. The Timer's onTriggered
+                // runs in expandedOverlay scope and has no access to
+                // delegateItem directly, so we explicitly capture it via
+                // argument threading from the Repeater-delegate call
+                // sites (see controlPanel.openExpandedView above).
+                expandedOverlay.delegateItemRef = delegateRef || null;
 
-                // Use a Timer to ensure QML engine commits the geometry snap before re-enabling animations
-                morphStartTimer.start();
+                // Drive the morph on the actual widgetBg. open() writes
+                // target geometry directly; the Behaviors on widgetBg
+                // (gated on isMorphing) animate. The assignments in
+                // open() break widgetBg's cell-bound x/y/width/height/
+                // radius bindings for the duration of the morph; the
+                // morphCompleteTimer restores them when the close
+                // animation lands.
+                expandedOverlay.open();
+            }
+
+            // Replay a deferred open() once the panel's bloom is done.
+            // Wired via Connections { target: qs } inside expandedOverlay.
+            function replayPendingOpen() {
+                if (!expandedOverlay.hasPendingOpen)
+                    return;
+                let src = expandedOverlay.pendingSourceRect;
+                let wid = expandedOverlay.pendingWidgetItem;
+                let del = expandedOverlay.pendingDelegateItemRef;
+                expandedOverlay.pendingSourceRect = null;
+                expandedOverlay.pendingWidgetItem = null;
+                expandedOverlay.pendingDelegateItemRef = null;
+                expandedOverlay.hasPendingOpen = false;
+                doOpenExpandedView(src, wid, del);
             }
 
             function closeExpandedView() {
@@ -1440,13 +1500,15 @@ PanelWindow {
                         width: parent.width
                         spacing: 24
 
-                        opacity: expandedOverlay.isExpanded ? (shellRoot.materialTheme === "Solid" ? 0.2 : 0.0) : 1.0
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 250
-                                easing.type: Easing.OutCubic
-                            }
-                        }
+                        // Stay at full opacity while the expanded view is
+                        // open. The source widget's per-instance opacity
+                        // binding (line ~1572) still fades it out cleanly,
+                        // and the expanded card's z: 200 + MaterialSurface
+                        // background covers everything underneath.
+                        // The previous binding (which dropped to 0 / 0.2
+                        // when expanded) made the entire panel "dissolve"
+                        // instead of the toggle "morph".
+                        opacity: 1.0
 
                         Item {
                             id: gridWrapper
@@ -1515,7 +1577,32 @@ PanelWindow {
                                         Rectangle {
                                             id: widgetBg
                                             parent: gridWrapper
+                                            // ── Phase D: widgetBg IS the morph container. ──
+                                            // (Previously a separate `expandedCard` Rectangle was
+                                            // reparented to gridWrapper and duplicated the visual
+                                            // surface during the morph. The user rejected that
+                                            // pattern — they want the actual toggle to morph into
+                                            // the expanded view, not be hidden while a duplicate
+                                            // container grows in its place. Now widgetBg itself
+                                            // animates geometry/radius while widgetLoader content
+                                            // fades out and the new expandedLoader content fades
+                                            // in inside this same widget.)
                                             property bool isCircle: model.colSpan === 1 && model.rowSpan === 1
+                                            // 4-state geometry-animation machine (lives on the
+                                            // morph container now, not on a separate card).
+                                            //   idle      - geometry assignments instant (default)
+                                            //   opening   - Behaviors animating toward expanded bounds
+                                            //   open      - holding expanded geometry; animations idle
+                                            //   closing   - Behaviors animating back to source bounds
+                                            property string morphState: "idle"
+                                            // Phase F: gate the geometry Behaviors on the local
+                                            // morphState (a value we control explicitly via
+                                            // open/close/timer) rather than on expandedOverlay.isExpanded
+                                            // (a sibling flag that flips the moment close() runs).
+                                            // Coupling made close() render the shrink instantly because
+                                            // the Behavior's `enabled:` was already false by the time
+                                            // we wrote the geometry.
+                                            property bool isMorphing: morphState !== "idle"
                                             width: delegateItem.width
                                             height: delegateItem.height
                                             x: delegateItem.x
@@ -1523,12 +1610,31 @@ PanelWindow {
                                             radius: (model.colSpan >= 2 && model.rowSpan >= 2) ? 16 : Math.min(width, height) / 2
                                             color: "transparent"
                                             clip: true
-                                            opacity: (expandedOverlay.isExpanded && expandedOverlay.sourceItem === widgetBg) ? 0.0 : 1.0
+                                            // Container opacity is NOT animated — the container
+                                            // stays at full opacity so the user sees the toggle
+                                            // actually morph. Only the inner content
+                                            // (widgetLoader + toggleChrome) fades out, while
+                                            // expandedLoader fades in.
 
                                             MaterialSurface {
                                                 id: bgSurface
                                                 anchors.fill: parent
                                                 radius: parent.radius
+                                                // Phase F: hide the colored backdrop of any
+                                                // non-morph cell while an expanded view is
+                                                // showing. Without this, the bgSurface stays
+                                                // at full opacity and the user sees colored
+                                                // round/pill shapes around the expanded card.
+                                                // The morph target cell stays visible (it's the
+                                                // source); only the OTHER cells fade out.
+                                                opacity: (expandedOverlay.isExpanded && expandedOverlay.sourceItem !== widgetBg) ? 0.0 : 1.0
+                                                Behavior on opacity {
+                                                    enabled: !controlPanel.editMode
+                                                    NumberAnimation {
+                                                        duration: 400
+                                                        easing.type: Easing.OutExpo
+                                                    }
+                                                }
                                                 isActive: {
                                                     if (!widgetLoader.item)
                                                         return false;
@@ -1538,48 +1644,51 @@ PanelWindow {
                                                 }
                                                 accentColor: (widgetLoader.item && widgetLoader.item.activeColor) ? widgetLoader.item.activeColor : (shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0))
                                             }
-                                            Behavior on opacity {
-                                                NumberAnimation {
-                                                    duration: 250
-                                                    easing.type: Easing.OutCubic
-                                                }
-                                            }
 
-                                            Behavior on width {
-                                                enabled: controlPanel.editMode
-                                                NumberAnimation {
-                                                    duration: 300
-                                                    easing.type: Easing.OutCubic
-                                                }
-                                            }
-                                            Behavior on height {
-                                                enabled: controlPanel.editMode
-                                                NumberAnimation {
-                                                    duration: 300
-                                                    easing.type: Easing.OutCubic
-                                                }
-                                            }
-                                            Behavior on x {
-                                                enabled: controlPanel.editMode
-                                                NumberAnimation {
-                                                    duration: 300
-                                                    easing.type: Easing.OutCubic
-                                                }
-                                            }
-                                            Behavior on y {
-                                                enabled: controlPanel.editMode
-                                                NumberAnimation {
-                                                    duration: 300
-                                                    easing.type: Easing.OutCubic
-                                                }
-                                            }
-                                            Behavior on radius {
-                                                enabled: controlPanel.editMode
-                                                NumberAnimation {
-                                                    duration: 300
-                                                    easing.type: Easing.OutCubic
-                                                }
-                                            }
+// ── Geometry Behaviors (Phase E consolidated) ──
+// One Behavior per property, gated on the disjunction of morph and
+// edit-mode. Animation duration/easing picks based on which mode is
+// active (morph wins if both). Phase D's dual-block pattern (one
+// Behavior gated on editMode, a parallel one gated on isMorphing) had
+// a QML gotcha where the parallel Behaviors' enabled conditions could
+// briefly read stale at the moment of property change, causing the
+// animation to be skipped. A single Behavior with conditional
+// animation params avoids that interaction.
+Behavior on width {
+    enabled: widgetBg.isMorphing || controlPanel.editMode
+    NumberAnimation {
+        duration: widgetBg.isMorphing ? 400 : 300
+        easing.type: widgetBg.isMorphing ? Easing.OutExpo : Easing.OutCubic
+    }
+}
+Behavior on height {
+    enabled: widgetBg.isMorphing || controlPanel.editMode
+    NumberAnimation {
+        duration: widgetBg.isMorphing ? 400 : 300
+        easing.type: widgetBg.isMorphing ? Easing.OutExpo : Easing.OutCubic
+    }
+}
+Behavior on x {
+    enabled: widgetBg.isMorphing || controlPanel.editMode
+    NumberAnimation {
+        duration: widgetBg.isMorphing ? 400 : 300
+        easing.type: widgetBg.isMorphing ? Easing.OutExpo : Easing.OutCubic
+    }
+}
+Behavior on y {
+    enabled: widgetBg.isMorphing || controlPanel.editMode
+    NumberAnimation {
+        duration: widgetBg.isMorphing ? 400 : 300
+        easing.type: widgetBg.isMorphing ? Easing.OutExpo : Easing.OutCubic
+    }
+}
+Behavior on radius {
+    enabled: widgetBg.isMorphing || controlPanel.editMode
+    NumberAnimation {
+        duration: widgetBg.isMorphing ? 400 : 300
+        easing.type: widgetBg.isMorphing ? Easing.OutExpo : Easing.OutCubic
+    }
+}
 
                                             property bool isItemPressed: {
                                                 if (controlPanel.editMode)
@@ -1590,6 +1699,24 @@ PanelWindow {
                                                     return widgetLoader.item.isPressed;
                                                 return complexHoldArea.pressed;
                                             }
+                                            // Phase G3 hotfix: alias the
+                                            // EditOverlay id so
+                                            // morphCompleteTimer (declared
+                                            // in expandedOverlay scope,
+                                            // outside the Repeater) can
+                                            // read dragActive when
+                                            // restoring the scale binding
+                                            // after a close. widgetOverlay
+                                            // is a Repeater-child id and
+                                            // is not hoisted into the
+                                            // Timer's scope; this property
+                                            // re-exports it from widgetBg
+                                            // (whose reference is already
+                                            // stored in
+                                            // expandedOverlay.sourceItem,
+                                            // so any code with `s` can do
+                                            // `s.dragOverlay.dragActive`).
+                                            property var dragOverlay: widgetOverlay
 
                                             scale: widgetOverlay.dragActive ? 1.05 : (isItemPressed ? 0.95 : 1.0)
                                             Behavior on scale {
@@ -1614,10 +1741,19 @@ PanelWindow {
                                                 enabled: !controlPanel.editMode && widgetLoader.item !== null && widgetLoader.item.hasExpandedView === true && widgetLoader.item.isSimpleToggle !== true
                                                 pressAndHoldInterval: 300
                                                 onPressAndHold: {
-                                                    controlPanel.openExpandedView(widgetBg, widgetLoader.item);
+                                                    controlPanel.openExpandedView(widgetBg, widgetLoader.item, delegateItem);
                                                 }
                                             }
 
+                                            // ── Toggle's own content (the compact view) ──
+                                            // Fades out during the morph so the expanded view's
+                                            // content can fade in inside the same widgetBg.
+                                            // Edit-mode guard keeps edit-mode direct opacity
+                                            // writes instant (the drag-ghost sets opacity on
+                                            // widgetBg directly, not on widgetLoader, so this
+                                            // Behavior isn't actually triggered by the ghost,
+                                            // but the guard is kept for symmetry with the
+                                            // earlier phases' pattern).
                                             Loader {
                                                 id: widgetLoader
                                                 anchors.fill: parent
@@ -1625,12 +1761,20 @@ PanelWindow {
                                                 asynchronous: true
                                                 property var modelData: model
                                                 source: model.source || ""
+                                                opacity: expandedOverlay.isExpanded ? 0.0 : 1.0
+                                                Behavior on opacity {
+                                                    enabled: !controlPanel.editMode
+                                                    NumberAnimation {
+                                                        duration: 400
+                                                        easing.type: Easing.OutExpo
+                                                    }
+                                                }
                                                 onLoaded: {
                                                     // Connect expandRequested signal for widgets that handle their own hold detection
                                                     if (item && item.expandRequested) {
                                                         item.expandRequested.connect(function () {
                                                             if (!controlPanel.editMode && item.hasExpandedView) {
-                                                                controlPanel.openExpandedView(widgetBg, item);
+                                                                controlPanel.openExpandedView(widgetBg, item, delegateItem);
                                                             }
                                                         });
                                                     }
@@ -1640,12 +1784,22 @@ PanelWindow {
                                             // ── Shell-provided toggle chrome for simple toggles ──
                                             // If the loaded widget has `isSimpleToggle: true`, the shell
                                             // handles all styling (active bg, icon, label, click).
+                                            // Same opacity-crossfade as widgetLoader: chrome fades
+                                            // out during the morph, expandedView fades in on top.
                                             Rectangle {
                                                 id: toggleChrome
                                                 anchors.fill: parent
                                                 visible: widgetLoader.item && widgetLoader.item.isSimpleToggle === true
                                                 radius: widgetBg.radius
                                                 color: "transparent"
+                                                opacity: expandedOverlay.isExpanded ? 0.0 : 1.0
+                                                Behavior on opacity {
+                                                    enabled: !controlPanel.editMode
+                                                    NumberAnimation {
+                                                        duration: 400
+                                                        easing.type: Easing.OutExpo
+                                                    }
+                                                }
                                                 Behavior on color {
                                                     ColorAnimation {
                                                         duration: 200
@@ -1807,7 +1961,14 @@ PanelWindow {
                                                 MouseArea {
                                                     id: simpleToggleMouse
                                                     anchors.fill: parent
-                                                    enabled: !controlPanel.editMode
+                                                    // Phase G2: disable while expanded. toggleChrome's
+                                                    // opacity:0 doesn't disable input, so without this
+                                                    // gate simpleToggleMouse would still fire the compact
+                                                    // toggle's toggled() when clicks propagate through
+                                                    // the expandedLoader (notably during the brief load
+                                                    // window before the expanded component's MouseAreas
+                                                    // are in the scene graph).
+                                                    enabled: !controlPanel.editMode && !expandedOverlay.isExpanded
                                                     pressAndHoldInterval: 300
                                                     Accessible.name: (widgetLoader.item && widgetLoader.item.toggleName) || "Toggle"
                                                     Accessible.role: Accessible.Button
@@ -1817,9 +1978,79 @@ PanelWindow {
                                                     }
                                                     onPressAndHold: {
                                                         if (widgetLoader.item && widgetLoader.item.hasExpandedView) {
-                                                            controlPanel.openExpandedView(widgetBg, widgetLoader.item);
+                                                            controlPanel.openExpandedView(widgetBg, widgetLoader.item, delegateItem);
                                                         }
                                                     }
+                                                }
+                                            }
+
+                                            // ── Expanded view content (Phase D) ──
+                                            // Lives INSIDE widgetBg (same parent as widgetLoader +
+                                            // toggleChrome), so the expanded view appears inside
+                                            // the morphing widget rather than in a separate
+                                            // container. Opacity stays asymmetric on purpose:
+                                            // 200ms in (fast arrival) vs the 400ms toggle
+                                            // content fade-out (slow absorption), biasing the
+                                            // read toward "the expanded view has arrived" while
+                                            // the toggle is still bleeding out.
+                                            Loader {
+                                                id: expandedLoader
+                                                anchors.fill: parent
+                                                anchors.margins: 24
+                                                focus: true
+                                                asynchronous: true
+                                                // Phase E: only the morph-target cell
+                                                // instantiates the expanded view. Phase D
+                                                // moved this Loader from a singleton (inside
+                                                // the deleted expandedCard) into per-cell
+                                                // widgetBg but forgot to gate active/opacity
+                                                // on the source check, so every cell ended
+                                                // up showing the expanded view simultaneously.
+                                                active: expandedOverlay.sourceItem === widgetBg
+                                                sourceComponent: (expandedOverlay.isExpanded && widgetLoader.item) ? widgetLoader.item.expandedComponent : null
+                                                opacity: (expandedOverlay.isExpanded && expandedOverlay.sourceItem === widgetBg) ? 1.0 : 0.0
+                                                Behavior on opacity {
+                                                    NumberAnimation {
+                                                        duration: 200
+                                                    }
+                                                }
+                                                // Phase G: re-measure the loaded expanded
+                                                // component and resize the card if its
+                                                // implicitHeight differs from the first-pass
+                                                // morph target (expandedHeight). Components
+                                                // without implicitHeight (Bluetooth) early-
+                                                // return and stay at expandedHeight.
+                                                onLoaded: {
+                                                    if (expandedOverlay.sourceItem !== widgetBg)
+                                                        return;
+                                                    let implH = item.implicitHeight || 0;
+                                                    if (implH <= 0)
+                                                        return;
+                                                    // +48 matches expandedLoader's
+                                                    // anchors.margins: 24 top + 24 bottom.
+                                                    let desired = implH + 48;
+                                                    let maxH = Math.min(gridWrapper.height - 40, 680);
+                                                    if (maxH > 0)
+                                                        desired = Math.min(desired, maxH);
+                                                    // Skip the tween if we're already there
+                                                    // (e.g. PowerProfile: expandedHeight=320,
+                                                    // implH+48=320, no resize needed).
+                                                    if (Math.abs(desired - widgetBg.height) < 4)
+                                                        return;
+                                                    // Flip morphState back to "opening" so the
+                                                    // Behavior on height re-enables for the
+                                                    // resize tween, recenter, and write the new
+                                                    // height. The Qt.callLater below restores
+                                                    // the latched "open" state once the tween
+                                                    // is in flight.
+                                                    widgetBg.morphState = "opening";
+                                                    widgetBg.y = (gridWrapper.height - desired) / 2;
+                                                    widgetBg.height = desired;
+                                                    expandedOverlay.computedTargetHeight = desired;
+                                                    Qt.callLater(() => {
+                                                        if (widgetBg.morphState === "opening")
+                                                            widgetBg.morphState = "open";
+                                                    });
                                                 }
                                             }
                                         }
@@ -2392,7 +2623,18 @@ PanelWindow {
                 }
             }
 
-            // ── Expanded View Overlay ──
+            // ── Expanded View Overlay (Phase D slimmed) ──
+            // Only two responsibilities remain:
+            //   1. Click-to-close backdrop (this Item itself, full-overlay,
+            //      with a MouseArea that catches outside-click to close).
+            //   2. State owner: isExpanded, deferred-open slot, per-open
+            //      geometry parameters (startX/Y/Width/Height, sourceRadius,
+            //      computedTargetHeight), and open()/close() that drive the
+            //      morph on `sourceItem` (which is now widgetBg itself,
+            //      reparented into gridWrapper since Phase B).
+            //
+            // No morph container lives here anymore. expandedCard is gone;
+            // expandedLoader lives inside widgetBg.
             Item {
                 id: expandedOverlay
                 anchors.fill: parent
@@ -2402,12 +2644,35 @@ PanelWindow {
 
                 property var sourceItem: null
                 property var widgetItem: null
+                // Deferred-open slot: if openExpandedView() is called while
+                // qs.morphComplete is false (e.g. user presses-and-holds a
+                // toggle in the same gesture that opens the panel), we stash
+                // the args here and replay them once the panel bloom settles.
+                property var pendingSourceRect: null
+                property var pendingWidgetItem: null
+                property var pendingDelegateItemRef: null
+                property bool hasPendingOpen: false
                 property real startX: 0
                 property real startY: 0
                 property real startWidth: 0
                 property real startHeight: 0
-                property real targetHeight: 420
+                // Source widget's natural radius captured at open() time.
+                // Used by close() to animate back to the source's actual
+                // shape without depending on the live (animated) width/
+                // height values, which would drift during the morph.
+                property real sourceRadius: 0
+                // Target height computed once per open() — replaces the
+                // previous Qt.binding() chain that re-evaluated on every
+                // geometry change and produced visible first-frame jumps.
+                property real computedTargetHeight: 0
                 property bool isExpanded: false
+                // Captured at open() time so the morphCompleteTimer
+                // (declared outside the Repeater delegate) can restore
+                // the cell-bound geometry bindings on the morphed
+                // widgetBg after the close animation. Without this,
+                // the Timer's onTriggered can't reference `delegateItem`
+                // because it lives outside the Repeater's scope.
+                property var delegateItemRef: null
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -2416,124 +2681,279 @@ PanelWindow {
                     }
                 }
 
+                // Drive the morph on `sourceItem` (widgetBg itself). The
+                // geometry Behaviors on widgetBg (gated on isMorphing)
+                // animate the geometry changes written here.
                 function open() {
                     isExpanded = true;
                     opacity = 1.0;
 
-                    expandedLoader.sourceComponent = widgetItem.expandedComponent;
+                    // Resolve the expanded component (already lives inside
+                    // widgetBg now, so no sourceComponent assignment is
+                    // needed here — expandedLoader reads widgetItem directly
+                    // via its binding). Phase G: first-pass target uses
+                    // expandedHeight (a fixed per-toggle property) so the
+                    // morph has a stable target. expandedLoader.onLoaded
+                    // re-measures the loaded component's implicitHeight and
+                    // tweens to that size if it differs from expandedHeight.
+                    // Dropped the previous `w.implicitHeight` branch — it
+                    // always read 0 because `w` is the toggle widget root
+                    // (an Item with no implicitHeight), not the expanded
+                    // component.
+                    let w = widgetItem;
+                    let explicitH = (w && w.expandedHeight > 0) ? w.expandedHeight : 0;
+                    let targetH = explicitH > 0 ? explicitH : 420;
 
-                    let targetW = expandedOverlay.width;
-                    let targetX = 0;
+                    let maxH = Math.min(gridWrapper.height - 40, 680);
+                    if (maxH > 0) {
+                        targetH = Math.min(targetH, maxH);
+                    }
+                    expandedOverlay.computedTargetHeight = targetH;
 
-                    expandedCard.x = targetX;
-                    expandedCard.width = targetW;
+                    // Drive the actual toggle's geometry morph. Use
+                    // gridWrapper bounds (the parent of widgetBg) so the
+                    // morphed card doesn't overflow the Flickable's 24px
+                    // left/right margins. Phase D used expandedOverlay.width
+                    // (= controlPanel.width = 400) which overflowed
+                    // gridWrapper (= 352) by 48px and rendered past the
+                    // panel's right edge.
+                    if (sourceItem) {
+                        sourceItem.morphState = "opening";
+                        // Phase G2: break the radius binding FIRST. The
+                        // radius binding (Math.min(width, height) / 2 for
+                        // 1x1 cells) captures width and height as
+                        // dependencies; if width/height are assigned before
+                        // the binding is broken, the binding re-evaluates
+                        // synchronously and writes a transient large radius
+                        // (e.g. 176 for 352x480). The Behavior on radius
+                        // then animates from that transient value toward 16
+                        // instead of from the natural 55, so the corner
+                        // rounding visibly lags behind the geometry morph.
+                        sourceItem.radius = 16;
+                        sourceItem.x = 0;
+                        sourceItem.y = (gridWrapper.height - targetH) / 2;
+                        sourceItem.width = gridWrapper.width;
+                        sourceItem.height = targetH;
+                        // Cancel any residual press-scale so the morph
+                        // geometry isn't composed with a 0.95 scale.
+                        sourceItem.scale = 1.0;
+                    }
 
-                    expandedOverlay.targetHeight = Qt.binding(function () {
-                        let targetH = 420; // fallback
-                        let implicitH = (expandedLoader.item && expandedLoader.item.implicitHeight > 0) ? expandedLoader.item.implicitHeight + 48 : 0;
-                        let explicitH = (widgetItem && widgetItem.expandedHeight > 0) ? widgetItem.expandedHeight : 0;
-
-                        if (implicitH > 0) {
-                            targetH = implicitH;
-                        } else if (explicitH > 0) {
-                            targetH = explicitH;
-                        }
-
-                        let maxH = Math.min(expandedOverlay.height - 40, 680);
-                        if (maxH > 0) {
-                            targetH = Math.min(targetH, maxH);
-                        }
-                        return targetH;
+                    // After the open morph lands, latch into "open" so any
+                    // minor geometry tweaks don't re-trigger Behaviors.
+                    Qt.callLater(() => {
+                        if (sourceItem && sourceItem.morphState === "opening")
+                            sourceItem.morphState = "open";
                     });
-
-                    expandedCard.height = Qt.binding(function () {
-                        return expandedOverlay.targetHeight;
-                    });
-                    expandedCard.y = Qt.binding(function () {
-                        return (expandedOverlay.height - expandedOverlay.targetHeight) / 2;
-                    });
-
-                    expandedCard.radius = 16;
                 }
 
                 function close() {
+                    // Phase F: write geometry BEFORE flipping isExpanded.
+                    // With isMorphing now gated on morphState (not on
+                    // isExpanded), the Behavior fires on these assignments
+                    // regardless of isExpanded. Driving the geometry first
+                    // lets the 400ms OutExpo shrink run, while the
+                    // isExpanded flip below triggers the content fade-in
+                    // (400ms) and expandedLoader fade-out (200ms) in
+                    // parallel.
+                    if (sourceItem) {
+                        sourceItem.morphState = "closing";
+                        // Phase G3: explicitly animate the radius. The
+                        // Behavior on radius may not fire reliably on
+                        // the first assignment after morphState flips
+                        // (state-machine batching at the same event
+                        // boundary can swallow the change in some Qt
+                        // versions), so we drive the close corner-rounding
+                        // animation directly. The static sourceItem.radius
+                        // write below stays as a fallback: either the
+                        // animation lands or the static value renders.
+                        // Create + assign target in one go. Property
+                        // name keys in the createObject() literal must
+                        // not be QML reserved words; `target` is fine,
+                        // `property` is not. So we pass target here and
+                        // assign `property`/to/duration/easing via
+                        // bracket access below.
+                        let radiusAnim = numberAnimationComponent.createObject(sourceItem, {
+                            target: sourceItem
+                        });
+                        if (radiusAnim) {
+                            radiusAnim["property"] = "radius";
+                            radiusAnim.to = sourceRadius > 0 ? sourceRadius : 24;
+                            radiusAnim.duration = 400;
+                            radiusAnim.easing.type = Easing.OutExpo;
+                            radiusAnim.start();
+                        }
+                        // Phase G2: keep radius BEFORE width/height for
+                        // symmetry with open(). The radius binding is
+                        // already broken from open() (only restored by
+                        // morphCompleteTimer 400ms after close() lands),
+                        // so close() should already work — but keeping
+                        // the same order makes the code robust against
+                        // any future change that restores the binding
+                        // earlier.
+                        sourceItem.radius = sourceRadius > 0 ? sourceRadius : 24;
+                        sourceItem.x = startX;
+                        sourceItem.y = startY;
+                        sourceItem.width = startWidth;
+                        sourceItem.height = startHeight;
+                    }
+
                     isExpanded = false;
                     opacity = 0.0;
 
-                    // Break bindings and morph back to original slot
-                    expandedOverlay.targetHeight = 420; // Break binding
-                    expandedCard.height = startHeight;
-                    expandedCard.y = startY;
-                    expandedCard.x = startX;
-                    expandedCard.width = startWidth;
-                    expandedCard.radius = (startWidth === startHeight) ? startWidth / 2 : 24;
+                    // After the close morph lands, snap the widgetBg
+                    // geometry bindings back to the cell-bound form. Using
+                    // Qt.binding() restores the original conditional
+                    // bindings (lines ~1563-1565) so the toggle reappears
+                    // with its natural radius (auto-computed from cell
+                    // size for 1x1 circles, fixed 16 for 2x2+).
+                    morphCompleteTimer.restart();
+                }
+
+                // Phase G3 hotfix: factory for the deterministic
+                // close-radius NumberAnimation. Earlier this declared
+                // `target: sourceItem` in the NumberAnimation body,
+                // but sourceItem is a property on the grandparent
+                // expandedOverlay, not a QML id in the new object's
+                // scope chain — QML's JS resolver returned a
+                // ReferenceError at load time, the Component
+                // instantiation silently failed, and createObject()
+                // returned null in close(). Hence no animation.
+                // Fix: leave target unset in the factory; pass it
+                // imperatively from close() via
+                // createObject(sourceItem, { target: sourceItem }).
+                Component {
+                    id: numberAnimationComponent
+                    NumberAnimation {
+                        duration: 400
+                        easing.type: Easing.OutExpo
+                    }
+                }
+
+                // Restore the cell-bound geometry bindings on the morphed
+                // widgetBg once the close animation has finished.
+                // Reads dimension values from expandedOverlay.delegateItemRef
+                // (the Repeater delegate) and expands them into
+                // bindings via Qt.binding(), since this Timer runs in
+                // expandedOverlay scope and doesn't have direct access
+                // to either `delegateItem` or `model`.
+                Timer {
+                    id: morphCompleteTimer
+                    interval: 400
+                    repeat: false
+                    onTriggered: {
+                        let s = expandedOverlay.sourceItem;
+                        if (!s || s.morphState !== "closing")
+                            return;
+                        let del = expandedOverlay.delegateItemRef;
+                        s.morphState = "idle";
+                        s.x = Qt.binding(function() { return del ? del.x : 0; });
+                        s.y = Qt.binding(function() { return del ? del.y : 0; });
+                        s.width = Qt.binding(function() { return del ? del.width : 0; });
+                        s.height = Qt.binding(function() { return del ? del.height : 0; });
+                        // Phase G4: simplified to read sourceRadius
+                        // (captured at open() time) directly. sourceRadius
+                        // already encodes the natural radius per the
+                        // formula in doOpenExpandedView, which matches
+                        // the cell-bound binding at line 1598. Reading
+                        // `width` / `height` here would force the
+                        // binding to track cell resizes, but the
+                        // 4-col fixed-cellSize grid has no in-place
+                        // resize path (only swap / reorder), so
+                        // sourceRadius is stable per cell. Skipping
+                        // the re-derivation also drops the del.model /
+                        // del.Layout fallback chain.
+                        s.radius = Qt.binding(function() {
+                            return expandedOverlay.sourceRadius > 0 ? expandedOverlay.sourceRadius : 16;
+                        });
+                        // Phase G3: restore scale binding too, so press-scale
+                        // animation works again on toggles that have
+                        // hasExpandedView (network, bluetooth, power profile,
+                        // screen record, media). Without this,
+                        // sourceItem.scale = 1.0 in open() permanently breaks
+                        // the binding and subsequent presses can never
+                        // animate the 1.0 -> 0.95 -> 1.0 shrink.
+                        s.scale = Qt.binding(function() {
+                            // Phase G3 hotfix: use s.dragOverlay /
+                            // s.isItemPressed instead of the bare
+                            // widgetOverlay / isItemPressed ids. The
+                            // bare ids are Repeater-child ids and not
+                            // hoisted into expandedOverlay's scope, so
+                            // the original binding threw ReferenceError
+                            // when re-evaluated. Re-binding through
+                            // `s` (a captured local = widgetBg) goes
+                            // through widgetBg.dragOverlay / isItemPressed
+                            // properties, which always resolve.
+                            return s.dragOverlay.dragActive
+                                ? 1.05
+                                : (s.isItemPressed ? 0.95 : 1.0);
+                        });
+                        expandedOverlay.delegateItemRef = null;
+                    }
+                }
+
+                // Replay a deferred open() once the panel's bloom-scale
+                // spring has settled. Watches qs.morphComplete (set by
+                // onSmoothMorphProgressChanged when smoothMorphProgress
+                // reaches 1.0).
+                Connections {
+                    target: qs
+                    function onMorphCompleteChanged() {
+                        // Phase G3: scope-qualify. replayPendingOpen
+                        // lives on controlPanel (defined at :1264), not
+                        // on expandedOverlay, so the unqualified call
+                        // throws ReferenceError and the deferred open
+                        // is silently dropped.
+                        if (qs.morphComplete)
+                            controlPanel.replayPendingOpen();
+                    }
                 }
 
                 MouseArea {
+                    // Phase G4: forward in-card touches to inner Flickables
+                    // so touch scrolling works inside the expanded view
+                    // (Network wifi list, Bluetooth device list, etc.).
+                    //
+                    // Phase G2 used propagateComposedEvents + onClicked's
+                    // `mouse.accepted = false` to pass CLICKS through.
+                    // Touch SCROLLS (press → move → release) need an
+                    // explicit onPressed reject — without it the outer
+                    // MouseArea implicitly claims the press (because
+                    // onClicked is attached), the inner Flickable never
+                    // receives the gesture, and scrolling silently fails.
+                    // Out-of-card presses are still claimed by default
+                    // (mouse.accepted = true), so dismiss-on-click-outside
+                    // continues to work.
                     anchors.fill: parent
-                    onClicked: expandedOverlay.close()
-                }
-
-                Rectangle {
-                    id: expandedCard
-                    property bool animationsEnabled: true
-                    color: "transparent"
-                    clip: true
-
-                    MaterialSurface {
-                        anchors.fill: parent
-                        radius: parent.radius
+                    acceptedButtons: Qt.LeftButton
+                    propagateComposedEvents: true
+                    onPressed: (mouse) => {
+                        let s = expandedOverlay.sourceItem;
+                        if (!s)
+                            return;
+                        let inside = mouse.x >= s.x
+                                  && mouse.x <  s.x + s.width
+                                  && mouse.y >= s.y
+                                  && mouse.y <  s.y + s.height;
+                        if (inside)
+                            mouse.accepted = false;  // forward to Flickable / inner MouseAreas
+                        // else: leave accepted = true (default), so
+                        // onClicked will fire on release without movement → dismiss
                     }
-
-                    Behavior on x {
-                        enabled: expandedCard.animationsEnabled
-                        NumberAnimation {
-                            duration: 400
-                            easing.type: Easing.OutExpo
+                    onClicked: (mouse) => {
+                        // Only fires for out-of-card presses now (in-card
+                        // presses were rejected in onPressed).
+                        let s = expandedOverlay.sourceItem;
+                        if (!s) {
+                            expandedOverlay.close();
+                            return;
                         }
-                    }
-                    Behavior on y {
-                        enabled: expandedCard.animationsEnabled
-                        NumberAnimation {
-                            duration: 400
-                            easing.type: Easing.OutExpo
-                        }
-                    }
-                    Behavior on width {
-                        enabled: expandedCard.animationsEnabled
-                        NumberAnimation {
-                            duration: 400
-                            easing.type: Easing.OutExpo
-                        }
-                    }
-                    Behavior on height {
-                        enabled: expandedCard.animationsEnabled
-                        NumberAnimation {
-                            duration: 400
-                            easing.type: Easing.OutExpo
-                        }
-                    }
-                    Behavior on radius {
-                        enabled: expandedCard.animationsEnabled
-                        NumberAnimation {
-                            duration: 400
-                            easing.type: Easing.OutExpo
-                        }
-                    }
-
-                    // Only show loader content when fully expanded to avoid layout jumping during morph
-                    Loader {
-                        id: expandedLoader
-                        anchors.fill: parent
-                        anchors.margins: 24
-                        focus: true
-                        asynchronous: true
-                        opacity: expandedOverlay.isExpanded ? 1.0 : 0.0
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 200
-                            }
-                        }
+                        let inside = mouse.x >= s.x
+                                  && mouse.x <  s.x + s.width
+                                  && mouse.y >= s.y
+                                  && mouse.y <  s.y + s.height;
+                        if (!inside)
+                            expandedOverlay.close();
                     }
                 }
             }
