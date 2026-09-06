@@ -1931,7 +1931,14 @@ Behavior on radius {
                                                 MouseArea {
                                                     id: simpleToggleMouse
                                                     anchors.fill: parent
-                                                    enabled: !controlPanel.editMode
+                                                    // Phase G2: disable while expanded. toggleChrome's
+                                                    // opacity:0 doesn't disable input, so without this
+                                                    // gate simpleToggleMouse would still fire the compact
+                                                    // toggle's toggled() when clicks propagate through
+                                                    // the expandedLoader (notably during the brief load
+                                                    // window before the expanded component's MouseAreas
+                                                    // are in the scene graph).
+                                                    enabled: !controlPanel.editMode && !expandedOverlay.isExpanded
                                                     pressAndHoldInterval: 300
                                                     Accessible.name: (widgetLoader.item && widgetLoader.item.toggleName) || "Toggle"
                                                     Accessible.role: Accessible.Button
@@ -2682,11 +2689,21 @@ Behavior on radius {
                     // panel's right edge.
                     if (sourceItem) {
                         sourceItem.morphState = "opening";
+                        // Phase G2: break the radius binding FIRST. The
+                        // radius binding (Math.min(width, height) / 2 for
+                        // 1x1 cells) captures width and height as
+                        // dependencies; if width/height are assigned before
+                        // the binding is broken, the binding re-evaluates
+                        // synchronously and writes a transient large radius
+                        // (e.g. 176 for 352x480). The Behavior on radius
+                        // then animates from that transient value toward 16
+                        // instead of from the natural 55, so the corner
+                        // rounding visibly lags behind the geometry morph.
+                        sourceItem.radius = 16;
                         sourceItem.x = 0;
                         sourceItem.y = (gridWrapper.height - targetH) / 2;
                         sourceItem.width = gridWrapper.width;
                         sourceItem.height = targetH;
-                        sourceItem.radius = 16;
                         // Cancel any residual press-scale so the morph
                         // geometry isn't composed with a 0.95 scale.
                         sourceItem.scale = 1.0;
@@ -2711,11 +2728,19 @@ Behavior on radius {
                     // parallel.
                     if (sourceItem) {
                         sourceItem.morphState = "closing";
+                        // Phase G2: assign radius BEFORE width/height for
+                        // symmetry with open(). The radius binding is
+                        // already broken from open() (only restored by
+                        // morphCompleteTimer 400ms after close() lands),
+                        // so close() should already work — but keeping
+                        // the same order makes the code robust against
+                        // any future change that restores the binding
+                        // earlier.
+                        sourceItem.radius = sourceRadius > 0 ? sourceRadius : 24;
                         sourceItem.x = startX;
                         sourceItem.y = startY;
                         sourceItem.width = startWidth;
                         sourceItem.height = startHeight;
-                        sourceItem.radius = sourceRadius > 0 ? sourceRadius : 24;
                     }
 
                     isExpanded = false;
@@ -2778,15 +2803,20 @@ Behavior on radius {
                 }
 
                 MouseArea {
-                    // Phase G: only intercept clicks OUTSIDE the morphed
+                    // Phase G2: only intercept clicks OUTSIDE the morphed
                     // card. Phase F left a panel-wide MouseArea that ate
                     // every click meant for switches/sliders/rows inside
-                    // the expanded view. Hit-test against sourceItem's
-                    // live (post-morph) bounds in the same coord space
-                    // (sourceItem and expandedOverlay are both children
-                    // of controlPanel/gridWrapper).
+                    // the expanded view. Phase G hit-tested the rect but
+                    // still auto-accepted every event, so inner
+                    // MouseAreas (ExpandedHeader switch, network rows,
+                    // TouchComboBox, etc.) never saw the click. Phase G2
+                    // enables propagateComposedEvents and rejects
+                    // in-card clicks so they pass down through the
+                    // stacking order to expandedLoader.item's children
+                    // MouseAreas.
                     anchors.fill: parent
                     acceptedButtons: Qt.LeftButton
+                    propagateComposedEvents: true
                     onClicked: (mouse) => {
                         let s = expandedOverlay.sourceItem;
                         if (!s) {
@@ -2797,8 +2827,12 @@ Behavior on radius {
                                   && mouse.x <  s.x + s.width
                                   && mouse.y >= s.y
                                   && mouse.y <  s.y + s.height;
-                        if (!inside)
+                        if (inside) {
+                            mouse.accepted = false;  // let it propagate to inner MouseAreas
+                        } else {
                             expandedOverlay.close();
+                            // mouse.accepted stays true (default) — consume the dismiss click
+                        }
                     }
                 }
             }
