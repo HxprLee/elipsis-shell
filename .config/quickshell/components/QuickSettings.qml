@@ -1229,15 +1229,33 @@ PanelWindow {
                 expandedOverlay.startWidth = sourceRect.width;
                 expandedOverlay.startHeight = sourceRect.height;
                 // Capture the source widget's natural radius so close()
-                // animates back to the source's actual shape. For 1x1
-                // toggles this is the circle radius (width/height/2);
-                // for 2x2 toggles the source uses a 16px rounded square,
-                // so we fall back to 24px (the slightly tighter inner
-                // card radius) to avoid a visible flatten-then-pop.
+                // animates back to a value that EXACTLY matches the
+                // cell-bound binding at line 1598:
+                //   radius: (model.colSpan >= 2 && model.rowSpan >= 2)
+                //       ? 16 : Math.min(width, height) / 2
+                // Without this alignment, morphCompleteTimer's binding
+                // restore forces a one-frame snap from the close-
+                // animation target (24 or 84) to the natural value (38
+                // or 16), which the user reads as the toggle "popping"
+                // back into place. With alignment, the close animation
+                // lands on the natural value and the binding restore
+                // produces the same number — no snap.
+                //
+                // delegateRef is the Repeater delegate (`delegateItem`),
+                // which carries model.colSpan / model.rowSpan as
+                // Repeater-delegate properties. (model.colSpan/rowSpan
+                // is also accessible directly from widgetBg because
+                // widgetBg is also inside the Repeater delegate, but
+                // doOpenExpandedView is called from the touch layer
+                // which is outside the Repeater and only has delegateRef.)
+                // Falling back to (1, 1) keeps the previous behavior
+                // (Math.min(w,h)/2) for any future caller that passes null.
+                let cs = delegateRef && delegateRef.model ? delegateRef.model.colSpan : 1;
+                let rs = delegateRef && delegateRef.model ? delegateRef.model.rowSpan : 1;
                 expandedOverlay.sourceRadius =
-                    (sourceRect.width === sourceRect.height)
-                        ? sourceRect.width / 2
-                        : 24;
+                    (cs >= 2 && rs >= 2)
+                        ? 16
+                        : Math.min(sourceRect.width, sourceRect.height) / 2;
 
                 // Capture the repeating-delegateItem reference at open time so
                 // morphCompleteTimer (declared outside the Repeater) can
@@ -2834,20 +2852,25 @@ Behavior on radius {
                         if (!s || s.morphState !== "closing")
                             return;
                         let del = expandedOverlay.delegateItemRef;
-                        let cs = 0;
-                        let rs = 0;
-                        try {
-                            cs = del && del.model ? del.model.colSpan : (del && del.Layout ? del.Layout.columnSpan : 0);
-                            rs = del && del.model ? del.model.rowSpan : (del && del.Layout ? del.Layout.rowSpan : 0);
-                        } catch (e) {}
                         s.morphState = "idle";
                         s.x = Qt.binding(function() { return del ? del.x : 0; });
                         s.y = Qt.binding(function() { return del ? del.y : 0; });
                         s.width = Qt.binding(function() { return del ? del.width : 0; });
                         s.height = Qt.binding(function() { return del ? del.height : 0; });
+                        // Phase G4: simplified to read sourceRadius
+                        // (captured at open() time) directly. sourceRadius
+                        // already encodes the natural radius per the
+                        // formula in doOpenExpandedView, which matches
+                        // the cell-bound binding at line 1598. Reading
+                        // `width` / `height` here would force the
+                        // binding to track cell resizes, but the
+                        // 4-col fixed-cellSize grid has no in-place
+                        // resize path (only swap / reorder), so
+                        // sourceRadius is stable per cell. Skipping
+                        // the re-derivation also drops the del.model /
+                        // del.Layout fallback chain.
                         s.radius = Qt.binding(function() {
-                            return (cs >= 2 && rs >= 2)
-                                ? 16 : Math.min(width, height) / 2;
+                            return expandedOverlay.sourceRadius > 0 ? expandedOverlay.sourceRadius : 16;
                         });
                         // Phase G3: restore scale binding too, so press-scale
                         // animation works again on toggles that have
@@ -2893,21 +2916,39 @@ Behavior on radius {
                 }
 
                 MouseArea {
-                    // Phase G2: only intercept clicks OUTSIDE the morphed
-                    // card. Phase F left a panel-wide MouseArea that ate
-                    // every click meant for switches/sliders/rows inside
-                    // the expanded view. Phase G hit-tested the rect but
-                    // still auto-accepted every event, so inner
-                    // MouseAreas (ExpandedHeader switch, network rows,
-                    // TouchComboBox, etc.) never saw the click. Phase G2
-                    // enables propagateComposedEvents and rejects
-                    // in-card clicks so they pass down through the
-                    // stacking order to expandedLoader.item's children
-                    // MouseAreas.
+                    // Phase G4: forward in-card touches to inner Flickables
+                    // so touch scrolling works inside the expanded view
+                    // (Network wifi list, Bluetooth device list, etc.).
+                    //
+                    // Phase G2 used propagateComposedEvents + onClicked's
+                    // `mouse.accepted = false` to pass CLICKS through.
+                    // Touch SCROLLS (press → move → release) need an
+                    // explicit onPressed reject — without it the outer
+                    // MouseArea implicitly claims the press (because
+                    // onClicked is attached), the inner Flickable never
+                    // receives the gesture, and scrolling silently fails.
+                    // Out-of-card presses are still claimed by default
+                    // (mouse.accepted = true), so dismiss-on-click-outside
+                    // continues to work.
                     anchors.fill: parent
                     acceptedButtons: Qt.LeftButton
                     propagateComposedEvents: true
+                    onPressed: (mouse) => {
+                        let s = expandedOverlay.sourceItem;
+                        if (!s)
+                            return;
+                        let inside = mouse.x >= s.x
+                                  && mouse.x <  s.x + s.width
+                                  && mouse.y >= s.y
+                                  && mouse.y <  s.y + s.height;
+                        if (inside)
+                            mouse.accepted = false;  // forward to Flickable / inner MouseAreas
+                        // else: leave accepted = true (default), so
+                        // onClicked will fire on release without movement → dismiss
+                    }
                     onClicked: (mouse) => {
+                        // Only fires for out-of-card presses now (in-card
+                        // presses were rejected in onPressed).
                         let s = expandedOverlay.sourceItem;
                         if (!s) {
                             expandedOverlay.close();
@@ -2917,12 +2958,8 @@ Behavior on radius {
                                   && mouse.x <  s.x + s.width
                                   && mouse.y >= s.y
                                   && mouse.y <  s.y + s.height;
-                        if (inside) {
-                            mouse.accepted = false;  // let it propagate to inner MouseAreas
-                        } else {
+                        if (!inside)
                             expandedOverlay.close();
-                            // mouse.accepted stays true (default) — consume the dismiss click
-                        }
                     }
                 }
             }
