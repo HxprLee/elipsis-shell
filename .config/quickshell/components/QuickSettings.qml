@@ -1576,10 +1576,6 @@ PanelWindow {
                                             // fades out and the new expandedLoader content fades
                                             // in inside this same widget.)
                                             property bool isCircle: model.colSpan === 1 && model.rowSpan === 1
-                                            // True only when this widgetBg is the current
-                                            // morph target. Used to gate the morph-tuned
-                                            // Behaviors below so they don't fire spuriously.
-                                            property bool isMorphing: expandedOverlay.isExpanded && expandedOverlay.sourceItem === widgetBg
                                             // 4-state geometry-animation machine (lives on the
                                             // morph container now, not on a separate card).
                                             //   idle      - geometry assignments instant (default)
@@ -1587,6 +1583,14 @@ PanelWindow {
                                             //   open      - holding expanded geometry; animations idle
                                             //   closing   - Behaviors animating back to source bounds
                                             property string morphState: "idle"
+                                            // Phase F: gate the geometry Behaviors on the local
+                                            // morphState (a value we control explicitly via
+                                            // open/close/timer) rather than on expandedOverlay.isExpanded
+                                            // (a sibling flag that flips the moment close() runs).
+                                            // Coupling made close() render the shrink instantly because
+                                            // the Behavior's `enabled:` was already false by the time
+                                            // we wrote the geometry.
+                                            property bool isMorphing: morphState !== "idle"
                                             width: delegateItem.width
                                             height: delegateItem.height
                                             x: delegateItem.x
@@ -1712,7 +1716,7 @@ Behavior on radius {
                                                 asynchronous: true
                                                 property var modelData: model
                                                 source: model.source || ""
-                                                opacity: (expandedOverlay.isExpanded && expandedOverlay.sourceItem === widgetBg) ? 0.0 : 1.0
+                                                opacity: expandedOverlay.isExpanded ? 0.0 : 1.0
                                                 Behavior on opacity {
                                                     enabled: !controlPanel.editMode
                                                     NumberAnimation {
@@ -1743,7 +1747,7 @@ Behavior on radius {
                                                 visible: widgetLoader.item && widgetLoader.item.isSimpleToggle === true
                                                 radius: widgetBg.radius
                                                 color: "transparent"
-                                                opacity: (expandedOverlay.isExpanded && expandedOverlay.sourceItem === widgetBg) ? 0.0 : 1.0
+                                                opacity: expandedOverlay.isExpanded ? 0.0 : 1.0
                                                 Behavior on opacity {
                                                     enabled: !controlPanel.editMode
                                                     NumberAnimation {
@@ -2638,12 +2642,14 @@ Behavior on radius {
                 }
 
                 function close() {
-                    isExpanded = false;
-                    opacity = 0.0;
-
-                    // Animate the actual toggle back to its source bounds.
-                    // radius uses captured sourceRadius so 1x1 circles don't
-                    // overshoot during the morph.
+                    // Phase F: write geometry BEFORE flipping isExpanded.
+                    // With isMorphing now gated on morphState (not on
+                    // isExpanded), the Behavior fires on these assignments
+                    // regardless of isExpanded. Driving the geometry first
+                    // lets the 400ms OutExpo shrink run, while the
+                    // isExpanded flip below triggers the content fade-in
+                    // (400ms) and expandedLoader fade-out (200ms) in
+                    // parallel.
                     if (sourceItem) {
                         sourceItem.morphState = "closing";
                         sourceItem.x = startX;
@@ -2652,6 +2658,9 @@ Behavior on radius {
                         sourceItem.height = startHeight;
                         sourceItem.radius = sourceRadius > 0 ? sourceRadius : 24;
                     }
+
+                    isExpanded = false;
+                    opacity = 0.0;
 
                     // After the close morph lands, snap the widgetBg
                     // geometry bindings back to the cell-bound form. Using
