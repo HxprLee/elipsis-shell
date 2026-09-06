@@ -2734,8 +2734,28 @@ Behavior on radius {
                 }
 
                 MouseArea {
+                    // Phase G: only intercept clicks OUTSIDE the morphed
+                    // card. Phase F left a panel-wide MouseArea that ate
+                    // every click meant for switches/sliders/rows inside
+                    // the expanded view. Hit-test against sourceItem's
+                    // live (post-morph) bounds in the same coord space
+                    // (sourceItem and expandedOverlay are both children
+                    // of controlPanel/gridWrapper).
                     anchors.fill: parent
-                    onClicked: expandedOverlay.close()
+                    acceptedButtons: Qt.LeftButton
+                    onClicked: (mouse) => {
+                        let s = expandedOverlay.sourceItem;
+                        if (!s) {
+                            expandedOverlay.close();
+                            return;
+                        }
+                        let inside = mouse.x >= s.x
+                                  && mouse.x <  s.x + s.width
+                                  && mouse.y >= s.y
+                                  && mouse.y <  s.y + s.height;
+                        if (!inside)
+                            expandedOverlay.close();
+                    }
                 }
             }
         } // closes controlPanel
