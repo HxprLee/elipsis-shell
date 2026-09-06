@@ -1608,6 +1608,21 @@ PanelWindow {
                                                 id: bgSurface
                                                 anchors.fill: parent
                                                 radius: parent.radius
+                                                // Phase F: hide the colored backdrop of any
+                                                // non-morph cell while an expanded view is
+                                                // showing. Without this, the bgSurface stays
+                                                // at full opacity and the user sees colored
+                                                // round/pill shapes around the expanded card.
+                                                // The morph target cell stays visible (it's the
+                                                // source); only the OTHER cells fade out.
+                                                opacity: (expandedOverlay.isExpanded && expandedOverlay.sourceItem !== widgetBg) ? 0.0 : 1.0
+                                                Behavior on opacity {
+                                                    enabled: !controlPanel.editMode
+                                                    NumberAnimation {
+                                                        duration: 400
+                                                        easing.type: Easing.OutExpo
+                                                    }
+                                                }
                                                 isActive: {
                                                     if (!widgetLoader.item)
                                                         return false;
