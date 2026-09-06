@@ -2728,7 +2728,30 @@ Behavior on radius {
                     // parallel.
                     if (sourceItem) {
                         sourceItem.morphState = "closing";
-                        // Phase G2: assign radius BEFORE width/height for
+                        // Phase G3: explicitly animate the radius. The
+                        // Behavior on radius may not fire reliably on
+                        // the first assignment after morphState flips
+                        // (state-machine batching at the same event
+                        // boundary can swallow the change in some Qt
+                        // versions), so we drive the close corner-rounding
+                        // animation directly. The static sourceItem.radius
+                        // write below stays as a fallback: either the
+                        // animation lands or the static value renders.
+                        // Build via NumberAnimation component + JS
+                        // assignment — `property:` is a QML reserved
+                        // keyword, so use bracket-string access; and
+                        // QML's JS doesn't accept the empty-object
+                        // NumberAnimation{} shorthand inside imperative
+                        // code, so instantiate then assign.
+                        let radiusAnim = numberAnimationComponent.createObject(sourceItem);
+                        if (radiusAnim) {
+                            radiusAnim["property"] = "radius";
+                            radiusAnim.to = sourceRadius > 0 ? sourceRadius : 24;
+                            radiusAnim.duration = 400;
+                            radiusAnim.easing.type = Easing.OutExpo;
+                            radiusAnim.start();
+                        }
+                        // Phase G2: keep radius BEFORE width/height for
                         // symmetry with open(). The radius binding is
                         // already broken from open() (only restored by
                         // morphCompleteTimer 400ms after close() lands),
@@ -2753,6 +2776,18 @@ Behavior on radius {
                     // with its natural radius (auto-computed from cell
                     // size for 1x1 circles, fixed 16 for 2x2+).
                     morphCompleteTimer.restart();
+                }
+
+                // Phase G3: factory used by close() to drive the
+                // deterministic radius corner-rounding animation.
+                // `property:` is a QML reserved keyword, so we declare
+                // the animation declaratively here and assign properties
+                // via JS bracket access from close().
+                Component {
+                    id: numberAnimationComponent
+                    NumberAnimation {
+                        target: sourceItem
+                    }
                 }
 
                 // Restore the cell-bound geometry bindings on the morphed
@@ -2786,6 +2821,18 @@ Behavior on radius {
                             return (cs >= 2 && rs >= 2)
                                 ? 16 : Math.min(width, height) / 2;
                         });
+                        // Phase G3: restore scale binding too, so press-scale
+                        // animation works again on toggles that have
+                        // hasExpandedView (network, bluetooth, power profile,
+                        // screen record, media). Without this,
+                        // sourceItem.scale = 1.0 in open() permanently breaks
+                        // the binding and subsequent presses can never
+                        // animate the 1.0 -> 0.95 -> 1.0 shrink.
+                        s.scale = Qt.binding(function() {
+                            return widgetOverlay.dragActive
+                                ? 1.05
+                                : (isItemPressed ? 0.95 : 1.0);
+                        });
                         expandedOverlay.delegateItemRef = null;
                     }
                 }
@@ -2797,8 +2844,13 @@ Behavior on radius {
                 Connections {
                     target: qs
                     function onMorphCompleteChanged() {
+                        // Phase G3: scope-qualify. replayPendingOpen
+                        // lives on controlPanel (defined at :1264), not
+                        // on expandedOverlay, so the unqualified call
+                        // throws ReferenceError and the deferred open
+                        // is silently dropped.
                         if (qs.morphComplete)
-                            replayPendingOpen();
+                            controlPanel.replayPendingOpen();
                     }
                 }
 
