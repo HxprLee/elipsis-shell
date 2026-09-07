@@ -161,8 +161,6 @@ Item {
                 // clamps to the hardcoded [1, 4] range. With this, the
                 // max comes from the widget's own declaration.
                 let sizeArr = editOverlay.availableSizes;
-                maxAvailCs = 4;
-                maxAvailRs = 4;
                 if (sizeArr && Array.isArray(sizeArr) && sizeArr.length > 0) {
                     maxAvailCs = 1;
                     maxAvailRs = 1;
@@ -171,6 +169,21 @@ Item {
                         if (s.colSpan !== undefined) maxAvailCs = Math.max(maxAvailCs, s.colSpan);
                         if (s.rowSpan !== undefined) maxAvailRs = Math.max(maxAvailRs, s.rowSpan);
                     }
+                } else if (editOverlay.widgetSource.indexOf("Slider") !== -1) {
+                    // Slider: must span multiple columns; cap 4x1.
+                    maxAvailCs = 4;
+                    maxAvailRs = 1;
+                } else if (editOverlay.widgetSource.indexOf("Media") !== -1) {
+                    // Media: must be at least 2x2; cap 4x2.
+                    maxAvailCs = 4;
+                    maxAvailRs = 2;
+                } else {
+                    // Simple toggle (Bluetooth, Network, Caffeine, etc.):
+                    // cap 2x2. Falling back to [1, 4] let the user drag
+                    // them to 1x4 or 4x1 (visually broken sizes that
+                    // onReleased then snapped back, confusing the user).
+                    maxAvailCs = 2;
+                    maxAvailRs = 2;
                 }
             }
 
