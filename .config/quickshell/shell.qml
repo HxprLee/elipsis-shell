@@ -463,26 +463,8 @@ ShellRoot {
     Process { id: btToggleProc; running: false }
     Process { id: wifiToggleProc; running: false }
 
-    // ── Battery via UPower ──
-    property int batteryPct: -1
-    property string batteryStatus: ""
-
-    Binding on batteryPct {
-        value: UPower.displayDevice && UPower.displayDevice.percentage >= 0.01
-            ? Math.round(UPower.displayDevice.percentage * 100)
-            : -1
-    }
-    Binding on batteryStatus {
-        value: UPower.displayDevice
-            ? UPowerDeviceState.toString(UPower.displayDevice.state)
-            : ""
-    }
-
-    Component.onCompleted: {
-        console.log("UPower displayDevice:", UPower.displayDevice);
-        console.log("UPower displayDevice percentage:", UPower.displayDevice?.percentage);
-        console.log("UPower displayDevice state:", UPower.displayDevice?.state);
-    }
+    // ── Battery (extracted to services/Battery.qml) ──
+    // batteryPct / batteryStatus now live in Battery.
 
     // ── Power Profiles ──
     property string powerProfile: "balanced"
@@ -745,8 +727,8 @@ ShellRoot {
         StatusBar {
             property var modelData
             screen: modelData
-            batteryPct: shellRoot.batteryPct
-            batteryStatus: shellRoot.batteryStatus
+            batteryPct: Battery.batteryPct
+            batteryStatus: Battery.batteryStatus
         }
     }
     Variants {
@@ -754,8 +736,8 @@ ShellRoot {
         QuickSettings {
             property var modelData
             screen: modelData
-            batteryPct: shellRoot.batteryPct
-            batteryStatus: shellRoot.batteryStatus
+            batteryPct: Battery.batteryPct
+            batteryStatus: Battery.batteryStatus
         }
     }
     NotificationPopup { id: globalToast }
