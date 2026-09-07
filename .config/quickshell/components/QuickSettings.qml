@@ -1629,10 +1629,29 @@ PanelWindow {
                                                         easing.type: Easing.OutExpo
                                                     }
                                                 }
+                                                // Phase J: when this widgetBg is the morph source, the
+                                                // expanded component fills the card and the bgSurface
+                                                // should render the panel's frosted material
+                                                // (Frosted Glass inactive = 10% white + gradient
+                                                // border), NOT the toggle's active-state color
+                                                // (Frosted Glass active = white 80%, which produces
+                                                // the solid-white expanded background the user
+                                                // reported). The expanded component provides its
+                                                // own content chrome (ExpandedHeader iconBadge,
+                                                // etc.) — it does not depend on bgSurface.fgColor
+                                                // inversion, so suppressing isActive here has no
+                                                // content-side effect.
+                                                //
+                                                // The original two early-return guards stay: empty
+                                                // widgetLoader (toggle still loading) and the
+                                                // pill-shape simplification (colSpan >= 2 + simple
+                                                // toggle never renders as active — pill, not dot).
                                                 isActive: {
                                                     if (!widgetLoader.item)
                                                         return false;
                                                     if (widgetLoader.item.isSimpleToggle && model.colSpan >= 2)
+                                                        return false;
+                                                    if (expandedOverlay.isExpanded && expandedOverlay.sourceItem === widgetBg)
                                                         return false;
                                                     return !!widgetLoader.item.isActive;
                                                 }
