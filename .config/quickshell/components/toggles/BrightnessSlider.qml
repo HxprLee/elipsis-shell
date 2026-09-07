@@ -395,31 +395,28 @@ Item {
                     // ── Dark Mode ──
                     ToggleListItem {
                         Layout.fillWidth: true
-                        label: "Dark Mode"
+                        title: "Dark Mode"
                         iconSource: shellRoot.icon("dark-mode-symbolic")
-                        isActive: qs.darkModeActive
-                        activeColor: shellRoot.accentColor
-                        onToggle: qs.setDarkMode(!qs.darkModeActive)
+                        showCheckmark: qs.darkModeActive
+                        onClicked: qs.setDarkMode(!qs.darkModeActive)
                     }
 
                     // ── Night Light (placeholder) ──
                     ToggleListItem {
                         Layout.fillWidth: true
-                        label: "Night Light"
+                        title: "Night Light"
                         iconSource: shellRoot.icon("night-light-symbolic")
-                        isActive: qs.nightLightActive
-                        activeColor: shellRoot.accentColor
-                        onToggle: qs.setNightLight(!qs.nightLightActive)
+                        showCheckmark: qs.nightLightActive
+                        onClicked: qs.setNightLight(!qs.nightLightActive)
                     }
 
                     // ── Auto-Brightness (placeholder) ──
                     ToggleListItem {
                         Layout.fillWidth: true
-                        label: "Auto Brightness"
+                        title: "Auto Brightness"
                         iconSource: shellRoot.icon("auto-brightness-symbolic")
-                        isActive: qs.autoBrightnessActive
-                        activeColor: shellRoot.accentColor
-                        onToggle: qs.setAutoBrightness(!qs.autoBrightnessActive)
+                        showCheckmark: qs.autoBrightnessActive
+                        onClicked: qs.setAutoBrightness(!qs.autoBrightnessActive)
                     }
                 }
             }
