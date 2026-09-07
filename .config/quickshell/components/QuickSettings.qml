@@ -2769,14 +2769,44 @@ Behavior on radius {
                     // parallel.
                     if (sourceItem) {
                         sourceItem.morphState = "closing";
-                        // Phase G3: explicitly animate the radius. The
-                        // Behavior on radius may not fire reliably on
-                        // the first assignment after morphState flips
+                        // Phase K: hoist del capture above the radius
+                        // block so the natural radius can be computed
+                        // from the same delegate dimensions the
+                        // geometry writes below use. Without the
+                        // natural radius here, the radiusAnim lands on
+                        // a hardcoded value and the binding restore
+                        // snaps to the cell's real natural radius
+                        // 400 ms later — the visible corner-rounding
+                        // jump.
+                        let del = expandedOverlay.delegateItemRef;
+                        // Phase K: derive the natural radius from the
+                        // captured del, not a hardcoded literal. The
+                        // cell-bound formula matches the binding that
+                        // morphCompleteTimer restores 400 ms later:
+                        //   (colSpan >= 2 && rowSpan >= 2)
+                        //     ? 16
+                        //     : Math.min(width, height) / 2
+                        // so the radiusAnim lands on exactly the value
+                        // the binding would produce — no end-of-morph
+                        // snap.
+                        //
+                        // fallback: if del is missing (delegate
+                        // destroyed mid-morph), use 16. Same default the
+                        // restored binding uses for the no-del case.
+                        let naturalRadius = del
+                            ? ((del.colSpan >= 2 && del.rowSpan >= 2)
+                                ? 16
+                                : Math.min(del.width, del.height) / 2)
+                            : 16;
+                        // Phase G3: drive the close corner-rounding
+                        // animation with an explicit NumberAnimation.
+                        // The Behavior on radius may not fire reliably
+                        // on the first assignment after morphState flips
                         // (state-machine batching at the same event
                         // boundary can swallow the change in some Qt
-                        // versions), so we drive the close corner-rounding
-                        // animation directly. The static sourceItem.radius
-                        // write below stays as a fallback: either the
+                        // versions), so we drive the animation
+                        // directly. The static sourceItem.radius write
+                        // below stays as a fallback: either the
                         // animation lands or the static value renders.
                         // Create + assign target in one go. Property
                         // name keys in the createObject() literal must
@@ -2787,18 +2817,16 @@ Behavior on radius {
                         let radiusAnim = numberAnimationComponent.createObject(sourceItem, {
                             target: sourceItem
                         });
-                        // Phase I: s.sourceRadius is gone (Phase I Edit 3a).
-                        // The morphCompleteTimer binding restore reads the
-                        // LIVE formula from delegateItem.colSpan/rowSpan/
-                        // width/height, so close()'s radiusAnim.to just
-                        // needs the per-cell natural radius as a fallback.
-                        // We use a literal 24 (matches Phase H's conservative
-                        // fallback). The Behavior on radius (file-scope)
-                        // animates from the open-time 16, then
-                        // morphCompleteTimer's restored binding takes over.
                         if (radiusAnim) {
                             radiusAnim["property"] = "radius";
-                            radiusAnim.to = 24;
+                            // Phase K: animate to the cell's natural
+                            // radius, not a literal. Phase I left the
+                            // literal 24 in place when it removed
+                            // sourceRadius, so every close-path radius
+                            // animation landed on 24 and then the
+                            // binding restore snapped to the real
+                            // natural value 0–1 frame later.
+                            radiusAnim.to = naturalRadius;
                             radiusAnim.duration = 400;
                             radiusAnim.easing.type = Easing.OutExpo;
                             radiusAnim.start();
@@ -2810,9 +2838,10 @@ Behavior on radius {
                         // so close() should already work — but keeping
                         // the same order makes the code robust against
                         // any future change that restores the binding
-                        // earlier. Phase I: use literal 24 (matches
-                        // radiusAnim.to above) since sourceRadius is gone.
-                        sourceItem.radius = 24;
+                        // earlier. Phase K: use naturalRadius (matches
+                        // radiusAnim.to above) so both writes land on
+                        // the same value — no end-of-morph snap.
+                        sourceItem.radius = naturalRadius;
                         // Drive the close animation's target geometry from the live
                         // delegateItemRef bounds. Reading them at close time (not
                         // from the captured start* values from open time) guarantees
@@ -2820,7 +2849,6 @@ Behavior on radius {
                         // morphCompleteTimer binding restore will produce — no
                         // end-of-close snap when the cell bound has shifted
                         // during the expanded view.
-                        let del = expandedOverlay.delegateItemRef;
                         sourceItem.x      = del ? del.x      : sourceItem.x;
                         sourceItem.y      = del ? del.y      : sourceItem.y;
                         sourceItem.width  = del ? del.width  : sourceItem.width;
