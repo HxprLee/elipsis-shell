@@ -1224,22 +1224,12 @@ PanelWindow {
                 // morphCompleteTimer binding restore reads — no snap.
                 expandedOverlay.sourceItem = sourceRect;
                 expandedOverlay.widgetItem = widgetItem;
-                // Phase H: capture the natural radius on the source widgetBg itself
-                // (not on the shared expandedOverlay.sourceRadius). The shared
-                // capture got overwritten on every subsequent open, so any
-                // previously-restored binding re-evaluated and adopted the new
-                // toggle's radius — every expanded-UI toggle eventually showed the
-                // LAST opened toggle's radius. The per-widgetBg capture is stable
-                // because widgetBg is inside the Repeater delegate (one instance per
-                // cell) and only this toggle's open() ever writes to its own
-                // sourceRadius.
-                //
-                // At the moment doOpenExpandedView runs, open() (line ~2700) hasn't
-                // been called yet, so the cell-bound radius binding is still active.
-                // sourceRect.radius therefore evaluates to the binding's natural
-                // value — for 2x2 / 4x2 cells it's 16, for 2x1 / 1x2 / 1x1 it's
-                // Math.min(width, height) / 2 (the pill-cap radius).
-                sourceRect.sourceRadius = sourceRect.radius;
+                // Phase I: per-toggle sourceRadius capture is no longer
+                // needed — the morphCompleteTimer binding restore now
+                // reads the LIVE formula from delegateItem.colSpan/
+                // rowSpan/width/height (Phase I Edits 1-2). Each restored
+                // binding tracks its own delegateItemRef, so per-toggle
+                // isolation is preserved without a captured scalar.
 
                 // Capture the repeating-delegateItem reference at open time so
                 // morphCompleteTimer (declared outside the Repeater) can
@@ -1518,6 +1508,20 @@ PanelWindow {
                                         id: delegateItem
                                         property int itemIndex: index
                                         property bool isDragging: controlPanel.dragIndex === index
+                                        // Phase I: declare colSpan/rowSpan as real QML properties so they're
+                                        // accessible from morphCompleteTimer's expandedOverlay scope (where
+                                        // `model` is not resolvable as a JS-accessible field — see the
+                                        // Phase G3 reliability concern at lines ~1242-1247). Without this,
+                                        // the binding restore cannot rebuild the cell-bound radius formula
+                                        // after a close cycle, and resizing the toggle in edit mode does
+                                        // not update the radius because the restored binding is a captured
+                                        // scalar (s.sourceRadius) rather than a live formula.
+                                        //
+                                        // The bindings track model.colSpan/rowSpan via the Repeater context
+                                        // property, so they update immediately when togglesModel.setProperty
+                                        // writes a new value from the ResizeHandle.
+                                        property int colSpan: model.colSpan
+                                        property int rowSpan: model.rowSpan
 
                                         // Keep the layout slot full size so it acts as a placeholder
                                         Layout.columnSpan: model.colSpan
@@ -1593,13 +1597,6 @@ PanelWindow {
                                             // the Behavior's `enabled:` was already false by the time
                                             // we wrote the geometry.
                                             property bool isMorphing: morphState !== "idle"
-                                            // Phase H: per-toggle natural radius captured at open time. The
-                                            // morphCompleteTimer binding restore (declared outside the Repeater)
-                                            // reads s.sourceRadius from this property so each restored binding
-                                            // tracks its OWN toggle's natural radius, not the shared
-                                            // expandedOverlay.sourceRadius (which gets overwritten on every
-                                            // subsequent open — the source of the radius cross-talk bug).
-                                            property real sourceRadius: 0
                                             width: delegateItem.width
                                             height: delegateItem.height
                                             x: delegateItem.x
@@ -2625,9 +2622,9 @@ Behavior on radius {
             //   1. Click-to-close backdrop (this Item itself, full-overlay,
             //      with a MouseArea that catches outside-click to close).
             //   2. State owner: isExpanded, deferred-open slot, per-open
-            //      geometry parameters (startX/Y/Width/Height, sourceRadius,
-            //      computedTargetHeight), and open()/close() that drive the
-            //      morph on `sourceItem` (which is now widgetBg itself,
+            //      geometry parameters (startX/Y/Width/Height,
+            //      computedTargetHeight), and open()/close() that drive
+            //      the morph on `sourceItem` (which is now widgetBg itself,
             //      reparented into gridWrapper since Phase B).
             //
             // No morph container lives here anymore. expandedCard is gone;
@@ -2771,15 +2768,18 @@ Behavior on radius {
                         let radiusAnim = numberAnimationComponent.createObject(sourceItem, {
                             target: sourceItem
                         });
-                        // Phase H: sourceRadius here is the per-toggle value captured on
-                        // sourceItem.sourceRadius at open time (Edit 2). Reading the
-                        // shared expandedOverlay.sourceRadius would give the same value
-                        // during a synchronous close (no race), but per-toggle is more
-                        // robust and matches what the binding restore reads.
-                        let srcRad = sourceItem.sourceRadius > 0 ? sourceItem.sourceRadius : 24;
+                        // Phase I: s.sourceRadius is gone (Phase I Edit 3a).
+                        // The morphCompleteTimer binding restore reads the
+                        // LIVE formula from delegateItem.colSpan/rowSpan/
+                        // width/height, so close()'s radiusAnim.to just
+                        // needs the per-cell natural radius as a fallback.
+                        // We use a literal 24 (matches Phase H's conservative
+                        // fallback). The Behavior on radius (file-scope)
+                        // animates from the open-time 16, then
+                        // morphCompleteTimer's restored binding takes over.
                         if (radiusAnim) {
                             radiusAnim["property"] = "radius";
-                            radiusAnim.to = srcRad;
+                            radiusAnim.to = 24;
                             radiusAnim.duration = 400;
                             radiusAnim.easing.type = Easing.OutExpo;
                             radiusAnim.start();
@@ -2791,8 +2791,9 @@ Behavior on radius {
                         // so close() should already work — but keeping
                         // the same order makes the code robust against
                         // any future change that restores the binding
-                        // earlier.
-                        sourceItem.radius = srcRad;
+                        // earlier. Phase I: use literal 24 (matches
+                        // radiusAnim.to above) since sourceRadius is gone.
+                        sourceItem.radius = 24;
                         // Drive the close animation's target geometry from the live
                         // delegateItemRef bounds. Reading them at close time (not
                         // from the captured start* values from open time) guarantees
@@ -2860,16 +2861,30 @@ Behavior on radius {
                         s.y = Qt.binding(function() { return del ? del.y : 0; });
                         s.width = Qt.binding(function() { return del ? del.width : 0; });
                         s.height = Qt.binding(function() { return del ? del.height : 0; });
-                        // Phase H: read s.sourceRadius (the per-widgetBg value captured at
-                        // this toggle's open time in Edit 2). The previous Phase G4 version
-                        // read expandedOverlay.sourceRadius — a shared property overwritten
-                        // by every subsequent open — which made every previously-restored
-                        // radius binding re-evaluate to the LATEST opened toggle's radius.
-                        // The grid then settled on one radius after a few sequential opens,
-                        // visible as the dismissed toggle's radius applied to all expanded-
-                        // UI toggles.
+                        // Phase I: restore the LIVE cell-bound formula, reading colSpan/
+                        // rowSpan from delegateItemRef (the captured Repeater delegate)
+                        // and width/height from the same. Edit 1 declares colSpan/rowSpan
+                        // as real QML properties on delegateItem so they're accessible
+                        // from morphCompleteTimer's expandedOverlay scope (where `model`
+                        // is not resolvable).
+                        //
+                        // This binding now tracks resize: when the user changes the
+                        // toggle's shape in edit mode via the ResizeHandle, model.colSpan
+                        // and model.rowSpan update, delegateItem's declared properties
+                        // follow (Edit 1), and this binding re-evaluates against the new
+                        // shape's formula. The Behavior on radius (file-scope, gated on
+                        // controlPanel.editMode) animates the radius change.
+                        //
+                        // Per-toggle isolation is preserved: each restored binding reads
+                        // `del` (its own delegateItemRef, captured at open time via
+                        // expandedOverlay.delegateItemRef = delegateRef). Other toggles'
+                        // bindings read their own `del` — no cross-toggle interference
+                        // (the original Phase H bug).
                         s.radius = Qt.binding(function() {
-                            return s.sourceRadius > 0 ? s.sourceRadius : 16;
+                            if (!del) return 16;
+                            return (del.colSpan >= 2 && del.rowSpan >= 2)
+                                ? 16
+                                : Math.min(del.width, del.height) / 2;
                         });
                         // Phase G3: restore scale binding too, so press-scale
                         // animation works again on toggles that have
