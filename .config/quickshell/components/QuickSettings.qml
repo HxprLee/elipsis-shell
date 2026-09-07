@@ -141,6 +141,91 @@ PanelWindow {
         setBrightnessProc.running = true;
     }
 
+    // ── Keyboard backlight ──
+    // Dell laptops expose dell::kbd_backlight in /sys/class/leds/.
+    // max=2, brightness={0,1,2}.
+    property int kbdBacklightValue: 0
+    property int kbdBacklightMax: 2
+    Process {
+        id: kbdBacklightProc
+        command: ["cat", "/sys/class/leds/dell::kbd_backlight/brightness"]
+        running: false
+        stdout: SplitParser {
+            onRead: data => {
+                let v = parseInt(data.trim());
+                if (!isNaN(v)) qs.kbdBacklightValue = v;
+            }
+        }
+    }
+    Process {
+        id: kbdBacklightMaxProc
+        command: ["cat", "/sys/class/leds/dell::kbd_backlight/max_brightness"]
+        running: false
+        stdout: SplitParser {
+            onRead: data => {
+                let v = parseInt(data.trim());
+                if (!isNaN(v) && v > 0) qs.kbdBacklightMax = v;
+            }
+        }
+    }
+    Process { id: setKbdBacklightProc; running: false }
+    function setKbdBacklight(pct) {
+        // pct is 0-100; map to raw kbdBacklightMax levels
+        let raw = Math.round((pct / 100.0) * Math.max(1, kbdBacklightMax));
+        raw = Math.max(0, Math.min(kbdBacklightMax, raw));
+        setKbdBacklightProc.command = ["sh", "-c", "echo " + raw + " > /sys/class/leds/dell::kbd_backlight/brightness"];
+        setKbdBacklightProc.running = true;
+    }
+
+    // ── Dark mode (gsettings) ──
+    property bool darkModeActive: false
+    Process {
+        id: darkModeTimer
+        command: ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"]
+        running: false
+        onExited: (code) => {
+            let out = readAll().trim();
+            qs.darkModeActive = out.includes("prefer-dark");
+        }
+    }
+    Process { id: setDarkModeProc; running: false }
+    function setDarkMode(active) {
+        setDarkModeProc.command = ["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", active ? "prefer-dark" : "default"];
+        setDarkModeProc.running = true;
+    }
+
+    // ── Night light (placeholder — Hyprland, no backend yet) ──
+    property bool nightLightActive: false
+    function setNightLight(active) {
+        console.log("Night Light: placeholder only (Hyprland backend not implemented)");
+        // TODO: implement with gammastep or equivalent
+    }
+
+    // ── Auto-brightness (placeholder — Hyprland, no backend yet) ──
+    property bool autoBrightnessActive: false
+    function setAutoBrightness(active) {
+        console.log("Auto Brightness: placeholder only (Hyprland backend not implemented)");
+        // TODO: implement with ambient-light-sensor or equivalent
+    }
+
+    // ── Poll kbd backlight and dark mode periodically ──
+    Timer {
+        interval: 5000
+        running: true
+        repeat: true
+        onTriggered: {
+            kbdBacklightProc.running = true;
+            darkModeTimer.running = true;
+        }
+    }
+    // Also probe kbd backlight max on startup
+    Timer {
+        interval: 100
+        running: true
+        repeat: false
+        onTriggered: kbdBacklightMaxProc.running = true
+    }
+
     // ── Drag / open animation ──
     onDragOffsetChanged: {
         let rawProgress = 0.0;
