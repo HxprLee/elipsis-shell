@@ -27,49 +27,8 @@ ShellRoot {
         function unlock(): void { Lock.unlock(); }
     }
 
-    // ── Notification Server ──
-    Notifs.NotificationServer {
-        id: notificationServer
-
-        property var notificationList: []
-
-        onNotification: (notification) => {
-            let item = {
-                id: notification.id,
-                appName: notification.appName,
-                appIcon: notification.appIcon ?? "",
-                summary: notification.summary,
-                body: notification.body,
-                timeout: notification.expireTimeout,
-                timestamp: Date.now()
-            };
-            console.log("Notification received: ", item.summary);
-            let copy = notificationList.slice();
-            let found = false;
-            for (let i = 0; i < copy.length; i++) {
-                if (copy[i].id === item.id) {
-                    copy[i] = item;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) copy.unshift(item);
-            notificationList = copy;
-            
-            // Trigger iOS Popup Drop-down (unless DND)
-            if (!shellRoot.dndActive) globalToast.show(item);
-        }
-
-        function dismiss(nid) {
-            notificationList = notificationList.filter(n => n.id !== nid);
-        }
-        function dismissByApp(appName) {
-            notificationList = notificationList.filter(n => n.appName !== appName);
-        }
-        function clearAll() {
-            notificationList = [];
-        }
-    }
+    // ── Notifications (extracted to services/Notifications.qml) ──
+    // notificationServer, notificationList, dndActive, setDnd now live there.
 
     // ── Pipewire tracking ──
     PwObjectTracker {
@@ -291,13 +250,8 @@ ShellRoot {
         setPowerProfileProc.running = true;
     }
 
-    // ── Do Not Disturb ──
-    property bool dndActive: false
-
-    function setDnd(active) {
-        shellRoot.dndActive = active;
-        shellRoot.setToggleSetting("DndToggle", "active", active);
-    }
+    // ── Do Not Disturb (extracted to services/Notifications.qml) ──
+    // dndActive + setDnd now live in Notifications.
 
     // ── Caffeine ──
     property bool caffeineActive: false
@@ -411,6 +365,13 @@ ShellRoot {
         }
     }
     NotificationPopup { id: globalToast }
+    // Wire Notifications → global toast (only show when panel is closed).
+    Connections {
+        target: Notifications
+        function onNotificationReceived(item) {
+            if (!UIState.panelOpen) globalToast.show(item);
+        }
+    }
     Variants {
         model: Quickshell.screens
         TaskManager {
