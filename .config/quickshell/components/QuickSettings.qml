@@ -1224,28 +1224,22 @@ PanelWindow {
                 // morphCompleteTimer binding restore reads — no snap.
                 expandedOverlay.sourceItem = sourceRect;
                 expandedOverlay.widgetItem = widgetItem;
-                // Capture the source widget's natural radius so close()
-                // animates back to a value that EXACTLY matches the
-                // cell-bound binding at line 1616:
-                //   radius: (model.colSpan >= 2 && model.rowSpan >= 2)
-                //       ? 16 : Math.min(width, height) / 2
+                // Phase H: capture the natural radius on the source widgetBg itself
+                // (not on the shared expandedOverlay.sourceRadius). The shared
+                // capture got overwritten on every subsequent open, so any
+                // previously-restored binding re-evaluated and adopted the new
+                // toggle's radius — every expanded-UI toggle eventually showed the
+                // LAST opened toggle's radius. The per-widgetBg capture is stable
+                // because widgetBg is inside the Repeater delegate (one instance per
+                // cell) and only this toggle's open() ever writes to its own
+                // sourceRadius.
                 //
-                // At the moment doOpenExpandedView runs, open() (line ~2700)
-                // hasn't been called yet, so the cell-bound radius binding
-                // is still active. sourceRect.radius therefore evaluates to
-                // the binding's natural value — for 2x2 / 4x2 cells it's
-                // 16, for 2x1 / 1x2 / 1x1 it's Math.min(width, height) / 2
-                // (the pill-cap radius). Reading the binding's current value
-                // here is simpler and more reliable than recomputing the
-                // formula from the Repeater-delegate context (delegateRef
-                // .model.colSpan). The previous Phase G4 formula depended
-                // on accessing `model` as a JS property on the captured
-                // delegateItem from outside the Repeater scope; that depends
-                // on Qt's exposure of Repeater context properties as
-                // JS-accessible fields, which is not guaranteed across
-                // Quickshell's underlying Qt versions and produced wrong
-                // fallback values for 2x2+ cells in some configurations.
-                expandedOverlay.sourceRadius = sourceRect.radius;
+                // At the moment doOpenExpandedView runs, open() (line ~2700) hasn't
+                // been called yet, so the cell-bound radius binding is still active.
+                // sourceRect.radius therefore evaluates to the binding's natural
+                // value — for 2x2 / 4x2 cells it's 16, for 2x1 / 1x2 / 1x1 it's
+                // Math.min(width, height) / 2 (the pill-cap radius).
+                sourceRect.sourceRadius = sourceRect.radius;
 
                 // Capture the repeating-delegateItem reference at open time so
                 // morphCompleteTimer (declared outside the Repeater) can
@@ -1599,6 +1593,13 @@ PanelWindow {
                                             // the Behavior's `enabled:` was already false by the time
                                             // we wrote the geometry.
                                             property bool isMorphing: morphState !== "idle"
+                                            // Phase H: per-toggle natural radius captured at open time. The
+                                            // morphCompleteTimer binding restore (declared outside the Repeater)
+                                            // reads s.sourceRadius from this property so each restored binding
+                                            // tracks its OWN toggle's natural radius, not the shared
+                                            // expandedOverlay.sourceRadius (which gets overwritten on every
+                                            // subsequent open — the source of the radius cross-talk bug).
+                                            property real sourceRadius: 0
                                             width: delegateItem.width
                                             height: delegateItem.height
                                             x: delegateItem.x
@@ -2652,7 +2653,9 @@ Behavior on radius {
                 // Used by close() to animate back to the source's actual
                 // shape without depending on the live (animated) width/
                 // height values, which would drift during the morph.
-                property real sourceRadius: 0
+                // Phase H: removed — captured per-toggle on widgetBg.sourceRadius
+                // (see Edit 2). The shared property got overwritten on every
+                // subsequent open, causing the radius cross-talk bug.
                 // Target height computed once per open() — replaces the
                 // previous Qt.binding() chain that re-evaluated on every
                 // geometry change and produced visible first-frame jumps.
@@ -2768,9 +2771,15 @@ Behavior on radius {
                         let radiusAnim = numberAnimationComponent.createObject(sourceItem, {
                             target: sourceItem
                         });
+                        // Phase H: sourceRadius here is the per-toggle value captured on
+                        // sourceItem.sourceRadius at open time (Edit 2). Reading the
+                        // shared expandedOverlay.sourceRadius would give the same value
+                        // during a synchronous close (no race), but per-toggle is more
+                        // robust and matches what the binding restore reads.
+                        let srcRad = sourceItem.sourceRadius > 0 ? sourceItem.sourceRadius : 24;
                         if (radiusAnim) {
                             radiusAnim["property"] = "radius";
-                            radiusAnim.to = sourceRadius > 0 ? sourceRadius : 24;
+                            radiusAnim.to = srcRad;
                             radiusAnim.duration = 400;
                             radiusAnim.easing.type = Easing.OutExpo;
                             radiusAnim.start();
@@ -2783,7 +2792,7 @@ Behavior on radius {
                         // the same order makes the code robust against
                         // any future change that restores the binding
                         // earlier.
-                        sourceItem.radius = sourceRadius > 0 ? sourceRadius : 24;
+                        sourceItem.radius = srcRad;
                         // Drive the close animation's target geometry from the live
                         // delegateItemRef bounds. Reading them at close time (not
                         // from the captured start* values from open time) guarantees
@@ -2851,20 +2860,16 @@ Behavior on radius {
                         s.y = Qt.binding(function() { return del ? del.y : 0; });
                         s.width = Qt.binding(function() { return del ? del.width : 0; });
                         s.height = Qt.binding(function() { return del ? del.height : 0; });
-                        // Phase G4: simplified to read sourceRadius
-                        // (captured at open() time) directly. sourceRadius
-                        // already encodes the natural radius per the
-                        // formula in doOpenExpandedView, which matches
-                        // the cell-bound binding at line 1598. Reading
-                        // `width` / `height` here would force the
-                        // binding to track cell resizes, but the
-                        // 4-col fixed-cellSize grid has no in-place
-                        // resize path (only swap / reorder), so
-                        // sourceRadius is stable per cell. Skipping
-                        // the re-derivation also drops the del.model /
-                        // del.Layout fallback chain.
+                        // Phase H: read s.sourceRadius (the per-widgetBg value captured at
+                        // this toggle's open time in Edit 2). The previous Phase G4 version
+                        // read expandedOverlay.sourceRadius — a shared property overwritten
+                        // by every subsequent open — which made every previously-restored
+                        // radius binding re-evaluate to the LATEST opened toggle's radius.
+                        // The grid then settled on one radius after a few sequential opens,
+                        // visible as the dismissed toggle's radius applied to all expanded-
+                        // UI toggles.
                         s.radius = Qt.binding(function() {
-                            return expandedOverlay.sourceRadius > 0 ? expandedOverlay.sourceRadius : 16;
+                            return s.sourceRadius > 0 ? s.sourceRadius : 16;
                         });
                         // Phase G3: restore scale binding too, so press-scale
                         // animation works again on toggles that have
