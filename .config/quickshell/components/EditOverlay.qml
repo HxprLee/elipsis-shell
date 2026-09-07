@@ -122,14 +122,28 @@ Item {
 
         MouseArea {
             id: resizeArea
+            // Anchor to the entire editOverlay (not just the 32x32 visual
+            // handle) so a vertical drag stays grabbed while moving up
+            // into the widget body. Previously anchored to
+            // resizeHandleItem with margins: -8 → 48x48 grab zone, but
+            // the row step is ~116px; any vertical drag past 48px exited
+            // the grab zone and the press was released mid-drag,
+            // visibly "dropping" the resize.
             anchors.fill: parent
-            anchors.margins: -8
+            z: 20
+            preventStealing: true
 
             property real startX: 0
             property real startY: 0
             property int startColSpan: 1
             property int startRowSpan: 1
             property bool isDraggingSize: false
+            // Computed in onPressed from availableSizes (or [1,4] if
+            // absent). Read in onPositionChanged to clamp the live
+            // drag target. Per-press recomputation handles the case
+            // where availableSizes changes mid-session.
+            property int maxAvailCs: 4
+            property int maxAvailRs: 4
 
             onPressed: (mouse) => {
                 let globalPos = mapToItem(null, mouse.x, mouse.y)
@@ -138,6 +152,39 @@ Item {
                 startColSpan = editOverlay.currentColSpan
                 startRowSpan = editOverlay.currentRowSpan
                 isDraggingSize = false
+
+                // Compute clamping bounds from availableSizes if declared,
+                // else fall back to [1, 4]. Without this, a simple toggle
+                // with no availableSizes (Bluetooth, Network, Caffeine)
+                // could be dragged to 1x4 or 4x1 — sizes it never
+                // intended to support — because onPositionChanged
+                // clamps to the hardcoded [1, 4] range. With this, the
+                // max comes from the widget's own declaration.
+                let sizeArr = editOverlay.availableSizes;
+                if (sizeArr && Array.isArray(sizeArr) && sizeArr.length > 0) {
+                    maxAvailCs = 1;
+                    maxAvailRs = 1;
+                    for (let i = 0; i < sizeArr.length; i++) {
+                        let s = sizeArr[i];
+                        if (s.colSpan !== undefined) maxAvailCs = Math.max(maxAvailCs, s.colSpan);
+                        if (s.rowSpan !== undefined) maxAvailRs = Math.max(maxAvailRs, s.rowSpan);
+                    }
+                } else if (editOverlay.widgetSource.indexOf("Slider") !== -1) {
+                    // Slider: must span multiple columns; cap 4x1.
+                    maxAvailCs = 4;
+                    maxAvailRs = 1;
+                } else if (editOverlay.widgetSource.indexOf("Media") !== -1) {
+                    // Media: must be at least 2x2; cap 4x2.
+                    maxAvailCs = 4;
+                    maxAvailRs = 2;
+                } else {
+                    // Simple toggle (Bluetooth, Network, Caffeine, etc.):
+                    // cap 2x2. Falling back to [1, 4] let the user drag
+                    // them to 1x4 or 4x1 (visually broken sizes that
+                    // onReleased then snapped back, confusing the user).
+                    maxAvailCs = 2;
+                    maxAvailRs = 2;
+                }
             }
 
             onPositionChanged: (mouse) => {
@@ -158,9 +205,13 @@ Item {
 
                 let targetCs = startColSpan + dx / stepX
                 let targetRs = startRowSpan + dy / stepY
-                
-                let newCs = Math.max(1, Math.min(4, Math.round(targetCs)))
-                let newRs = Math.max(1, Math.min(4, Math.round(targetRs)))
+
+                // Clamp to widget-declared available sizes (computed in
+                // onPressed) instead of the hardcoded [1,4]. Simple
+                // toggles without availableSizes cap at the [1,4]
+                // fallback they fall back to.
+                let newCs = Math.max(1, Math.min(maxAvailCs, Math.round(targetCs)))
+                let newRs = Math.max(1, Math.min(maxAvailRs, Math.round(targetRs)))
 
                 if (newCs !== editOverlay.currentColSpan || newRs !== editOverlay.currentRowSpan) {
                     editOverlay.resized(newCs, newRs)

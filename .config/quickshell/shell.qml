@@ -957,6 +957,11 @@ ShellRoot {
             "mpv":                                 "file:///usr/share/icons/breeze-dark/apps/48/mpv.svg",
             "firefox":                             "file:///usr/share/icons/breeze-dark/apps/48/firefox.svg",
             "chromium":                            "file:///usr/share/icons/breeze-dark/apps/48/chromium-browser.svg",
+            "dark-mode-symbolic":           "file:///usr/share/icons/breeze-dark/status/24/dark-mode-symbolic.svg",
+            "night-light-symbolic":          "file:///usr/share/icons/breeze-dark/status/24/night-light-symbolic.svg",
+            "auto-brightness-symbolic":     "file:///usr/share/icons/breeze-dark/actions/24/auto-brightness-symbolic.svg",
+            "keyboard-brightness-symbolic": "file:///usr/share/icons/breeze-dark/status/24/keyboard-brightness-symbolic.svg",
+            "input-keyboard-symbolic":     "file:///usr/share/icons/breeze-dark/devices/24/input-keyboard-symbolic.svg",
             };
 
             if (table[name]) return table[name];
