@@ -17,10 +17,8 @@ import "services"
 ShellRoot {
     id: shellRoot
 
-    property string materialTheme: "Acrylic"
-    property var accentColor: null
-
-    // Lock state and WlSessionLock live in services/Lock.qml.
+    // Appearance state (materialTheme, accentColor, blurEnabled, ...) lives
+    // in services/Wallpapers.qml. Lock state lives in services/Lock.qml.
 
     IpcHandler {
         target: "lock"
@@ -247,16 +245,6 @@ ShellRoot {
         }
     }
 
-    // Auto-save appearance settings on change
-    Connections {
-        target: shellRoot
-        function onMaterialThemeChanged() { saveAppearance(); }
-        function onBlurEnabledChanged() { saveAppearance(); }
-        function onAccentColorChanged() { saveAppearance(); }
-        function onWallpaperPathChanged() { saveAppearance(); }
-        function onStaticBlurEnabledChanged() { saveAppearance(); }
-    }
-
     // ── UIState (extracted to services/UIState.qml) ──
     // panelOpen/powerMenuOpen/appDrawerOpen/switcherOpen/panelDragOffset/
     // barState/hasWindowsOnCurrentWs/hasSingleTiledWindow now live in UIState.
@@ -374,135 +362,16 @@ ShellRoot {
         }
     }
 
-    // ── Wallpaper & Blur ──
-    property string wallpaperPath: ""
-    property int blurVersion: 0
-    property string blurredWallpaperPath: "file:///tmp/elipsis_blur.png"
-    property bool usePrecomputedBlur: true
-    property bool staticBlurEnabled: true
-    property bool blurEnabled: true
-
-    Process {
-        id: wallpaperQuery
-        command: ["awww", "query"]
-        running: true
-        stdout: SplitParser {
-            onRead: (line) => {
-                let match = line.match(/image: (.*)/);
-                if (match) {
-                    let path = match[1].trim();
-                    if (shellRoot.wallpaperPath !== path) {
-                        shellRoot.wallpaperPath = path;
-                        if (shellRoot.usePrecomputedBlur) blurGenerator.startBlur();
-                    }
-                }
-            }
-        }
-    }
-
-    Timer {
-        interval: 2000 // Poll wallpaper every 2s for snappier response
-        running: true
-        repeat: true
-        onTriggered: if (!wallpaperQuery.running) wallpaperQuery.running = true
-    }
-
-    Process {
-        id: blurGenerator
-        function startBlur() {
-            if (shellRoot.wallpaperPath === "") return;
-            // High-speed optimization: 
-            // 1. Use -sample for ultra-fast downscaling (5%)
-            // 2. Use -blur with small radius on tiny image
-            // 3. Use -resize for smooth upscaling back to 100%
-            command = ["magick", shellRoot.wallpaperPath, "-sample", "5%", "-blur", "0x2", "-resize", "2000%", "/tmp/elipsis_blur.png"];
-            running = true;
-        }
-        onExited: (code) => {
-            if (code === 0) shellRoot.blurVersion++;
-        }
-    }
+    // ── Wallpapers (extracted to services/Wallpapers.qml) ──
+    // wallpaperPath/blurVersion/blurredWallpaperPath/usePrecomputedBlur/
+    // staticBlurEnabled/blurEnabled/materialTheme/accentColor now live in
+    // Wallpapers. The 'appearance' IPC handlers delegate to it below.
 
     IpcHandler {
         target: "appearance"
-        function setPrecomputedBlur(enabled: string) {
-            let s = String(enabled).toLowerCase();
-            let isEnabled = (s === "true" || s === "1" || s === "yes" || s === "on");
-            shellRoot.usePrecomputedBlur = isEnabled;
-            if (isEnabled && shellRoot.wallpaperPath !== "") blurGenerator.startBlur();
-        }
-
-        function setBlurEnabled(enabled: string) {
-            let s = String(enabled).toLowerCase();
-            let isEnabled = (s === "true" || s === "1" || s === "yes" || s === "on");
-            shellRoot.blurEnabled = isEnabled;
-        }
-
-        function setMaterial(material: string) {
-            if (typeof material !== "string") return;
-            if (["Solid", "Acrylic", "Frosted Glass"].includes(material)) {
-                shellRoot.materialTheme = material;
-            } else {
-                console.warn("Unknown material:", material);
-            }
-        }
-    }
-
-    IpcHandler {
-        target: "power"
-        function show() {
-            UIState.closeOtherOverlays("power");
-            UIState.powerMenuOpen = true;
-        }
-        function hide() {
-            UIState.powerMenuOpen = false;
-        }
-        function toggle() {
-            if (UIState.powerMenuOpen) {
-                UIState.powerMenuOpen = false;
-            } else {
-                UIState.closeOtherOverlays("power");
-                UIState.powerMenuOpen = true;
-            }
-        }
-    }
-
-    IpcHandler {
-        target: "quicksettings"
-        function show() {
-            UIState.closeOtherOverlays("panel");
-            UIState.panelOpen = true;
-        }
-        function hide() {
-            UIState.panelOpen = false;
-        }
-        function toggle() {
-            if (UIState.panelOpen) {
-                UIState.panelOpen = false;
-            } else {
-                UIState.closeOtherOverlays("panel");
-                UIState.panelOpen = true;
-            }
-        }
-    }
-
-    IpcHandler {
-        target: "task_manager"
-        function toggle() {
-            if (UIState.switcherOpen) {
-                UIState.switcherOpen = false;
-            } else {
-                UIState.closeOtherOverlays("switcher");
-                UIState.switcherOpen = true;
-            }
-        }
-        function open() {
-            UIState.closeOtherOverlays("switcher");
-            UIState.switcherOpen = true;
-        }
-        function close() {
-            UIState.switcherOpen = false;
-        }
+        function setPrecomputedBlur(enabled: string): void { Wallpapers.setPrecomputedBlur(enabled); }
+        function setBlurEnabled(enabled: string): void { Wallpapers.setBlurEnabled(enabled); }
+        function setMaterial(material: string): void { Wallpapers.setMaterial(material); }
     }
 
     // ── UI Components (per-screen via Variants) ──
