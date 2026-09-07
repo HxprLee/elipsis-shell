@@ -1218,16 +1218,12 @@ PanelWindow {
                 // sourceRect is the widgetBg being morphed. It already
                 // lives under gridWrapper at its cell-bound position
                 // (Phase D no longer needs to reparent a separate card).
-                // We capture its current position so close() can animate
-                // back without relying on the live (animated) values,
-                // which would drift during the morph.
-                let pos = sourceRect.mapToItem(gridWrapper, 0, 0);
+                // The close animation targets delegateItemRef.{x,y,width,
+                // height} directly (read at close time, not captured here),
+                // so the animation lands on the same value the
+                // morphCompleteTimer binding restore reads — no snap.
                 expandedOverlay.sourceItem = sourceRect;
                 expandedOverlay.widgetItem = widgetItem;
-                expandedOverlay.startX = pos.x;
-                expandedOverlay.startY = pos.y;
-                expandedOverlay.startWidth = sourceRect.width;
-                expandedOverlay.startHeight = sourceRect.height;
                 // Capture the source widget's natural radius so close()
                 // animates back to a value that EXACTLY matches the
                 // cell-bound binding at line 1616:
@@ -2652,10 +2648,6 @@ Behavior on radius {
                 property var pendingWidgetItem: null
                 property var pendingDelegateItemRef: null
                 property bool hasPendingOpen: false
-                property real startX: 0
-                property real startY: 0
-                property real startWidth: 0
-                property real startHeight: 0
                 // Source widget's natural radius captured at open() time.
                 // Used by close() to animate back to the source's actual
                 // shape without depending on the live (animated) width/
@@ -2792,10 +2784,18 @@ Behavior on radius {
                         // any future change that restores the binding
                         // earlier.
                         sourceItem.radius = sourceRadius > 0 ? sourceRadius : 24;
-                        sourceItem.x = startX;
-                        sourceItem.y = startY;
-                        sourceItem.width = startWidth;
-                        sourceItem.height = startHeight;
+                        // Drive the close animation's target geometry from the live
+                        // delegateItemRef bounds. Reading them at close time (not
+                        // from the captured start* values from open time) guarantees
+                        // the close animation lands on the same value the
+                        // morphCompleteTimer binding restore will produce — no
+                        // end-of-close snap when the cell bound has shifted
+                        // during the expanded view.
+                        let del = expandedOverlay.delegateItemRef;
+                        sourceItem.x      = del ? del.x      : sourceItem.x;
+                        sourceItem.y      = del ? del.y      : sourceItem.y;
+                        sourceItem.width  = del ? del.width  : sourceItem.width;
+                        sourceItem.height = del ? del.height : sourceItem.height;
                     }
 
                     isExpanded = false;
