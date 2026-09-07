@@ -95,7 +95,7 @@ PanelWindow {
         running: false
         onExited: (code) => {
             if (code === 0) {
-                qs.backlightDevice = qs.testDeviceProc.deviceName;
+                qs.backlightDevice = testDeviceProc.deviceName;
                 qs.maxBrightnessProc.running = true;
                 qs.brightnessProc.running = true;
             } else {
