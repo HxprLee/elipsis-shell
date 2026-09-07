@@ -30,10 +30,10 @@ Item {
         anchors.fill: parent
         visible: !root.isVertical
         from: 1; to: 100
-        value: qs.brightnessValue
+        value: Brightness.brightnessValue
         onMoved: {
             if (root.holdTriggered) return;
-            qs.setBrightness(value);
+            Brightness.setBrightness(value);
             holdTimer.restart();
         }
         padding: 0
@@ -98,10 +98,10 @@ Item {
             } else {
                 holdTimer.stop();
                 if (!root.holdTriggered) {
-                    qs.setBrightness(value);
+                    Brightness.setBrightness(value);
                 }
                 // Restore binding so the slider tracks external brightness changes again
-                slider.value = Qt.binding(function() { return qs.brightnessValue });
+                slider.value = Qt.binding(function() { return Brightness.brightnessValue });
             }
         }
     }
@@ -113,10 +113,10 @@ Item {
         visible: root.isVertical
         orientation: Qt.Vertical
         from: 1; to: 100
-        value: qs.brightnessValue
+        value: Brightness.brightnessValue
         onMoved: {
             if (root.holdTriggered) return;
-            qs.setBrightness(value);
+            Brightness.setBrightness(value);
             holdTimer.restart();
         }
         padding: 0
@@ -189,9 +189,9 @@ Item {
             } else {
                 holdTimer.stop();
                 if (!root.holdTriggered) {
-                    qs.setBrightness(value);
+                    Brightness.setBrightness(value);
                 }
-                vSlider.value = Qt.binding(function() { return qs.brightnessValue });
+                vSlider.value = Qt.binding(function() { return Brightness.brightnessValue });
             }
         }
     }
@@ -203,8 +203,8 @@ Item {
         onTriggered: {
             root.holdTriggered = true;
             root.expandRequested();
-            if (slider.value !== qs.brightnessValue) slider.value = qs.brightnessValue;
-            if (vSlider.value !== qs.brightnessValue) vSlider.value = qs.brightnessValue;
+            if (slider.value !== Brightness.brightnessValue) slider.value = Brightness.brightnessValue;
+            if (vSlider.value !== Brightness.brightnessValue) vSlider.value = Brightness.brightnessValue;
         }
     }
     signal expandRequested()
@@ -259,7 +259,7 @@ Item {
                                 Layout.fillWidth: true
                             }
                             Text {
-                                text: Math.round(qs.brightnessValue) + "%"
+                                text: Math.round(Brightness.brightnessValue) + "%"
                                 color: Qt.rgba(1, 1, 1, 0.5)
                                 font.pixelSize: 13
                             }
@@ -276,7 +276,7 @@ Item {
                                 anchors.fill: parent
                                 anchors.margins: 8
                                 from: 1; to: 100
-                                value: qs.brightnessValue
+                                value: Brightness.brightnessValue
                                 padding: 0
                                 handle: Item {}
                                 background: Rectangle {
@@ -307,7 +307,7 @@ Item {
                                         color: Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
                                     }
                                 }
-                                onMoved: qs.setBrightness(value)
+                                onMoved: Brightness.setBrightness(value)
                             }
                         }
                     }
@@ -338,7 +338,7 @@ Item {
                                 Layout.fillWidth: true
                             }
                             Text {
-                                text: Math.round((qs.kbdBacklightValue / Math.max(1, qs.kbdBacklightMax)) * 100) + "%"
+                                text: Math.round((Brightness.kbdBacklightValue / Math.max(1, Brightness.kbdBacklightMax)) * 100) + "%"
                                 color: Qt.rgba(1, 1, 1, 0.5)
                                 font.pixelSize: 13
                             }
@@ -354,8 +354,8 @@ Item {
                                 id: vSliderKbd
                                 anchors.fill: parent
                                 anchors.margins: 8
-                                from: 0; to: Math.max(1, qs.kbdBacklightMax)
-                                value: qs.kbdBacklightValue
+                                from: 0; to: Math.max(1, Brightness.kbdBacklightMax)
+                                value: Brightness.kbdBacklightValue
                                 padding: 0
                                 handle: Item {}
                                 background: Rectangle {
@@ -371,7 +371,7 @@ Item {
                                     Rectangle {
                                         x: parent.height
                                         width: {
-                                            let range = Math.max(1, qs.kbdBacklightMax);
+                                            let range = Math.max(1, Brightness.kbdBacklightMax);
                                             ((vSliderKbd.value - 0) / range) * (parent.width - parent.height);
                                         }
                                         height: parent.height
@@ -379,8 +379,8 @@ Item {
                                     }
                                 }
                                 onMoved: {
-                                    let pct = Math.round((value / Math.max(1, qs.kbdBacklightMax)) * 100);
-                                    qs.setKbdBacklight(pct);
+                                    let pct = Math.round((value / Math.max(1, Brightness.kbdBacklightMax)) * 100);
+                                    Brightness.setKbdBacklight(pct);
                                 }
                             }
                         }
@@ -398,8 +398,8 @@ Item {
                         Layout.fillWidth: true
                         title: "Dark Mode"
                         iconSource: Icons.icon("dark-mode-symbolic")
-                        showCheckmark: qs.darkModeActive
-                        onClicked: qs.setDarkMode(!qs.darkModeActive)
+                        showCheckmark: Brightness.darkModeActive
+                        onClicked: Brightness.setDarkMode(!Brightness.darkModeActive)
                     }
 
                     // ── Night Light (placeholder) ──
@@ -407,8 +407,8 @@ Item {
                         Layout.fillWidth: true
                         title: "Night Light"
                         iconSource: Icons.icon("night-light-symbolic")
-                        showCheckmark: qs.nightLightActive
-                        onClicked: qs.setNightLight(!qs.nightLightActive)
+                        showCheckmark: Brightness.nightLightActive
+                        onClicked: Brightness.setNightLight(!Brightness.nightLightActive)
                     }
 
                     // ── Auto-Brightness (placeholder) ──
@@ -416,8 +416,8 @@ Item {
                         Layout.fillWidth: true
                         title: "Auto Brightness"
                         iconSource: Icons.icon("auto-brightness-symbolic")
-                        showCheckmark: qs.autoBrightnessActive
-                        onClicked: qs.setAutoBrightness(!qs.autoBrightnessActive)
+                        showCheckmark: Brightness.autoBrightnessActive
+                        onClicked: Brightness.setAutoBrightness(!Brightness.autoBrightnessActive)
                     }
                 }
             }

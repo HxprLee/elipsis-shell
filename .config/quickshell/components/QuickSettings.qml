@@ -71,162 +71,9 @@ PanelWindow {
     }
 
     // ── Brightness ──
-    property int brightnessValue: 50
-    property int maxBrightness: 100
-    property string backlightDevice: ""
-    property var backlightCandidates: ["intel_backlight", "amdgpu_bl0", "acpi_video0", "nv_backlight", "apple_backlight", "panasonic_backlight", "sony_backlight"]
-    property int backlightProbeIndex: 0
-
-    function detectBacklightDevice() {
-        if (qs.backlightDevice !== "") return;
-        if (qs.backlightProbeIndex >= qs.backlightCandidates.length) return;
-        let d = qs.backlightCandidates[qs.backlightProbeIndex];
-        testDeviceProc.command = ["test", "-r", "/sys/class/backlight/" + d + "/brightness"];
-        testDeviceProc.deviceName = d;
-        testDeviceProc.running = true;
-    }
-
-    Component.onCompleted: {
-        detectBacklightDevice();
-    }
-
-    Process {
-        id: testDeviceProc
-        property string deviceName: ""
-        running: false
-        onExited: (code) => {
-            if (code === 0) {
-                qs.backlightDevice = testDeviceProc.deviceName;
-                qs.maxBrightnessProc.running = true;
-                qs.brightnessProc.running = true;
-            } else {
-                qs.backlightProbeIndex++;
-                qs.detectBacklightDevice();
-            }
-        }
-    }
-
-    Process {
-        id: maxBrightnessProc
-        command: ["cat", "/sys/class/backlight/" + qs.backlightDevice + "/max_brightness"]
-        running: false
-        stdout: SplitParser {
-            onRead: data => {
-                let v = parseInt(data.trim());
-                if (!isNaN(v))
-                    qs.maxBrightness = v;
-            }
-        }
-    }
-    Process {
-        id: brightnessProc
-        command: ["cat", "/sys/class/backlight/" + qs.backlightDevice + "/brightness"]
-        running: false
-        stdout: SplitParser {
-            onRead: data => {
-                let v = parseInt(data.trim());
-                if (!isNaN(v) && qs.maxBrightness > 0)
-                    qs.brightnessValue = Math.round((v / qs.maxBrightness) * 100);
-            }
-        }
-    }
-    Process {
-        id: setBrightnessProc
-        running: false
-    }
-
-    function setBrightness(pct) {
-        brightnessValue = pct;
-        let raw = Math.round((pct / 100.0) * maxBrightness);
-        setBrightnessProc.command = ["busctl", "call", "org.freedesktop.login1", "/org/freedesktop/login1/session/auto", "org.freedesktop.login1.Session", "SetBrightness", "ssu", "backlight", backlightDevice, String(raw)];
-        setBrightnessProc.running = true;
-    }
-
-    // ── Keyboard backlight ──
-    // Dell laptops expose dell::kbd_backlight in /sys/class/leds/.
-    // max=2, brightness={0,1,2}.
-    property int kbdBacklightValue: 0
-    property int kbdBacklightMax: 2
-    Process {
-        id: kbdBacklightProc
-        command: ["cat", "/sys/class/leds/dell::kbd_backlight/brightness"]
-        running: false
-        stdout: SplitParser {
-            onRead: data => {
-                let v = parseInt(data.trim());
-                if (!isNaN(v)) qs.kbdBacklightValue = v;
-            }
-        }
-    }
-    Process {
-        id: kbdBacklightMaxProc
-        command: ["cat", "/sys/class/leds/dell::kbd_backlight/max_brightness"]
-        running: false
-        stdout: SplitParser {
-            onRead: data => {
-                let v = parseInt(data.trim());
-                if (!isNaN(v) && v > 0) qs.kbdBacklightMax = v;
-            }
-        }
-    }
-    Process { id: setKbdBacklightProc; running: false }
-    function setKbdBacklight(pct) {
-        // pct is 0-100; map to raw kbdBacklightMax levels
-        let raw = Math.round((pct / 100.0) * Math.max(1, kbdBacklightMax));
-        raw = Math.max(0, Math.min(kbdBacklightMax, raw));
-        setKbdBacklightProc.command = ["sh", "-c", "echo " + raw + " > /sys/class/leds/dell::kbd_backlight/brightness"];
-        setKbdBacklightProc.running = true;
-    }
-
-    // ── Dark mode (gsettings) ──
-    property bool darkModeActive: false
-    Process {
-        id: darkModeTimer
-        command: ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"]
-        running: false
-        stdout: SplitParser {
-            onRead: data => {
-                qs.darkModeActive = data.trim().includes("prefer-dark");
-            }
-        }
-    }
-    Process { id: setDarkModeProc; running: false }
-    function setDarkMode(active) {
-        setDarkModeProc.command = ["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", active ? "prefer-dark" : "default"];
-        setDarkModeProc.running = true;
-    }
-
-    // ── Night light (placeholder — Hyprland, no backend yet) ──
-    property bool nightLightActive: false
-    function setNightLight(active) {
-        console.log("Night Light: placeholder only (Hyprland backend not implemented)");
-        // TODO: implement with gammastep or equivalent
-    }
-
-    // ── Auto-brightness (placeholder — Hyprland, no backend yet) ──
-    property bool autoBrightnessActive: false
-    function setAutoBrightness(active) {
-        console.log("Auto Brightness: placeholder only (Hyprland backend not implemented)");
-        // TODO: implement with ambient-light-sensor or equivalent
-    }
-
-    // ── Poll kbd backlight and dark mode periodically ──
-    Timer {
-        interval: 5000
-        running: true
-        repeat: true
-        onTriggered: {
-            kbdBacklightProc.running = true;
-            darkModeTimer.running = true;
-        }
-    }
-    // Also probe kbd backlight max on startup
-    Timer {
-        interval: 100
-        running: true
-        repeat: false
-        onTriggered: kbdBacklightMaxProc.running = true
-    }
+    // All backlight / kbd-backlight / dark-mode logic now lives in
+    // services/Brightness.qml. Consumers reference Brightness.brightnessValue,
+    // Brightness.maxBrightness, Brightness.kbdBacklightValue, etc.
 
     // ── Drag / open animation ──
     onDragOffsetChanged: {
@@ -1484,8 +1331,8 @@ PanelWindow {
                                     id: battIconMorph
                                     anchors.fill: parent
                                     source: {
-                                        let isCharging = qs.batteryStatus === "Charging";
-                                        let pct = qs.batteryPct;
+                                        let isCharging = Battery.batteryStatus === "Charging";
+                                        let pct = Battery.batteryPct;
                                         if (pct < 0)
                                             return Icons.icon("battery-missing-symbolic");
                                         let level = Math.max(0, Math.min(100, Math.round(pct / 10) * 10));
@@ -1506,7 +1353,7 @@ PanelWindow {
                                 }
                             }
                             Text {
-                                text: qs.batteryPct >= 0 ? qs.batteryPct + "%" : "—"
+                                text: Battery.batteryPct >= 0 ? Battery.batteryPct + "%" : "—"
                                 color: "white"
                                 font.pixelSize: 15
                                 font.bold: true
@@ -3203,8 +3050,8 @@ Behavior on radius {
                         id: morphBattIcon
                         anchors.fill: parent
                         source: {
-                            let isCharging = qs.batteryStatus === "Charging";
-                            let pct = qs.batteryPct;
+                            let isCharging = Battery.batteryStatus === "Charging";
+                            let pct = Battery.batteryPct;
                             if (pct < 0) return Icons.icon("battery-missing-symbolic");
                             let level = Math.max(0, Math.min(100, Math.round(pct / 10) * 10));
                             let sLevel = (level < 100 ? (level < 10 ? "00" : "0") : "") + level;
@@ -3223,7 +3070,7 @@ Behavior on radius {
                     }
                 }
                 Text {
-                    text: qs.batteryPct >= 0 ? qs.batteryPct + "%" : "—"
+                    text: Battery.batteryPct >= 0 ? Battery.batteryPct + "%" : "—"
                     color: "white"
                     font.pixelSize: 15
                     font.bold: true
