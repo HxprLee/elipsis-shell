@@ -214,42 +214,126 @@ ShellRoot {
     // ── Battery (extracted to services/Battery.qml) ──
     // batteryPct / batteryStatus now live in Battery.
 
-    // ── Power Profiles ──
-    property string powerProfile: "balanced"
+    // ── PowerProfiles (extracted to services/PowerProfiles.qml) ──
 
+    // ── Do Not Disturb (extracted to services/Notifications.qml) ──
+    // dndActive + setDnd now live in Notifications.
+
+    // ── Caffeine (extracted to services/Caffeine.qml) ──
+
+    // ── Screen Recording ──
+    property bool isScreenRecording: screenRecordProc.running
     Process {
-        id: getPowerProfileProc
-        command: ["busctl", "get-property", "net.hadess.PowerProfiles", "/net/hadess/PowerProfiles", "net.hadess.PowerProfiles", "ActiveProfile"]
+        id: screenRecordProc
         running: false
-        stdout: SplitParser { 
-            onRead: data => { 
-                // data looks like: s "performance"
-                let parts = data.trim().split('"');
-                if (parts.length >= 2) {
-                    shellRoot.powerProfile = parts[1];
-                }
-            } 
+    }
+    Process {
+        id: stopScreenRecordProc
+        command: ["pkill", "-SIGINT", "-f", "gpu-screen-recorder.*-o"]
+        running: false
+    }
+
+    function toggleScreenRecording(audioIndex, fpsIndex, encoderIndex, resIndex, bitrateIndex) {
+        if (isScreenRecording) {
+            stopScreenRecordProc.running = true
+        } else {
+            let audioOptions = ["default_output", "default_input", "default_output|default_input", "none"]
+            let fpsOptions = ["30", "45", "60"]
+            let encoderOptions = ["auto", "h264", "hevc", "av1"]
+            let resOptions = ["0x0"]
+            let bitrateOptions = ["medium", "high", "very_high", "ultra"]
+
+            // Clamp indices to valid range to defend against corrupted persisted state
+            let aIdx = Math.max(0, Math.min(audioOptions.length - 1, parseInt(audioIndex) || 0));
+            let fIdx = Math.max(0, Math.min(fpsOptions.length - 1, parseInt(fpsIndex) || 0));
+            let eIdx = Math.max(0, Math.min(encoderOptions.length - 1, parseInt(encoderIndex) || 0));
+            let rIdx = Math.max(0, Math.min(resOptions.length - 1, parseInt(resIndex) || 0));
+            let bIdx = Math.max(0, Math.min(bitrateOptions.length - 1, parseInt(bitrateIndex) || 0));
+
+            let aOpt = audioOptions[aIdx]
+            let aStr = aOpt !== "none" ? `-a "${aOpt}"` : ""
+            let cmd = `gpu-screen-recorder -w screen ${aStr} -f ${fpsOptions[fIdx]} -k ${encoderOptions[eIdx]} -s ${resOptions[rIdx]} -q ${bitrateOptions[bIdx]} -o ~/Videos/ScreenRecord-$(date +%Y%m%d-%H%M%S).mp4`
+
+            screenRecordProc.command = ["sh", "-c", cmd]
+            screenRecordProc.running = true
         }
     }
 
-    Timer {
-        interval: 5000
-        running: true
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: {
-            getPowerProfileProc.running = true;
+    // ── Wallpapers (extracted to services/Wallpapers.qml) ──
+    // wallpaperPath/blurVersion/blurredWallpaperPath/usePrecomputedBlur/
+    // staticBlurEnabled/blurEnabled/materialTheme/accentColor now live in
+    // Wallpapers. The 'appearance' IPC handlers delegate to it below.
+
+    IpcHandler {
+        target: "appearance"
+        function setPrecomputedBlur(enabled: string): void { Wallpapers.setPrecomputedBlur(enabled); }
+        function setBlurEnabled(enabled: string): void { Wallpapers.setBlurEnabled(enabled); }
+        function setMaterial(material: string): void { Wallpapers.setMaterial(material); }
+    }
+
+    // ── UI Components (per-screen via Variants) ──
+    Variants {
+        model: Quickshell.screens
+        Item {
+            id: barStack
+            required property var modelData
+            // BackgroundBar is declared first so its z-order is below BottomBar.
+            BackgroundBar {
+                id: backgroundBar
+                screen: barStack.modelData
+                dockControl: bottomBar
+            }
+            BottomBar {
+                id: bottomBar
+                screen: barStack.modelData
+            }
         }
     }
-
-    Process { id: setPowerProfileProc; running: false }
-
-    function setPowerProfile(profile) {
-        shellRoot.powerProfile = profile; // optimistic update
-        setPowerProfileProc.command = ["busctl", "set-property", "net.hadess.PowerProfiles", "/net/hadess/PowerProfiles", "net.hadess.PowerProfiles", "ActiveProfile", "s", profile];
-        setPowerProfileProc.running = true;
+    Variants {
+        model: Quickshell.screens
+        StatusBar {
+            property var modelData
+            screen: modelData
+            batteryPct: Battery.batteryPct
+            batteryStatus: Battery.batteryStatus
+        }
     }
+    Variants {
+        model: Quickshell.screens
+        QuickSettings {
+            property var modelData
+            screen: modelData
+            batteryPct: Battery.batteryPct
+            batteryStatus: Battery.batteryStatus
+        }
+    }
+    NotificationPopup { id: globalToast }
+    // Wire Notifications → global toast (only show when panel is closed).
+    Connections {
+        target: Notifications
+        function onNotificationReceived(item) {
+            if (!UIState.panelOpen) globalToast.show(item);
+        }
+    }
+    Variants {
+        model: Quickshell.screens
+        TaskManager {
+            property var modelData
+            screen: modelData
+        }
+    }
+    Variants {
+        model: Quickshell.screens
+        AppDrawer {
+            property var modelData
+            screen: modelData
+        }
+    }
+    VolumeOSD {}
+    PowerMenu {}
 
+    // ── Context menu helpers live in services/UIState.qml ──
+}
     // ── Do Not Disturb (extracted to services/Notifications.qml) ──
     // dndActive + setDnd now live in Notifications.
 
