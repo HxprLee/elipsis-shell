@@ -183,9 +183,10 @@ PanelWindow {
         id: darkModeTimer
         command: ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"]
         running: false
-        onExited: (code) => {
-            let out = readAll().trim();
-            qs.darkModeActive = out.includes("prefer-dark");
+        stdout: SplitParser {
+            onRead: data => {
+                qs.darkModeActive = data.trim().includes("prefer-dark");
+            }
         }
     }
     Process { id: setDarkModeProc; running: false }
