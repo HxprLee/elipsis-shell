@@ -5,21 +5,22 @@ import Qt5Compat.GraphicalEffects
 import Quickshell.Networking
 import ".."
 import "../reusables"
+import "services"
 
 Item {
     id: root
     property bool isControlWidget: true
     property bool isSimpleToggle: true
-    property bool isWired: shellRoot.ethernetConnected
+    property bool isWired: Network.ethernetConnected
 
     // Dynamic Title support
-    property string titleText: isWired ? "Ethernet" : (shellRoot.networkName !== "" ? shellRoot.networkName : "Networks")
+    property string titleText: isWired ? "Ethernet" : (Network.networkName !== "" ? Network.networkName : "Networks")
     property string toggleName: "Network"
 
-    property string subtitleText: isWired ? "Connected" : (shellRoot.networkName !== "" ? "Connected" : (qs.wifiEnabled ? "Not Connected" : "Off"))
-    property string iconSource: shellRoot.icon(isWired ? "network-wired-symbolic" : (qs.wifiEnabled ? "network-wireless-symbolic" : "network-wireless-offline-symbolic"))
+    property string subtitleText: isWired ? "Connected" : (Network.networkName !== "" ? "Connected" : (qs.wifiEnabled ? "Not Connected" : "Off"))
+    property string iconSource: Icons.icon(isWired ? "network-wired-symbolic" : (qs.wifiEnabled ? "network-wireless-symbolic" : "network-wireless-offline-symbolic"))
     property bool isActive: qs.wifiEnabled || isWired
-    property color activeColor: shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
+    property color activeColor: Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
 
     // Expanded view support
     property bool hasExpandedView: true
@@ -35,10 +36,10 @@ Item {
 
             // Enable wifi scanner while expanded view is open
             Binding {
-                target: shellRoot.wifiDevice
+                target: Network.wifiDevice
                 property: "scannerEnabled"
                 value: root.isActive && expandedOverlay.isExpanded
-                when: shellRoot.wifiDevice !== null
+                when: Network.wifiDevice !== null
                 restoreMode: Binding.RestoreBindingOrValue
             }
 
@@ -109,13 +110,13 @@ Item {
 
                         Component.onCompleted: {
                             if (root.isActive) {
-                                shellRoot.refreshNetwork();
+                                Network.refreshNetwork();
                             }
                         }
 
                         // Internal filtered models to avoid redundant expensive filtering
                         property var allNetworks: {
-                            let nets = shellRoot.wifiDevice ? shellRoot.wifiDevice.networks.values : [];
+                            let nets = Network.wifiDevice ? Network.wifiDevice.networks.values : [];
                             return nets.slice().sort((a, b) => {
                                 if (a.connected)
                                     return -1;
@@ -131,7 +132,7 @@ Item {
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 2
-                            visible: shellRoot.ethernetConnected
+                            visible: Network.ethernetConnected
 
                             Text {
                                 text: "Ethernet"
@@ -142,17 +143,17 @@ Item {
                             }
 
                             ToggleListItem {
-                                title: shellRoot.activeEthernetName !== "" ? shellRoot.activeEthernetName : (shellRoot.ethernetIface !== "" ? shellRoot.ethernetIface : "Wired Connection")
-                                subtitle: shellRoot.ethernetConnected ? "Connected" : "Disconnected"
-                                subtitleColor: shellRoot.ethernetConnected ? root.activeColor : Qt.rgba(1, 1, 1, 0.6)
-                                iconSource: shellRoot.icon(shellRoot.ethernetConnected ? "network-wired-symbolic" : "network-wired-offline-symbolic")
-                                iconOpacity: shellRoot.ethernetConnected ? 1.0 : 0.6
-                                showCheckmark: shellRoot.ethernetConnected
+                                title: Network.activeEthernetName !== "" ? Network.activeEthernetName : (Network.ethernetIface !== "" ? Network.ethernetIface : "Wired Connection")
+                                subtitle: Network.ethernetConnected ? "Connected" : "Disconnected"
+                                subtitleColor: Network.ethernetConnected ? root.activeColor : Qt.rgba(1, 1, 1, 0.6)
+                                iconSource: Icons.icon(Network.ethernetConnected ? "network-wired-symbolic" : "network-wired-offline-symbolic")
+                                iconOpacity: Network.ethernetConnected ? 1.0 : 0.6
+                                showCheckmark: Network.ethernetConnected
                                 onClicked: {
-                                    if (shellRoot.ethernetConnected) {
-                                        shellRoot.disconnectEthernet();
+                                    if (Network.ethernetConnected) {
+                                        Network.disconnectEthernet();
                                     } else {
-                                        shellRoot.connectEthernet();
+                                        Network.connectEthernet();
                                     }
                                 }
                             }
@@ -206,7 +207,7 @@ Item {
                                     width: refreshRow.implicitWidth
                                     height: 24
 
-                                    property bool isScanning: shellRoot.isScanningNetwork
+                                    property bool isScanning: Network.isScanningNetwork
 
                                     Row {
                                         id: refreshRow
@@ -224,7 +225,7 @@ Item {
                                         Image {
                                             visible: refreshBtn.isScanning
                                             sourceSize: Qt.size(16, 16)
-                                            source: shellRoot.icon("view-refresh-symbolic")
+                                            source: Icons.icon("view-refresh-symbolic")
                                             opacity: 0.6
                                             RotationAnimation on rotation {
                                                 running: refreshBtn.isScanning
@@ -240,7 +241,7 @@ Item {
                                         id: refreshMouse
                                         anchors.fill: parent
                                         hoverEnabled: true
-                                        onClicked: shellRoot.refreshNetwork()
+                                        onClicked: Network.refreshNetwork()
                                     }
                                 }
                             }
@@ -271,14 +272,14 @@ Item {
                         subtitleColor: root.activeColor
                         iconSource: {
                             if (modelData.signalStrength >= 0.8)
-                                return shellRoot.icon("network-wireless-signal-excellent-symbolic");
+                                return Icons.icon("network-wireless-signal-excellent-symbolic");
                             if (modelData.signalStrength >= 0.6)
-                                return shellRoot.icon("network-wireless-signal-good-symbolic");
+                                return Icons.icon("network-wireless-signal-good-symbolic");
                             if (modelData.signalStrength >= 0.4)
-                                return shellRoot.icon("network-wireless-signal-ok-symbolic");
+                                return Icons.icon("network-wireless-signal-ok-symbolic");
                             if (modelData.signalStrength >= 0.2)
-                                return shellRoot.icon("network-wireless-signal-weak-symbolic");
-                            return shellRoot.icon("network-wireless-signal-none-symbolic");
+                                return Icons.icon("network-wireless-signal-weak-symbolic");
+                            return Icons.icon("network-wireless-signal-none-symbolic");
                         }
                         iconOpacity: modelData.connected ? 1.0 : 0.6
                         showCheckmark: modelData.connected
@@ -353,7 +354,7 @@ Item {
                             Image {
                                 anchors.centerIn: parent
                                 sourceSize: Qt.size(16, 16)
-                                source: shellRoot.icon("go-next-symbolic")
+                                source: Icons.icon("go-next-symbolic")
                             }
 
                             MouseArea {

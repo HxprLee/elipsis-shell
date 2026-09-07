@@ -5,6 +5,7 @@ import Quickshell.Wayland
 import QtQuick
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
+import "services"
 
 PanelWindow {
     id: osd
@@ -80,7 +81,7 @@ PanelWindow {
     }
 
     onVolumeChanged: {
-        if (!isInitialized || shellRoot.panelOpen) return;
+        if (!isInitialized || UIState.panelOpen) return;
         showOSD()
     }
 
@@ -109,7 +110,7 @@ PanelWindow {
     }
     
     onMutedChanged: {
-        if (!isInitialized || shellRoot.panelOpen) return;
+        if (!isInitialized || UIState.panelOpen) return;
         showOSD()
     }
 
@@ -286,7 +287,7 @@ PanelWindow {
                             id: volIcon
                             anchors.fill: parent
                             sourceSize: Qt.size(24, 24)
-                            source: shellRoot.icon(osd.muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
+                            source: Icons.icon(osd.muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
                             visible: false
                         }
                         ColorOverlay {
@@ -559,7 +560,7 @@ PanelWindow {
                                     Image {
                                         id: skipBackIcon
                                         anchors.fill: parent
-                                        source: shellRoot.icon("media-skip-backward-symbolic")
+                                        source: Icons.icon("media-skip-backward-symbolic")
                                         sourceSize: Qt.size(24, 24)
                                         visible: false
                                     }
@@ -583,7 +584,7 @@ PanelWindow {
                                     Image {
                                         id: playIcon
                                         anchors.fill: parent
-                                        source: shellRoot.icon(osd.activePlayer && osd.activePlayer.isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic")
+                                        source: Icons.icon(osd.activePlayer && osd.activePlayer.isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic")
                                         sourceSize: Qt.size(32, 32)
                                         visible: false
                                     }
@@ -607,7 +608,7 @@ PanelWindow {
                                     Image {
                                         id: skipFwdIcon
                                         anchors.fill: parent
-                                        source: shellRoot.icon("media-skip-forward-symbolic")
+                                        source: Icons.icon("media-skip-forward-symbolic")
                                         sourceSize: Qt.size(24, 24)
                                         visible: false
                                     }

@@ -14,8 +14,8 @@ import ".."
 // Two usage modes:
 //
 // 1. Factory mode (dynamic, self-destroying) — via ShellRoot helpers:
-//      shellRoot.openContextMenuAtCursor(screen, model)
-//      shellRoot.closeContextMenu(screen)
+//      UIState.openContextMenuAtCursor(screen, model)
+//      UIState.closeContextMenu(screen)
 //
 // 2. Inline mode (persistent instance, Menu-style API):
 //      ContextMenu {

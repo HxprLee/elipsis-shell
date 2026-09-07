@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import ".."
 import "../reusables"
+import "services"
 // BrightnessSlider.qml — Backlight brightness slider using logind/sysfs.
 // Context: shellRoot (icons), qs (brightnessValue, setBrightness), controlPanel (editMode)
 
@@ -50,7 +51,7 @@ Item {
                     id: bgIcon
                     anchors.centerIn: parent
                     sourceSize: Qt.size(28, 28)
-                    source: shellRoot.icon("display-brightness-symbolic")
+                    source: Icons.icon("display-brightness-symbolic")
                     visible: false
                 }
                 ColorOverlay {
@@ -76,7 +77,7 @@ Item {
                         id: fgIcon
                         anchors.centerIn: parent
                         sourceSize: Qt.size(28, 28)
-                        source: shellRoot.icon("display-brightness-symbolic")
+                        source: Icons.icon("display-brightness-symbolic")
                         visible: false
                     }
                     ColorOverlay {
@@ -137,7 +138,7 @@ Item {
                     id: vBgIcon
                     anchors.centerIn: parent
                     sourceSize: Qt.size(24, 24)
-                    source: shellRoot.icon("display-brightness-symbolic")
+                    source: Icons.icon("display-brightness-symbolic")
                     visible: false
                 }
                 ColorOverlay {
@@ -167,7 +168,7 @@ Item {
                         id: vFgIcon
                         anchors.centerIn: parent
                         sourceSize: Qt.size(24, 24)
-                        source: shellRoot.icon("display-brightness-symbolic")
+                        source: Icons.icon("display-brightness-symbolic")
                         visible: false
                     }
                     ColorOverlay {
@@ -241,7 +242,7 @@ Item {
                             Layout.fillWidth: true
                             Image {
                                 sourceSize: Qt.size(16, 16)
-                                source: shellRoot.icon("display-brightness-symbolic")
+                                source: Icons.icon("display-brightness-symbolic")
                                 Layout.preferredWidth: 16
                                 Layout.preferredHeight: 16
                                 ColorOverlay {
@@ -286,11 +287,11 @@ Item {
                                         width: parent.height
                                         height: parent.height
                                         radius: 4
-                                        color: shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
+                                        color: Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
                                         Image {
                                             anchors.centerIn: parent
                                             sourceSize: Qt.size(16, 16)
-                                            source: shellRoot.icon("display-brightness-symbolic")
+                                            source: Icons.icon("display-brightness-symbolic")
                                             visible: false
                                         }
                                         ColorOverlay {
@@ -303,7 +304,7 @@ Item {
                                         x: parent.height
                                         width: expandedBrightnessSlider.visualPosition * (parent.width - parent.height)
                                         height: parent.height
-                                        color: shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
+                                        color: Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
                                     }
                                 }
                                 onMoved: qs.setBrightness(value)
@@ -320,7 +321,7 @@ Item {
                             Layout.fillWidth: true
                             Image {
                                 sourceSize: Qt.size(16, 16)
-                                source: shellRoot.icon("input-keyboard-symbolic")
+                                source: Icons.icon("input-keyboard-symbolic")
                                 Layout.preferredWidth: 16
                                 Layout.preferredHeight: 16
                                 ColorOverlay {
@@ -365,7 +366,7 @@ Item {
                                         width: parent.height
                                         height: parent.height
                                         radius: 4
-                                        color: shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
+                                        color: Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
                                     }
                                     Rectangle {
                                         x: parent.height
@@ -374,7 +375,7 @@ Item {
                                             ((vSliderKbd.value - 0) / range) * (parent.width - parent.height);
                                         }
                                         height: parent.height
-                                        color: shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
+                                        color: Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
                                     }
                                 }
                                 onMoved: {
@@ -396,7 +397,7 @@ Item {
                     ToggleListItem {
                         Layout.fillWidth: true
                         title: "Dark Mode"
-                        iconSource: shellRoot.icon("dark-mode-symbolic")
+                        iconSource: Icons.icon("dark-mode-symbolic")
                         showCheckmark: qs.darkModeActive
                         onClicked: qs.setDarkMode(!qs.darkModeActive)
                     }
@@ -405,7 +406,7 @@ Item {
                     ToggleListItem {
                         Layout.fillWidth: true
                         title: "Night Light"
-                        iconSource: shellRoot.icon("night-light-symbolic")
+                        iconSource: Icons.icon("night-light-symbolic")
                         showCheckmark: qs.nightLightActive
                         onClicked: qs.setNightLight(!qs.nightLightActive)
                     }
@@ -414,7 +415,7 @@ Item {
                     ToggleListItem {
                         Layout.fillWidth: true
                         title: "Auto Brightness"
-                        iconSource: shellRoot.icon("auto-brightness-symbolic")
+                        iconSource: Icons.icon("auto-brightness-symbolic")
                         showCheckmark: qs.autoBrightnessActive
                         onClicked: qs.setAutoBrightness(!qs.autoBrightnessActive)
                     }

@@ -3,6 +3,7 @@ import Quickshell.Hyprland
 import Quickshell.Wayland
 import QtQuick
 import QtQuick.Controls
+import "services"
 
 // Background strip at the bottom of every screen. Owns the always-reserved
 // 24 px exclusive zone, the dim layer, and the edge-swipe input area that
@@ -55,7 +56,7 @@ PanelWindow {
         // Baseline band is faintly visible so the user can always see the
         // reserved strip at the bottom of the screen. The full dim fades
         // in for the single-tiled-window case.
-        color: shellRoot.hasSingleTiledWindow && shellRoot.barState === "handle"
+        color: UIState.hasSingleTiledWindow && UIState.barState === "handle"
             ? Qt.rgba(0, 0, 0, 0.6)
             : Qt.rgba(0, 0, 0, 0)
         Behavior on color {
@@ -66,7 +67,7 @@ PanelWindow {
     Binding {
         target: bottomBarBg
         property: "color"
-        when: !shellRoot.blurEnabled
+        when: !Wallpapers.blurEnabled
         value: Qt.rgba(0, 0, 0, 0.5)
     }
 
@@ -75,9 +76,9 @@ PanelWindow {
         id: switcherHoldTimer
         interval: 80
         onTriggered: {
-            if (isSwiping && shellRoot.barState === "handle") {
-                shellRoot.closeOtherOverlays("switcher");
-                shellRoot.switcherOpen = true;
+            if (isSwiping && UIState.barState === "handle") {
+                UIState.closeOtherOverlays("switcher");
+                UIState.switcherOpen = true;
                 switcherTriggered = true;
             }
         }
@@ -133,7 +134,7 @@ PanelWindow {
                 dockControl.swipeDelta = Qt.point(0, 0);
 
                 // Horizontal swipe → workspace switch (only in handle state)
-                if (Math.abs(dx) > 100 && shellRoot.barState === "handle") {
+                if (Math.abs(dx) > 100 && UIState.barState === "handle") {
                     Hyprland.dispatch("hl.dsp.focus({ workspace = '" + (dx < 0 ? "+1" : "-1") + "' })");
                 }
 
@@ -148,7 +149,7 @@ PanelWindow {
                 }
 
                 // Swipe down → collapse to handle
-                if (dy > 40 && shellRoot.barState !== "handle") {
+                if (dy > 40 && UIState.barState !== "handle") {
                     dockControl.setBarState("handle", true);
                 }
             }

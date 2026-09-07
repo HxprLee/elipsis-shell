@@ -6,6 +6,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
+import "services"
 
 WlSessionLockSurface {
     id: root
@@ -54,7 +55,7 @@ WlSessionLockSurface {
             source: bgSource
             radius: Math.min(80, 80 * (authVisible ? 1 : Math.abs(swipeOffset) / 150))
             opacity: 1.0
-            visible: shellRoot.blurEnabled
+            visible: Wallpapers.blurEnabled
         }
 
         // Darken overlay
@@ -177,7 +178,7 @@ WlSessionLockSurface {
                 lockoutRemaining = 0
                 lockoutTimer.stop()
                 passwordInput.text = ""
-                shellRoot.unlock()
+                Lock.unlock()
             } else if (result === PamResult.MaxTries) {
                 pamMessage.text = "Maximum attempts exceeded"
                 pamMessage.isError = true
@@ -215,7 +216,7 @@ WlSessionLockSurface {
         // Padlock Icon
         Image {
             id: padlockIcon
-            source: shellRoot.icon("system-lock-screen-symbolic")
+            source: Icons.icon("system-lock-screen-symbolic")
             width: 32; height: 32
             anchors.top: parent.top
             anchors.topMargin: 48
@@ -421,8 +422,8 @@ WlSessionLockSurface {
                                 sourceSize: Qt.size(32, 32)
                                 visible: modelData === "Cancel" || modelData === "Enter"
                                 source: modelData === "Cancel"
-                                    ? shellRoot.icon("window-close-symbolic")
-                                    : (modelData === "Enter" ? shellRoot.icon("emblem-ok-symbolic") : "")
+                                    ? Icons.icon("window-close-symbolic")
+                                    : (modelData === "Enter" ? Icons.icon("emblem-ok-symbolic") : "")
                             }
                             Text {
                                 anchors.centerIn: parent
@@ -471,8 +472,8 @@ WlSessionLockSurface {
             anchors.rightMargin: 16
             anchors.verticalCenter: parent.verticalCenter
             color: "white"
-            batteryPct: shellRoot.batteryPct
-            batteryStatus: shellRoot.batteryStatus
+            batteryPct: Battery.batteryPct
+            batteryStatus: Battery.batteryStatus
         }
     }
 }

@@ -5,6 +5,7 @@ import Quickshell.Wayland
 import QtQuick
 import QtQuick.Controls
 import Qt5Compat.GraphicalEffects
+import "services"
 
 // Dock handle + content. Implemented as a bottom-anchored, horizontally
 // centered PanelWindow on the Top layer (no exclusive zone, input masked
@@ -59,14 +60,14 @@ PanelWindow {
     // swipe; reset to 1.0 by State PropertyActions when the dock collapses.
     property real shrinkFactor: 1.0
 
-    property bool hasWindows: shellRoot.hasWindowsOnCurrentWs
+    property bool hasWindows: UIState.hasWindowsOnCurrentWs
 
     property bool _lockState: false
     property bool forceMinimized: false
 
     // barState lives on shellRoot so BackgroundBar.qml can react to it.
     // "handle" | "dock" | "overlay".
-    property string barState: shellRoot.barState
+    property string barState: UIState.barState
 
     // Close any open context menu when the bar state changes (e.g. user
     // swipes down to overlay state from inside a right-click menu).
@@ -74,7 +75,7 @@ PanelWindow {
         target: shellRoot
         function onBarStateChanged() {
             if (root.screen) {
-                shellRoot.closeContextMenu(root.screen);
+                UIState.closeContextMenu(root.screen);
             }
         }
     }
@@ -100,7 +101,7 @@ PanelWindow {
 
         // Exclusive zone is owned by BackgroundBar.qml (24px always). This
         // window floats above it and never reserves space.
-        shellRoot.barState = newState;
+        UIState.barState = newState;
 
         // Manage force minimized state
         if (newState === "handle" && !hasWindows && lock) {
@@ -201,22 +202,22 @@ PanelWindow {
         // Pin/Unpin item
         menuModel.push({
             text: app.isPinned ? "Unpin app from dock" : "Pin app to dock",
-            icon: shellRoot.icon(app.isPinned ? "window-close-symbolic" : "view-app-grid-symbolic"),
-            action: () => shellRoot.togglePin(app.id)
+            icon: Icons.icon(app.isPinned ? "window-close-symbolic" : "view-app-grid-symbolic"),
+            action: () => ConfigStore.togglePin(app.id)
         });
 
         // Close item
         if (app.isRunning) {
             menuModel.push({
                 text: "Close window",
-                icon: shellRoot.icon("window-close-symbolic"),
+                icon: Icons.icon("window-close-symbolic"),
                 isDestructive: true,
-                action: () => shellRoot.killApp(app.id)
+                action: () => SystemActions.killApp(app.id)
             });
         }
 
         if (root.screen) {
-            shellRoot.openContextMenuAtCursor(root.screen, menuModel);
+            UIState.openContextMenuAtCursor(root.screen, menuModel);
         }
     }
 
@@ -370,15 +371,15 @@ PanelWindow {
                         width: 50
                         height: 50
                         sourceSize: Qt.size(64, 64)
-                        source: shellRoot.icon("view-app-grid-symbolic")
+                        source: Icons.icon("view-app-grid-symbolic")
                     }
                 }
                 onClicked: {
-                    if (shellRoot.appDrawerOpen) {
-                        shellRoot.appDrawerOpen = false;
+                    if (UIState.appDrawerOpen) {
+                        UIState.appDrawerOpen = false;
                     } else {
-                        shellRoot.closeOtherOverlays("drawer");
-                        shellRoot.appDrawerOpen = !shellRoot.appDrawerOpen;
+                        UIState.closeOtherOverlays("drawer");
+                        UIState.appDrawerOpen = !UIState.appDrawerOpen;
                     }
                 }
                 ToolTip.visible: hovered
@@ -392,7 +393,7 @@ PanelWindow {
                 height: 64
                 orientation: ListView.Horizontal
                 spacing: 24
-                model: shellRoot.dockAppsModel
+                model: Dock.dockAppsModel
                 interactive: false
 
                 Behavior on width {
@@ -494,7 +495,7 @@ PanelWindow {
                         keys: ["dock-app"]
                         onEntered: drag => {
                             if (drag.source.dragAppId !== model.id) {
-                                shellRoot.movePinnedApp(drag.source.dragAppId, model.id);
+                                ConfigStore.movePinnedApp(drag.source.dragAppId, model.id);
                             }
                         }
                     }
@@ -604,7 +605,7 @@ PanelWindow {
                         onClicked: {
                             console.log("Dock button clicked: " + model.name);
                             if (root.screen) {
-                                shellRoot.closeContextMenu(root.screen);
+                                UIState.closeContextMenu(root.screen);
                             }
                             if (model.isRunning && model.address) {
                                 let safeAddr = model.address.replace(/[^0-9a-fA-Fx]/g, "");
@@ -670,7 +671,7 @@ PanelWindow {
                                 if (!dragging && didLongPress && (mouse.buttons & Qt.LeftButton)) {
                                     if (didSwipe) {
                                         if (root.screen) {
-                                            shellRoot.closeContextMenu(root.screen);
+                                            UIState.closeContextMenu(root.screen);
                                         }
 
                                         let rawX = startItemGlobalX + (p.x - startMouseX);

@@ -5,6 +5,7 @@ import Qt5Compat.GraphicalEffects
 import Quickshell.Services.Pipewire
 import Quickshell.Io
 import ".."
+import "services"
 
 // VolumeSlider.qml — Pipewire audio volume slider.
 // Context: shellRoot (icons), qs (audioNode), controlPanel (editMode)
@@ -100,7 +101,7 @@ Item {
                                         id: masterBgIcon
                                         anchors.centerIn: parent
                                         sourceSize: Qt.size(28, 28)
-                                        source: shellRoot.icon(qs.audioNode && qs.audioNode.muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
+                                        source: Icons.icon(qs.audioNode && qs.audioNode.muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
                                         visible: false
                                     }
                                     ColorOverlay {
@@ -114,7 +115,7 @@ Item {
                                 Rectangle {
                                     width: masterSlider.visualPosition * masterBgTrack.width
                                     height: masterBgTrack.height
-                                    color: shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
+                                    color: Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
 
                                     Item {
                                         x: 0
@@ -123,7 +124,7 @@ Item {
                                             id: masterFgIcon
                                             anchors.centerIn: parent
                                             sourceSize: Qt.size(28, 28)
-                                            source: shellRoot.icon(qs.audioNode && qs.audioNode.muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
+                                            source: Icons.icon(qs.audioNode && qs.audioNode.muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
                                             visible: false
                                         }
                                         ColorOverlay {
@@ -391,7 +392,7 @@ Item {
                             Image {
                                 anchors.centerIn: parent
                                 sourceSize: Qt.size(18, 18)
-                                source: shellRoot.icon((modelData && modelData.audio && modelData.audio.muted) ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
+                                source: Icons.icon((modelData && modelData.audio && modelData.audio.muted) ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
                             }
 
                             MouseArea {
@@ -464,7 +465,7 @@ Item {
                                         width: parent.parent.visualPosition * parent.width
                                         height: parent.height
                                         radius: 4
-                                        color: isDefault ? shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0) : Qt.rgba(1, 1, 1, 0.4)
+                                        color: isDefault ? Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0) : Qt.rgba(1, 1, 1, 0.4)
                                     }
                                 }
 
@@ -526,7 +527,7 @@ Item {
                             Image {
                                 anchors.centerIn: parent
                                 sourceSize: Qt.size(18, 18)
-                                source: shellRoot.icon((modelData && modelData.audio && modelData.audio.muted) ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
+                                source: Icons.icon((modelData && modelData.audio && modelData.audio.muted) ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
                             }
 
                             MouseArea {
@@ -575,7 +576,7 @@ Item {
                                         width: parent.parent.visualPosition * parent.width
                                         height: parent.height
                                         radius: 4
-                                        color: shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
+                                        color: Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
                                     }
                                 }
 
@@ -630,7 +631,7 @@ Item {
                     id: bgIcon
                     anchors.centerIn: parent
                     sourceSize: Qt.size(28, 28)
-                    source: shellRoot.icon(qs.audioNode && qs.audioNode.muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
+                    source: Icons.icon(qs.audioNode && qs.audioNode.muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
                     visible: false
                 }
                 ColorOverlay {
@@ -656,7 +657,7 @@ Item {
                         id: fgIcon
                         anchors.centerIn: parent
                         sourceSize: Qt.size(28, 28)
-                        source: shellRoot.icon(qs.audioNode && qs.audioNode.muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
+                        source: Icons.icon(qs.audioNode && qs.audioNode.muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
                         visible: false
                     }
                     ColorOverlay {
@@ -718,7 +719,7 @@ Item {
                     id: vBgIcon
                     anchors.centerIn: parent
                     sourceSize: Qt.size(24, 24)
-                    source: shellRoot.icon(qs.audioNode && qs.audioNode.muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
+                    source: Icons.icon(qs.audioNode && qs.audioNode.muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
                     visible: false
                 }
                 ColorOverlay {
@@ -748,7 +749,7 @@ Item {
                         id: vFgIcon
                         anchors.centerIn: parent
                         sourceSize: Qt.size(24, 24)
-                        source: shellRoot.icon(qs.audioNode && qs.audioNode.muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
+                        source: Icons.icon(qs.audioNode && qs.audioNode.muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
                         visible: false
                     }
                     ColorOverlay {

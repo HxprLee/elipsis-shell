@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import "services"
 
 Rectangle {
     id: control
@@ -83,14 +84,14 @@ Rectangle {
                 visible: control.showCheckmark
                 Layout.alignment: Qt.AlignVCenter
                 sourceSize: Qt.size(16, 16)
-                source: typeof shellRoot !== "undefined" ? shellRoot.icon("object-select-symbolic") : ""
+                source: typeof shellRoot !== "undefined" ? Icons.icon("object-select-symbolic") : ""
             }
 
             Image {
                 visible: control.showLock
                 Layout.alignment: Qt.AlignVCenter
                 sourceSize: Qt.size(14, 14)
-                source: typeof shellRoot !== "undefined" ? shellRoot.icon("system-lock-screen-symbolic") : ""
+                source: typeof shellRoot !== "undefined" ? Icons.icon("system-lock-screen-symbolic") : ""
                 opacity: 0.5
             }
         }

@@ -4,6 +4,7 @@ import Quickshell.Io
 import QtQuick
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
+import "services"
 
 // PowerMenu.qml — Full-screen power menu overlay.
 // Actions: Power Off, Restart, Suspend, Lock
@@ -27,7 +28,7 @@ PanelWindow {
 
     WlrLayershell.keyboardFocus: powerMenu.visible ? WlrLayershell.OnDemand : WlrLayershell.None
 
-    property bool isOpen: shellRoot.powerMenuOpen
+    property bool isOpen: UIState.powerMenuOpen
 
     onIsOpenChanged: {
         if (isOpen) {
@@ -71,7 +72,7 @@ PanelWindow {
 
         MouseArea {
             anchors.fill: parent
-            onClicked: shellRoot.powerMenuOpen = false
+            onClicked: UIState.powerMenuOpen = false
         }
     }
 
@@ -108,7 +109,7 @@ PanelWindow {
                 Accessible.name: "Power Off"
                 Accessible.role: Accessible.Button
                 onClicked: {
-                    shellRoot.powerMenuOpen = false
+                    UIState.powerMenuOpen = false
                     powerOffProc.running = true
                 }
             }
@@ -122,7 +123,7 @@ PanelWindow {
                 Accessible.name: "Restart"
                 Accessible.role: Accessible.Button
                 onClicked: {
-                    shellRoot.powerMenuOpen = false
+                    UIState.powerMenuOpen = false
                     restartProc.running = true
                 }
             }
@@ -136,7 +137,7 @@ PanelWindow {
                 Accessible.name: "Suspend"
                 Accessible.role: Accessible.Button
                 onClicked: {
-                    shellRoot.powerMenuOpen = false
+                    UIState.powerMenuOpen = false
                     suspendProc.running = true
                 }
             }
@@ -150,7 +151,7 @@ PanelWindow {
                 Accessible.name: "Lock Screen"
                 Accessible.role: Accessible.Button
                 onClicked: {
-                    shellRoot.powerMenuOpen = false
+                    UIState.powerMenuOpen = false
                     lockProc.running = true
                 }
             }
@@ -175,7 +176,7 @@ PanelWindow {
 
                 MouseArea {
                     anchors.fill: parent
-                    onClicked: shellRoot.powerMenuOpen = false
+                    onClicked: UIState.powerMenuOpen = false
                 }
             }
         }
@@ -209,7 +210,7 @@ PanelWindow {
                 Image {
                     anchors.centerIn: parent
                     sourceSize: Qt.size(22, 22)
-                    source: shellRoot.icon(iconName)
+                    source: Icons.icon(iconName)
                 }
             }
 
@@ -255,6 +256,6 @@ PanelWindow {
     Shortcut {
         sequence: "Escape"
         enabled: powerMenu.visible
-        onActivated: shellRoot.powerMenuOpen = false
+        onActivated: UIState.powerMenuOpen = false
     }
 }

@@ -1,6 +1,7 @@
 import Quickshell
 import Quickshell.Wayland
 import QtQuick
+import "services"
 
 PanelWindow {
     id: popupWindow
@@ -30,13 +31,13 @@ PanelWindow {
     Connections {
         target: shellRoot
         function onPanelOpenChanged() {
-            if (shellRoot.panelOpen) {
+            if (UIState.panelOpen) {
                 notificationQueue = []
                 popupWindow.finishHide()
             }
         }
         function onPanelDragOffsetChanged() {
-            if (shellRoot.panelDragOffset > 5) {
+            if (UIState.panelDragOffset > 5) {
                 notificationQueue = []
                 popupWindow.finishHide()
             }
@@ -48,8 +49,8 @@ PanelWindow {
     property int stackCount: 0
 
     function show(n) {
-        if (shellRoot.panelOpen) return;
-        if (shellRoot.dndActive) return;
+        if (UIState.panelOpen) return;
+        if (Notifications.dndActive) return;
 
         let copy = notificationQueue.slice()
         copy.push(n)
