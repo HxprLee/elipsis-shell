@@ -12,43 +12,21 @@ import Quickshell.Wayland
 import Quickshell.Services.UPower
 import QtQuick
 import "components"
+import "services"
 
 ShellRoot {
     id: shellRoot
 
     property string materialTheme: "Acrylic"
-    property bool isLocked: false
     property var accentColor: null
 
-    WlSessionLock {
-        id: sessionLock
-        locked: shellRoot.isLocked
-        surface: Lockscreen {}
-    }
-
-    function lock() {
-        shellRoot.isLocked = true
-    }
-
-    function unlock() {
-        shellRoot.isLocked = false
-    }
+    // Lock state and WlSessionLock live in services/Lock.qml.
 
     IpcHandler {
         target: "lock"
-
-        function toggle(): void {
-            if (shellRoot.isLocked) shellRoot.unlock();
-            else shellRoot.lock();
-        }
-
-        function lock(): void {
-            shellRoot.lock();
-        }
-
-        function unlock(): void {
-            shellRoot.unlock();
-        }
+        function toggle(): void { Lock.toggle(); }
+        function lock(): void { Lock.lock(); }
+        function unlock(): void { Lock.unlock(); }
     }
 
     // ── Notification Server ──
