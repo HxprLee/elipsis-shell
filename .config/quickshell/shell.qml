@@ -257,115 +257,9 @@ ShellRoot {
         function onStaticBlurEnabledChanged() { saveAppearance(); }
     }
 
-    // ── Shared UI state ──
-    property bool panelOpen: false
-    property real panelDragOffset: 0.0
-    property bool switcherOpen: false
-    property bool appDrawerOpen: false
-    property bool powerMenuOpen: false
-
-    function closeOtherOverlays(except) {
-        if (except !== "panel") shellRoot.panelOpen = false;
-        if (except !== "power") shellRoot.powerMenuOpen = false;
-        if (except !== "drawer") shellRoot.appDrawerOpen = false;
-        if (except !== "switcher") shellRoot.switcherOpen = false;
-    }
-
-    // ── Window tracking ──
-    property bool hasWindowsOnCurrentWs: {
-        const ws = Hyprland.focusedWorkspace;
-        if (!ws) return false;
-        
-        const toplevels = ws.toplevels.values;
-        if (toplevels.length === 0) return false;
-
-        let hasNonFloating = false;
-        let anyOverlap = false;
-
-        const dockHeight = 112; // Height of the uncollapsed dock
-        
-        // Use Quickshell.screens to find the logical height of the focused monitor
-        let mon = null;
-        const focusedMon = Hyprland.focusedMonitor;
-        if (focusedMon) {
-            for (let s of Quickshell.screens) {
-                if (s.name === focusedMon.name) {
-                    mon = s;
-                    break;
-                }
-            }
-        }
-        
-        if (!mon) mon = (Quickshell.screens.length > 0) ? Quickshell.screens[0] : null;
-        if (!mon) return false;
-        
-        const monitorBottom = mon.y + mon.height;
-
-        for (let i = 0; i < toplevels.length; i++) {
-            const tl = toplevels[i];
-            const ipc = tl.lastIpcObject;
-            if (!ipc) continue;
-            
-            // Determine floating status robustly
-            const isFloating = (tl.floating !== undefined) ? tl.floating : !!ipc.floating;
-
-            if (!isFloating) {
-                hasNonFloating = true;
-                break;
-            } else {
-                const y = (ipc.at && ipc.at.length > 1) ? ipc.at[1] : 0;
-                const h = (ipc.size && ipc.size.length > 1) ? ipc.size[1] : 0;
-                const windowBottom = y + h;
-                const hotZoneStart = monitorBottom - dockHeight - 5;
-
-                // DIAGNOSTIC LOGGING
-                // console.log(`[Dock Detect] Window: "${tl.title}" | floating: ${isFloating} | y=${y}, h=${h} (bottom=${windowBottom}) | HotZoneStart=${hotZoneStart}`);
-
-                if (windowBottom > hotZoneStart) {
-                    anyOverlap = true;
-                    break;
-                }
-            }
-        }
-
-        return hasNonFloating || anyOverlap;
-    }
-
-    // True when the focused workspace has exactly one tiled (non-floating)
-    // window. Used by BackgroundBar.qml to drive the dim layer.
-    property bool hasSingleTiledWindow: {
-        let ws = Hyprland.focusedMonitor?.activeWorkspace;
-        if (!ws) return false;
-        let toplevels = Hyprland.toplevels.values;
-        let tiledCount = 0;
-        for (let i = 0; i < toplevels.length; i++) {
-            let tl = toplevels[i];
-            if (!tl) continue;
-            let ipc = tl.lastIpcObject;
-            if (!ipc) continue;
-            if (ipc.workspace?.id === ws.id && !ipc.floating) {
-                tiledCount++;
-                if (tiledCount > 1) return false;
-            }
-        }
-        return tiledCount === 1;
-    }
-
-    // Dock state machine: "handle" (collapsed pill), "dock" (expanded),
-    // "overlay" (expanded + auto-hide). Written by BottomBar.qml's gesture
-    // and lock timers; read by BackgroundBar.qml for the dim trigger.
-    property string barState: "handle"
-
-    // Heartbeat for dock population
-    Timer {
-        interval: 1500
-        running: true
-        repeat: true
-        onTriggered: {
-            Hyprland.refreshToplevels()
-            shellRoot.refreshDock()
-        }
-    }
+    // ── UIState (extracted to services/UIState.qml) ──
+    // panelOpen/powerMenuOpen/appDrawerOpen/switcherOpen/panelDragOffset/
+    // barState/hasWindowsOnCurrentWs/hasSingleTiledWindow now live in UIState.
 
     // ── Global Network & Bluetooth State ──
     property var wifiDevice: {
@@ -774,18 +668,18 @@ ShellRoot {
     IpcHandler {
         target: "power"
         function show() {
-            shellRoot.closeOtherOverlays("power");
-            shellRoot.powerMenuOpen = true;
+            UIState.closeOtherOverlays("power");
+            UIState.powerMenuOpen = true;
         }
         function hide() {
-            shellRoot.powerMenuOpen = false;
+            UIState.powerMenuOpen = false;
         }
         function toggle() {
-            if (shellRoot.powerMenuOpen) {
-                shellRoot.powerMenuOpen = false;
+            if (UIState.powerMenuOpen) {
+                UIState.powerMenuOpen = false;
             } else {
-                shellRoot.closeOtherOverlays("power");
-                shellRoot.powerMenuOpen = true;
+                UIState.closeOtherOverlays("power");
+                UIState.powerMenuOpen = true;
             }
         }
     }
@@ -793,18 +687,18 @@ ShellRoot {
     IpcHandler {
         target: "quicksettings"
         function show() {
-            shellRoot.closeOtherOverlays("panel");
-            shellRoot.panelOpen = true;
+            UIState.closeOtherOverlays("panel");
+            UIState.panelOpen = true;
         }
         function hide() {
-            shellRoot.panelOpen = false;
+            UIState.panelOpen = false;
         }
         function toggle() {
-            if (shellRoot.panelOpen) {
-                shellRoot.panelOpen = false;
+            if (UIState.panelOpen) {
+                UIState.panelOpen = false;
             } else {
-                shellRoot.closeOtherOverlays("panel");
-                shellRoot.panelOpen = true;
+                UIState.closeOtherOverlays("panel");
+                UIState.panelOpen = true;
             }
         }
     }
@@ -812,19 +706,19 @@ ShellRoot {
     IpcHandler {
         target: "task_manager"
         function toggle() {
-            if (shellRoot.switcherOpen) {
-                shellRoot.switcherOpen = false;
+            if (UIState.switcherOpen) {
+                UIState.switcherOpen = false;
             } else {
-                shellRoot.closeOtherOverlays("switcher");
-                shellRoot.switcherOpen = true;
+                UIState.closeOtherOverlays("switcher");
+                UIState.switcherOpen = true;
             }
         }
         function open() {
-            shellRoot.closeOtherOverlays("switcher");
-            shellRoot.switcherOpen = true;
+            UIState.closeOtherOverlays("switcher");
+            UIState.switcherOpen = true;
         }
         function close() {
-            shellRoot.switcherOpen = false;
+            UIState.switcherOpen = false;
         }
     }
 
@@ -882,56 +776,5 @@ ShellRoot {
     VolumeOSD {}
     PowerMenu {}
 
-    // ── Context Menu Helpers ──
-    // Per-screen context menu windows keyed by screen name
-    property var _contextMenus: ({})
-
-    // Open a context menu at the cursor position on the given screen
-    function openContextMenuAtCursor(screen, model) {
-        closeContextMenu(screen);
-
-        // Get cursor position from Hyprland
-        let cursor = Hyprland.cursorPosition;
-        let x = cursor ? cursor.x : (screen ? screen.x + screen.width / 2 : 0);
-        let y = cursor ? cursor.y : (screen ? screen.y + screen.height / 2 : 0);
-
-        let menuComponent = Qt.createComponent("components/reusables/ContextMenu.qml");
-        if (menuComponent.status === Component.Ready) {
-            let menuWindow = menuComponent.createObject(shellRoot, {
-                "targetScreen": screen,
-                "autoDestroy": true,
-                "model": model,
-                "menuX": x,
-                "menuY": y
-            });
-
-            if (menuWindow) {
-                _contextMenus[screen ? screen.name : "default"] = menuWindow;
-                menuWindow.open(screen, model, x, y);
-            } else {
-                console.error("[ShellRoot] Failed to create context menu:", menuComponent.errorString());
-            }
-        } else {
-            console.error("[ShellRoot] Failed to load ContextMenu.qml:", menuComponent.errorString());
-        }
-    }
-
-    // Close the context menu on the given screen
-    function closeContextMenu(screen) {
-        let key = screen ? screen.name : "default";
-        if (_contextMenus[key]) {
-            _contextMenus[key].close();
-            delete _contextMenus[key];
-        }
-    }
-
-    // Close all open context menus
-    function closeAllContextMenus() {
-        for (let key in _contextMenus) {
-            if (_contextMenus[key]) {
-                _contextMenus[key].close();
-            }
-        }
-        _contextMenus = ({});
-    }
+    // ── Context menu helpers live in services/UIState.qml ──
 }
