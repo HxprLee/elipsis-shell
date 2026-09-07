@@ -110,7 +110,7 @@ PanelWindow {
                 Accessible.role: Accessible.Button
                 onClicked: {
                     UIState.powerMenuOpen = false
-                    powerOffProc.running = true
+                    SystemActions.powerOff()
                 }
             }
 
@@ -124,7 +124,7 @@ PanelWindow {
                 Accessible.role: Accessible.Button
                 onClicked: {
                     UIState.powerMenuOpen = false
-                    restartProc.running = true
+                    SystemActions.reboot()
                 }
             }
 
@@ -138,7 +138,7 @@ PanelWindow {
                 Accessible.role: Accessible.Button
                 onClicked: {
                     UIState.powerMenuOpen = false
-                    suspendProc.running = true
+                    SystemActions.suspend()
                 }
             }
 
@@ -152,7 +152,7 @@ PanelWindow {
                 Accessible.role: Accessible.Button
                 onClicked: {
                     UIState.powerMenuOpen = false
-                    lockProc.running = true
+                    SystemActions.lockScreen()
                 }
             }
 
@@ -231,26 +231,8 @@ PanelWindow {
     }
 
     // ── System commands ──
-    Process {
-        id: powerOffProc
-        command: ["systemctl", "poweroff"]
-        running: false
-    }
-    Process {
-        id: restartProc
-        command: ["systemctl", "reboot"]
-        running: false
-    }
-    Process {
-        id: suspendProc
-        command: ["systemctl", "suspend"]
-        running: false
-    }
-    Process {
-        id: lockProc
-        command: ["loginctl", "lock-session"]
-        running: false
-    }
+    // powerOffProc/restartProc/suspendProc/lockProc moved to services/SystemActions.qml.
+    // Calls in the buttons above now use SystemActions.powerOff() / .reboot() / .suspend() / .lockScreen().
 
     // Dismiss on Escape
     Shortcut {

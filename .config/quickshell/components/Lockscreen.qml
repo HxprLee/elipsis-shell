@@ -14,7 +14,7 @@ WlSessionLockSurface {
     // ── Security state ──
     property bool authVisible: false
     property real swipeOffset: 0
-    property string wallpaperPath: ""
+    // wallpaperPath comes from Wallpapers.wallpaperPath now.
 
     // Brute-force protection
     property int failedAttempts: 0
@@ -34,7 +34,7 @@ WlSessionLockSurface {
         Image {
             id: bgImage
             anchors.fill: parent
-            source: root.wallpaperPath
+            source: Wallpapers.wallpaperPath ? "file://" + Wallpapers.wallpaperPath : ""
             fillMode: Image.PreserveAspectCrop
             visible: false
             onStatusChanged: {
@@ -87,22 +87,8 @@ WlSessionLockSurface {
     }
 
     // ── Wallpaper ──
-    Process {
-        id: wallpaperQuery
-        command: ["awww", "query"]
-        stdout: SplitParser {
-            onRead: (line) => {
-                let match = line.match(/image: (.*)/);
-                if (match) {
-                    root.wallpaperPath = "file://" + match[1].trim();
-                }
-            }
-        }
-    }
-
-    Component.onCompleted: {
-        wallpaperQuery.running = true;
-    }
+    // wallpaperPath is sourced from Wallpapers (services/Wallpapers.qml),
+    // which already polls `awww query` and exposes the path.
 
     // ── Lockout timer (progressive backoff) ──
     Timer {

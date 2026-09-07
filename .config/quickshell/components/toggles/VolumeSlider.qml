@@ -487,17 +487,11 @@ Item {
                         z: -1
                         hoverEnabled: true
                         onClicked: {
-                            // Set as default device
+                            // Set as default device via SystemActions
                             if (modelData && modelData.id !== undefined) {
-                                setDefaultProc.command = ["wpctl", "set-default", String(modelData.id)]
-                                setDefaultProc.running = true
+                                SystemActions.setDefaultAudio(modelData.id)
                             }
                         }
-                    }
-
-                    Process {
-                        id: setDefaultProc
-                        running: false
                     }
                 }
             }

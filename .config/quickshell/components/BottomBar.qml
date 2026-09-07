@@ -611,10 +611,9 @@ PanelWindow {
                                 let safeAddr = model.address.replace(/[^0-9a-fA-Fx]/g, "");
                                 Hyprland.dispatch("hl.dsp.focus({ window = 'address:" + safeAddr + "' })");
                             } else if (model.entry) {
-                                model.entry.execute();
+                                SystemActions.launchEntry(model.entry);
                             } else if (model.exec) {
-                                launchProcess.command = ["sh", "-c", model.exec];
-                                launchProcess.running = true;
+                                SystemActions.launchExec(model.exec);
                             }
                         }
 
@@ -733,11 +732,8 @@ PanelWindow {
             }
         } // End of mainBar
 
-        // Shared process for launching apps
-        Process {
-            id: launchProcess
-            running: false
-        }
+        // Shared launchProcess moved to services/SystemActions.qml.
+        // Calls above use SystemActions.launchEntry() / .launchExec().
 
         MouseArea {
             id: collapseArea
