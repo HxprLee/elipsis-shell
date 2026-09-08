@@ -29,7 +29,7 @@ PanelWindow {
     WlrLayershell.layer: WlrLayershell.Overlay
 
     Connections {
-        target: shellRoot
+        target: UIState
         function onPanelOpenChanged() {
             if (UIState.panelOpen) {
                 notificationQueue = []

@@ -155,7 +155,7 @@ PanelWindow {
             fillMode: Image.PreserveAspectCrop
 
             Connections {
-                target: shellRoot
+                target: Wallpapers
                 function onBlurVersionChanged() {
                     let s = bgBlur.source;
                     bgBlur.source = "";
@@ -349,11 +349,11 @@ PanelWindow {
                     text: "Clear All"
                     color: Qt.rgba(1, 1, 1, 0.5)
                     font.pixelSize: 13
-                    visible: notificationServer.notificationList.length > 0
+                    visible: Notifications.notificationList.length > 0
                     MouseArea {
                         anchors.fill: parent
                         anchors.margins: -8
-                        onClicked: notificationServer.clearAll()
+                        onClicked: Notifications.clearAll()
                     }
                 }
             }
@@ -392,7 +392,7 @@ PanelWindow {
                 void notifPanel.timeRefresh;
                 if (!qs.isOpen && qs.dragOffset <= 0)
                     return [];
-                let list = notificationServer.notificationList;
+                let list = Notifications.notificationList;
                 let groups = {};
                 let order = [];
                 for (let i = 0; i < list.length; i++) {
@@ -623,9 +623,9 @@ PanelWindow {
                                         onReleased: {
                                             if (isSwiping && Math.abs(stackedTopCard.x) > 80) {
                                                 if (group.notifications.length === 1) {
-                                                    notificationServer.dismiss(stackedTopCard.notif.id);
+                                                    Notifications.dismiss(stackedTopCard.notif.id);
                                                 } else {
-                                                    notificationServer.dismissByApp(group.appName);
+                                                    Notifications.dismissByApp(group.appName);
                                                 }
                                             } else if (!isSwiping) {
                                                 if (group.notifications.length > 1) {
@@ -748,7 +748,7 @@ PanelWindow {
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: notificationServer.dismissByApp(group.appName)
+                                            onClicked: Notifications.dismissByApp(group.appName)
                                         }
                                     }
                                 }
@@ -892,7 +892,7 @@ PanelWindow {
                                                             anchors.fill: parent
                                                             anchors.margins: -6
                                                             hoverEnabled: true
-                                                            onClicked: notificationServer.dismiss(notif.id)
+                                                            onClicked: Notifications.dismiss(notif.id)
                                                         }
                                                     }
                                                 }
@@ -951,7 +951,7 @@ PanelWindow {
                                         Timer {
                                             id: dismissTimer
                                             interval: 250
-                                            onTriggered: notificationServer.dismiss(swipeContainer.notif.id)
+                                            onTriggered: Notifications.dismiss(swipeContainer.notif.id)
                                         }
                                     }
                                 }
@@ -966,7 +966,7 @@ PanelWindow {
                         text: "No new notifications"
                         color: Qt.rgba(1, 1, 1, 0.4)
                         font.pixelSize: 16
-                        visible: notificationServer.notificationList.length === 0
+                        visible: Notifications.notificationList.length === 0
                     }
                 }
             }

@@ -72,7 +72,7 @@ PanelWindow {
     // Close any open context menu when the bar state changes (e.g. user
     // swipes down to overlay state from inside a right-click menu).
     Connections {
-        target: shellRoot
+        target: UIState
         function onBarStateChanged() {
             if (root.screen) {
                 UIState.closeContextMenu(root.screen);

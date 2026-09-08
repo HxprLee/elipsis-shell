@@ -43,7 +43,7 @@ PanelWindow {
         Qt.callLater(() => { _screenRefreshQueued = false; screenDimensions = ({}); });
     }
     Connections {
-        target: shellRoot
+        target: UIState
         function onSwitcherOpenChanged() {
             // Background blur is managed globally by shellRoot
         }
@@ -74,7 +74,7 @@ PanelWindow {
         fillMode: Image.PreserveAspectCrop
         
         Connections {
-            target: shellRoot
+            target: Wallpapers
             function onBlurVersionChanged() {
                 let s = bgBlur.source
                 bgBlur.source = ""

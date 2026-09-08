@@ -94,7 +94,7 @@ PanelWindow {
             fillMode: Image.PreserveAspectCrop
             
             Connections {
-                target: shellRoot
+                target: Wallpapers
                 function onBlurVersionChanged() {
                     let s = bgBlur.source
                     bgBlur.source = ""
