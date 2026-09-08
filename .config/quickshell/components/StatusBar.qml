@@ -7,6 +7,7 @@ import Quickshell.Widgets
 import QtQuick
 import QtQuick.Controls
 import Qt5Compat.GraphicalEffects
+import "../services"
 
 PanelWindow {
     id: statusBar
@@ -55,7 +56,7 @@ PanelWindow {
     Binding {
         target: statusBarBg
         property: "color"
-        when: !shellRoot.blurEnabled
+        when: !Wallpapers.blurEnabled
         value: Qt.rgba(0, 0, 0, 0.3)
     }
 
@@ -110,7 +111,7 @@ Timer {
 // ── Left: time + workspaces ──
     Row {
         id: leftContent
-        opacity: Math.max(0, 1.0 - (shellRoot.panelDragOffset / 40.0))
+        opacity: Math.max(0, 1.0 - (UIState.panelDragOffset / 40.0))
         visible: opacity > 0
         anchors.left: parent.left
         anchors.leftMargin: 16
@@ -181,7 +182,7 @@ Timer {
     // ── Right: status cluster ──
     StatusCluster {
         id: rightContent
-        opacity: Math.max(0, 1.0 - (shellRoot.panelDragOffset / 40.0))
+        opacity: Math.max(0, 1.0 - (UIState.panelDragOffset / 40.0))
         visible: opacity > 0
         anchors.right: parent.right
         anchors.rightMargin: 16
@@ -205,17 +206,17 @@ Timer {
         }
         onPositionChanged: (mouse) => {
             let dy = mouse.y - startY
-            if (!shellRoot.panelOpen && dy > 10) {
+            if (!UIState.panelOpen && dy > 10) {
                 isDragging = true
-                shellRoot.panelDragOffset = dy
+                UIState.panelDragOffset = dy
             }
         }
         onReleased: (mouse) => {
             if (isDragging) {
-                if (shellRoot.panelDragOffset > 60) {
-                    shellRoot.panelOpen = true
+                if (UIState.panelDragOffset > 60) {
+                    UIState.panelOpen = true
                 }
-                shellRoot.panelDragOffset = 0
+                UIState.panelDragOffset = 0
                 isDragging = false
             }
         }

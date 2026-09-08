@@ -7,10 +7,11 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import "reusables"
+import "../services"
 
 PanelWindow {
     id: root
-    visible: shellRoot.appDrawerOpen
+    visible: UIState.appDrawerOpen
     color: "transparent"
 
     property string selectedCategory: "All"
@@ -58,7 +59,7 @@ PanelWindow {
         } else {
             // Closing the drawer should also dismiss the shared menu on
             // our screen so a stale overlay doesn't linger.
-            shellRoot.closeContextMenu(root.screen);
+            UIState.closeContextMenu(root.screen);
         }
     }
 
@@ -88,19 +89,19 @@ PanelWindow {
         Image {
             id: bgBlur
             anchors.fill: parent
-            source: shellRoot.blurredWallpaperPath
+            source: Wallpapers.blurredWallpaperPath
             cache: false
             fillMode: Image.PreserveAspectCrop
             
             Connections {
-                target: shellRoot
+                target: Wallpapers
                 function onBlurVersionChanged() {
                     let s = bgBlur.source
                     bgBlur.source = ""
                     bgBlur.source = s
                 }
             }
-            visible: shellRoot.usePrecomputedBlur && shellRoot.staticBlurEnabled
+            visible: Wallpapers.usePrecomputedBlur && Wallpapers.staticBlurEnabled
         }
 
         Rectangle {
@@ -110,21 +111,21 @@ PanelWindow {
         
         MouseArea {
             anchors.fill: parent
-            onClicked: shellRoot.appDrawerOpen = false
+            onClicked: UIState.appDrawerOpen = false
         }
     }
 
     function buildAppMenuModel(app) {
         let menuModel = []
-        let isPinned = shellRoot.pinnedApps.includes(app.id.toLowerCase())
+        let isPinned = ConfigStore.pinnedApps.includes(app.id.toLowerCase())
 
         // Pin/Unpin item
         menuModel.push({
             text: isPinned ? "Unpin from Dock" : "Add to Dock",
-            icon: shellRoot.icon(isPinned ? "window-close-symbolic" : "view-app-grid-symbolic"), // Placeholders
+            icon: Icons.icon(isPinned ? "window-close-symbolic" : "view-app-grid-symbolic"), // Placeholders
             action: () => {
-                shellRoot.togglePin(app.id)
-                shellRoot.closeContextMenu(root.screen)
+                ConfigStore.togglePin(app.id)
+                UIState.closeContextMenu(root.screen)
             }
         })
 
@@ -192,7 +193,7 @@ PanelWindow {
                         focus: root.visible
                         
                         Keys.onEscapePressed: {
-                            shellRoot.appDrawerOpen = false
+                            UIState.appDrawerOpen = false
                             searchField.text = ""
                         }
 
@@ -366,7 +367,7 @@ PanelWindow {
                                     width: 5; height: 5; radius: 2.5
                                     color: "white"
                                     opacity: 0.8
-                                    visible: shellRoot.runningAppIds.includes(entry.id)
+                                    visible: ConfigStore.runningAppIds.includes(entry.id)
                                 }
                             }
 
@@ -394,15 +395,15 @@ PanelWindow {
                                     // position rather than trusting local
                                     // MouseArea mapping, which has been
                                     // unreliable for menu placement.
-                                    shellRoot.openContextMenuAtCursor(root.screen, buildAppMenuModel(entry))
+                                    UIState.openContextMenuAtCursor(root.screen, buildAppMenuModel(entry))
                                 } else {
                                     entry.execute()
-                                    shellRoot.appDrawerOpen = false
+                                    UIState.appDrawerOpen = false
                                     searchField.text = ""
                                 }
                             }
                             onPressAndHold: {
-                                shellRoot.openContextMenuAtCursor(root.screen, buildAppMenuModel(entry))
+                                UIState.openContextMenuAtCursor(root.screen, buildAppMenuModel(entry))
                             }
                         }
                     }
@@ -476,7 +477,7 @@ PanelWindow {
         sequence: "Escape"
         enabled: root.visible
         onActivated: {
-            shellRoot.appDrawerOpen = false
+            UIState.appDrawerOpen = false
             searchField.text = ""
         }
     }

@@ -4,6 +4,7 @@ import Quickshell.Io
 import QtQuick
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
+import "../services"
 
 // PowerMenu.qml — Full-screen power menu overlay.
 // Actions: Power Off, Restart, Suspend, Lock
@@ -27,7 +28,7 @@ PanelWindow {
 
     WlrLayershell.keyboardFocus: powerMenu.visible ? WlrLayershell.OnDemand : WlrLayershell.None
 
-    property bool isOpen: shellRoot.powerMenuOpen
+    property bool isOpen: UIState.powerMenuOpen
 
     onIsOpenChanged: {
         if (isOpen) {
@@ -71,7 +72,7 @@ PanelWindow {
 
         MouseArea {
             anchors.fill: parent
-            onClicked: shellRoot.powerMenuOpen = false
+            onClicked: UIState.powerMenuOpen = false
         }
     }
 
@@ -108,8 +109,8 @@ PanelWindow {
                 Accessible.name: "Power Off"
                 Accessible.role: Accessible.Button
                 onClicked: {
-                    shellRoot.powerMenuOpen = false
-                    powerOffProc.running = true
+                    UIState.powerMenuOpen = false
+                    SystemActions.powerOff()
                 }
             }
 
@@ -122,8 +123,8 @@ PanelWindow {
                 Accessible.name: "Restart"
                 Accessible.role: Accessible.Button
                 onClicked: {
-                    shellRoot.powerMenuOpen = false
-                    restartProc.running = true
+                    UIState.powerMenuOpen = false
+                    SystemActions.reboot()
                 }
             }
 
@@ -136,8 +137,8 @@ PanelWindow {
                 Accessible.name: "Suspend"
                 Accessible.role: Accessible.Button
                 onClicked: {
-                    shellRoot.powerMenuOpen = false
-                    suspendProc.running = true
+                    UIState.powerMenuOpen = false
+                    SystemActions.suspend()
                 }
             }
 
@@ -150,8 +151,8 @@ PanelWindow {
                 Accessible.name: "Lock Screen"
                 Accessible.role: Accessible.Button
                 onClicked: {
-                    shellRoot.powerMenuOpen = false
-                    lockProc.running = true
+                    UIState.powerMenuOpen = false
+                    SystemActions.lockScreen()
                 }
             }
 
@@ -175,7 +176,7 @@ PanelWindow {
 
                 MouseArea {
                     anchors.fill: parent
-                    onClicked: shellRoot.powerMenuOpen = false
+                    onClicked: UIState.powerMenuOpen = false
                 }
             }
         }
@@ -209,7 +210,7 @@ PanelWindow {
                 Image {
                     anchors.centerIn: parent
                     sourceSize: Qt.size(22, 22)
-                    source: shellRoot.icon(iconName)
+                    source: Icons.icon(iconName)
                 }
             }
 
@@ -230,31 +231,13 @@ PanelWindow {
     }
 
     // ── System commands ──
-    Process {
-        id: powerOffProc
-        command: ["systemctl", "poweroff"]
-        running: false
-    }
-    Process {
-        id: restartProc
-        command: ["systemctl", "reboot"]
-        running: false
-    }
-    Process {
-        id: suspendProc
-        command: ["systemctl", "suspend"]
-        running: false
-    }
-    Process {
-        id: lockProc
-        command: ["loginctl", "lock-session"]
-        running: false
-    }
+    // powerOffProc/restartProc/suspendProc/lockProc moved to services/SystemActions.qml.
+    // Calls in the buttons above now use SystemActions.powerOff() / .reboot() / .suspend() / .lockScreen().
 
     // Dismiss on Escape
     Shortcut {
         sequence: "Escape"
         enabled: powerMenu.visible
-        onActivated: shellRoot.powerMenuOpen = false
+        onActivated: UIState.powerMenuOpen = false
     }
 }

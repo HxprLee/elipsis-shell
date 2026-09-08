@@ -4,6 +4,7 @@ import QtQuick.Controls
 import Quickshell.Io
 import "../reusables"
 import ".."
+import "../../services"
 
 Item {
     id: root
@@ -11,7 +12,7 @@ Item {
     property bool isSimpleToggle: true
     property string toggleName: "Record"
     property string subtitleText: isRecording ? "Recording" : ""
-    property string iconSource: shellRoot.icon(isRecording ? "media-playback-stop-symbolic" : "media-record-symbolic")
+    property string iconSource: Icons.icon(isRecording ? "media-playback-stop-symbolic" : "media-record-symbolic")
     property bool isActive: isRecording
     property color activeColor: Qt.rgba(1.0, 0.2, 0.2, 1.0)
 
@@ -38,20 +39,20 @@ Item {
     property bool _loading: false
 
     function loadSettings() {
-        if (!shellRoot.toggleDataLoaded) return;
+        if (!ConfigStore.toggleDataLoaded) return;
         _loading = true;
-        audioIndex = shellRoot.getToggleSetting("ScreenRecordToggle", "audioIndex", audioIndex)
-        fpsIndex = shellRoot.getToggleSetting("ScreenRecordToggle", "fpsIndex", fpsIndex)
-        encoderIndex = shellRoot.getToggleSetting("ScreenRecordToggle", "encoderIndex", encoderIndex)
-        resIndex = shellRoot.getToggleSetting("ScreenRecordToggle", "resIndex", resIndex)
-        bitrateIndex = shellRoot.getToggleSetting("ScreenRecordToggle", "bitrateIndex", bitrateIndex)
+        audioIndex = ConfigStore.getToggleSetting("ScreenRecordToggle", "audioIndex", audioIndex)
+        fpsIndex = ConfigStore.getToggleSetting("ScreenRecordToggle", "fpsIndex", fpsIndex)
+        encoderIndex = ConfigStore.getToggleSetting("ScreenRecordToggle", "encoderIndex", encoderIndex)
+        resIndex = ConfigStore.getToggleSetting("ScreenRecordToggle", "resIndex", resIndex)
+        bitrateIndex = ConfigStore.getToggleSetting("ScreenRecordToggle", "bitrateIndex", bitrateIndex)
         _loading = false;
     }
 
     Connections {
-        target: shellRoot
+        target: ConfigStore
         function onToggleDataLoadedChanged() {
-            if (shellRoot.toggleDataLoaded) {
+            if (ConfigStore.toggleDataLoaded) {
                 root.loadSettings();
             }
         }
@@ -63,16 +64,16 @@ Item {
     }
 
     // Save settings on change
-    onAudioIndexChanged: { if (!_loading) shellRoot.setToggleSetting("ScreenRecordToggle", "audioIndex", audioIndex) }
-    onFpsIndexChanged: { if (!_loading) shellRoot.setToggleSetting("ScreenRecordToggle", "fpsIndex", fpsIndex) }
-    onEncoderIndexChanged: { if (!_loading) shellRoot.setToggleSetting("ScreenRecordToggle", "encoderIndex", encoderIndex) }
-    onResIndexChanged: { if (!_loading) shellRoot.setToggleSetting("ScreenRecordToggle", "resIndex", resIndex) }
-    onBitrateIndexChanged: { if (!_loading) shellRoot.setToggleSetting("ScreenRecordToggle", "bitrateIndex", bitrateIndex) }
+    onAudioIndexChanged: { if (!_loading) ConfigStore.setToggleSetting("ScreenRecordToggle", "audioIndex", audioIndex) }
+    onFpsIndexChanged: { if (!_loading) ConfigStore.setToggleSetting("ScreenRecordToggle", "fpsIndex", fpsIndex) }
+    onEncoderIndexChanged: { if (!_loading) ConfigStore.setToggleSetting("ScreenRecordToggle", "encoderIndex", encoderIndex) }
+    onResIndexChanged: { if (!_loading) ConfigStore.setToggleSetting("ScreenRecordToggle", "resIndex", resIndex) }
+    onBitrateIndexChanged: { if (!_loading) ConfigStore.setToggleSetting("ScreenRecordToggle", "bitrateIndex", bitrateIndex) }
 
-    property bool isRecording: shellRoot.isScreenRecording
+    property bool isRecording: Recorder.isScreenRecording
 
     function toggleRecording() {
-        shellRoot.toggleScreenRecording(audioIndex, fpsIndex, encoderIndex, resIndex, bitrateIndex)
+        Recorder.toggleScreenRecording(audioIndex, fpsIndex, encoderIndex, resIndex, bitrateIndex)
     }
 
     signal toggled()
@@ -94,7 +95,7 @@ Item {
                     toggle: root
                     showButton: true
                     buttonText: root.isRecording ? "Stop" : "Record"
-                    buttonIconSource: shellRoot.icon(root.isRecording ? "media-playback-stop-symbolic" : "media-record-symbolic")
+                    buttonIconSource: Icons.icon(root.isRecording ? "media-playback-stop-symbolic" : "media-record-symbolic")
                     isButtonActive: root.isRecording
                     onButtonClicked: root.toggleRecording()
                 }

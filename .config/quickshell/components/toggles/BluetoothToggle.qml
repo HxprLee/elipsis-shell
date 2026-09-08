@@ -5,6 +5,7 @@ import Qt5Compat.GraphicalEffects
 import Quickshell.Bluetooth
 import ".."
 import "../reusables"
+import "../../services"
 
 // BluetoothToggle.qml — Bluetooth toggle (data-only, styled by the shell).
 
@@ -14,21 +15,23 @@ Item {
     property bool isSimpleToggle: true
     property string toggleName: "Bluetooth"
     property string titleText: {
-        if (!qs.bluetoothEnabled) return "Bluetooth";
-        let count = shellRoot.connectedBluetoothDevices.length;
-        if (count === 1) return shellRoot.bluetoothDeviceName;
+        if (!BTSvc.bluetoothEnabled) return "Bluetooth";
+        let count = BTSvc.connectedBluetoothDevices.length;
+        if (count === 1) return BTSvc.bluetoothDeviceName;
         return "Bluetooth";
     }
     property string subtitleText: {
-        if (!qs.bluetoothEnabled) return "Off";
-        let count = shellRoot.connectedBluetoothDevices.length;
+        if (!BTSvc.bluetoothEnabled) return "Off";
+        let count = BTSvc.connectedBluetoothDevices.length;
         if (count === 1) return "Connected";
         if (count > 1) return count + " connected";
         return "On";
     }
-    property string iconSource: shellRoot.icon(qs.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
-    property bool isActive: qs.bluetoothEnabled
-    property color activeColor: shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
+    property string iconSource: {
+        return Icons.icon(BTSvc.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic");
+    }
+    property bool isActive: !!BTSvc.bluetoothEnabled
+    property color activeColor: Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
     
     // Expanded view support
     property bool hasExpandedView: true
@@ -39,7 +42,7 @@ Item {
 
             Component.onCompleted: {
                 if (root.isActive) {
-                    shellRoot.startBluetoothDiscovery()
+                    BTSvc.startBluetoothDiscovery()
                 }
             }
 
@@ -127,7 +130,7 @@ Item {
                                     width: refreshRow.implicitWidth
                                     height: 24
                                     
-                                    property bool isScanning: !!(Bluetooth.adapter && Bluetooth.adapter.discovering) || shellRoot.bluetoothScanningManual
+                                    property bool isScanning: (Bluetooth.adapter && Bluetooth.adapter.discovering) === true || !!BTSvc.bluetoothScanningManual
 
                                     Row {
                                         id: refreshRow
@@ -146,7 +149,7 @@ Item {
                                         Image {
                                             visible: refreshBtn.isScanning
                                             sourceSize: Qt.size(16, 16)
-                                            source: shellRoot.icon("view-refresh-symbolic")
+                                            source: Icons.icon("view-refresh-symbolic")
                                             opacity: 0.6
                                             RotationAnimation on rotation {
                                                 running: refreshBtn.isScanning
@@ -160,7 +163,7 @@ Item {
                                         anchors.fill: parent
                                         hoverEnabled: true
                                         onClicked: {
-                                            shellRoot.startBluetoothDiscovery()
+                                            BTSvc.startBluetoothDiscovery()
                                         }
                                     }
                                 }
@@ -192,7 +195,7 @@ Item {
                     title: modelData.name || modelData.alias || "Unknown Device"
                     subtitle: modelData.connected ? "Connected" : ""
                     subtitleColor: root.activeColor
-                    iconSource: shellRoot.icon("bluetooth-active-symbolic")
+                    iconSource: Icons.icon("bluetooth-active-symbolic")
                     iconOpacity: modelData.connected ? 1.0 : 0.6
                     showCheckmark: modelData.connected
                     onClicked: {
@@ -208,5 +211,5 @@ Item {
     }
 
     signal toggled()
-    onToggled: qs.toggleBluetooth()
+    onToggled: BTSvc.toggleBluetooth()
 }

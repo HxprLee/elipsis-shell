@@ -8,6 +8,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Qt.labs.folderlistmodel
 import Qt5Compat.GraphicalEffects
+import "../services"
 
 PanelWindow {
     id: qs
@@ -27,8 +28,8 @@ PanelWindow {
 
     WlrLayershell.keyboardFocus: isOpen ? WlrLayershell.OnDemand : WlrLayershell.None
 
-    property bool isOpen: shellRoot.panelOpen
-    property real dragOffset: shellRoot.panelDragOffset
+    property bool isOpen: UIState.panelOpen
+    property real dragOffset: UIState.panelDragOffset
     property real smoothMorphProgress: 0
     property bool morphComplete: false
     onSmoothMorphProgressChanged: {
@@ -56,176 +57,23 @@ PanelWindow {
     property var audioNode: Pipewire.defaultAudioSink?.audio ?? null
 
     // ── Connectivity ──
-    property bool wifiEnabled: shellRoot.wifiEnabled
-    property bool bluetoothEnabled: shellRoot.bluetoothEnabled
+    property bool wifiEnabled: NetSvc.wifiEnabled
+    property bool bluetoothEnabled: BTSvc.bluetoothEnabled
 
     property int batteryPct: -1
     property string batteryStatus: ""
 
     function toggleWifi() {
-        shellRoot.toggleWifi();
+        NetSvc.toggleWifi();
     }
     function toggleBluetooth() {
-        shellRoot.toggleBluetooth();
+        BTSvc.toggleBluetooth();
     }
 
     // ── Brightness ──
-    property int brightnessValue: 50
-    property int maxBrightness: 100
-    property string backlightDevice: ""
-    property var backlightCandidates: ["intel_backlight", "amdgpu_bl0", "acpi_video0", "nv_backlight", "apple_backlight", "panasonic_backlight", "sony_backlight"]
-    property int backlightProbeIndex: 0
-
-    function detectBacklightDevice() {
-        if (qs.backlightDevice !== "") return;
-        if (qs.backlightProbeIndex >= qs.backlightCandidates.length) return;
-        let d = qs.backlightCandidates[qs.backlightProbeIndex];
-        testDeviceProc.command = ["test", "-r", "/sys/class/backlight/" + d + "/brightness"];
-        testDeviceProc.deviceName = d;
-        testDeviceProc.running = true;
-    }
-
-    Component.onCompleted: {
-        detectBacklightDevice();
-    }
-
-    Process {
-        id: testDeviceProc
-        property string deviceName: ""
-        running: false
-        onExited: (code) => {
-            if (code === 0) {
-                qs.backlightDevice = testDeviceProc.deviceName;
-                qs.maxBrightnessProc.running = true;
-                qs.brightnessProc.running = true;
-            } else {
-                qs.backlightProbeIndex++;
-                qs.detectBacklightDevice();
-            }
-        }
-    }
-
-    Process {
-        id: maxBrightnessProc
-        command: ["cat", "/sys/class/backlight/" + qs.backlightDevice + "/max_brightness"]
-        running: false
-        stdout: SplitParser {
-            onRead: data => {
-                let v = parseInt(data.trim());
-                if (!isNaN(v))
-                    qs.maxBrightness = v;
-            }
-        }
-    }
-    Process {
-        id: brightnessProc
-        command: ["cat", "/sys/class/backlight/" + qs.backlightDevice + "/brightness"]
-        running: false
-        stdout: SplitParser {
-            onRead: data => {
-                let v = parseInt(data.trim());
-                if (!isNaN(v) && qs.maxBrightness > 0)
-                    qs.brightnessValue = Math.round((v / qs.maxBrightness) * 100);
-            }
-        }
-    }
-    Process {
-        id: setBrightnessProc
-        running: false
-    }
-
-    function setBrightness(pct) {
-        brightnessValue = pct;
-        let raw = Math.round((pct / 100.0) * maxBrightness);
-        setBrightnessProc.command = ["busctl", "call", "org.freedesktop.login1", "/org/freedesktop/login1/session/auto", "org.freedesktop.login1.Session", "SetBrightness", "ssu", "backlight", backlightDevice, String(raw)];
-        setBrightnessProc.running = true;
-    }
-
-    // ── Keyboard backlight ──
-    // Dell laptops expose dell::kbd_backlight in /sys/class/leds/.
-    // max=2, brightness={0,1,2}.
-    property int kbdBacklightValue: 0
-    property int kbdBacklightMax: 2
-    Process {
-        id: kbdBacklightProc
-        command: ["cat", "/sys/class/leds/dell::kbd_backlight/brightness"]
-        running: false
-        stdout: SplitParser {
-            onRead: data => {
-                let v = parseInt(data.trim());
-                if (!isNaN(v)) qs.kbdBacklightValue = v;
-            }
-        }
-    }
-    Process {
-        id: kbdBacklightMaxProc
-        command: ["cat", "/sys/class/leds/dell::kbd_backlight/max_brightness"]
-        running: false
-        stdout: SplitParser {
-            onRead: data => {
-                let v = parseInt(data.trim());
-                if (!isNaN(v) && v > 0) qs.kbdBacklightMax = v;
-            }
-        }
-    }
-    Process { id: setKbdBacklightProc; running: false }
-    function setKbdBacklight(pct) {
-        // pct is 0-100; map to raw kbdBacklightMax levels
-        let raw = Math.round((pct / 100.0) * Math.max(1, kbdBacklightMax));
-        raw = Math.max(0, Math.min(kbdBacklightMax, raw));
-        setKbdBacklightProc.command = ["sh", "-c", "echo " + raw + " > /sys/class/leds/dell::kbd_backlight/brightness"];
-        setKbdBacklightProc.running = true;
-    }
-
-    // ── Dark mode (gsettings) ──
-    property bool darkModeActive: false
-    Process {
-        id: darkModeTimer
-        command: ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"]
-        running: false
-        stdout: SplitParser {
-            onRead: data => {
-                qs.darkModeActive = data.trim().includes("prefer-dark");
-            }
-        }
-    }
-    Process { id: setDarkModeProc; running: false }
-    function setDarkMode(active) {
-        setDarkModeProc.command = ["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", active ? "prefer-dark" : "default"];
-        setDarkModeProc.running = true;
-    }
-
-    // ── Night light (placeholder — Hyprland, no backend yet) ──
-    property bool nightLightActive: false
-    function setNightLight(active) {
-        console.log("Night Light: placeholder only (Hyprland backend not implemented)");
-        // TODO: implement with gammastep or equivalent
-    }
-
-    // ── Auto-brightness (placeholder — Hyprland, no backend yet) ──
-    property bool autoBrightnessActive: false
-    function setAutoBrightness(active) {
-        console.log("Auto Brightness: placeholder only (Hyprland backend not implemented)");
-        // TODO: implement with ambient-light-sensor or equivalent
-    }
-
-    // ── Poll kbd backlight and dark mode periodically ──
-    Timer {
-        interval: 5000
-        running: true
-        repeat: true
-        onTriggered: {
-            kbdBacklightProc.running = true;
-            darkModeTimer.running = true;
-        }
-    }
-    // Also probe kbd backlight max on startup
-    Timer {
-        interval: 100
-        running: true
-        repeat: false
-        onTriggered: kbdBacklightMaxProc.running = true
-    }
+    // All backlight / kbd-backlight / dark-mode logic now lives in
+    // services/Brightness.qml. Consumers reference Brightness.brightnessValue,
+    // Brightness.maxBrightness, Brightness.kbdBacklightValue, etc.
 
     // ── Drag / open animation ──
     onDragOffsetChanged: {
@@ -302,19 +150,19 @@ PanelWindow {
         Image {
             id: bgBlur
             anchors.fill: parent
-            source: shellRoot.blurredWallpaperPath
+            source: Wallpapers.blurredWallpaperPath
             cache: true
             fillMode: Image.PreserveAspectCrop
 
             Connections {
-                target: shellRoot
+                target: Wallpapers
                 function onBlurVersionChanged() {
                     let s = bgBlur.source;
                     bgBlur.source = "";
                     bgBlur.source = s;
                 }
             }
-            visible: shellRoot.usePrecomputedBlur && shellRoot.staticBlurEnabled
+            visible: Wallpapers.usePrecomputedBlur && Wallpapers.staticBlurEnabled
         }
 
         Rectangle {
@@ -343,23 +191,23 @@ PanelWindow {
                     let dy = mappedY - startY;
                     if (dy < -10) {
                         isDragging = true;
-                        shellRoot.panelDragOffset = dy;
+                        UIState.panelDragOffset = dy;
                     }
                 }
             }
             onReleased: mouse => {
                 if (isDragging) {
-                    if (shellRoot.panelDragOffset < -60) {
-                        shellRoot.panelOpen = false;
+                    if (UIState.panelDragOffset < -60) {
+                        UIState.panelOpen = false;
                     }
-                    shellRoot.panelDragOffset = 0;
+                    UIState.panelDragOffset = 0;
                     isDragging = false;
                 } else {
                     // If expanded view is open, close it instead of the whole panel
                     if (expandedOverlay.isExpanded) {
                         controlPanel.closeExpandedView();
                     } else {
-                        shellRoot.panelOpen = false;
+                        UIState.panelOpen = false;
                     }
                 }
             }
@@ -405,16 +253,16 @@ PanelWindow {
                     let dy = mappedY - startY;
                     if (dy < -10) {
                         isDragging = true;
-                        shellRoot.panelDragOffset = dy;
+                        UIState.panelDragOffset = dy;
                     }
                 }
             }
             onReleased: mouse => {
                 if (isDragging) {
-                    if (shellRoot.panelDragOffset < -60) {
-                        shellRoot.panelOpen = false;
+                    if (UIState.panelDragOffset < -60) {
+                        UIState.panelOpen = false;
                     }
-                    shellRoot.panelDragOffset = 0;
+                    UIState.panelDragOffset = 0;
                     isDragging = false;
                 }
             }
@@ -501,11 +349,11 @@ PanelWindow {
                     text: "Clear All"
                     color: Qt.rgba(1, 1, 1, 0.5)
                     font.pixelSize: 13
-                    visible: notificationServer.notificationList.length > 0
+                    visible: Notifications.notificationList.length > 0
                     MouseArea {
                         anchors.fill: parent
                         anchors.margins: -8
-                        onClicked: notificationServer.clearAll()
+                        onClicked: Notifications.clearAll()
                     }
                 }
             }
@@ -544,7 +392,7 @@ PanelWindow {
                 void notifPanel.timeRefresh;
                 if (!qs.isOpen && qs.dragOffset <= 0)
                     return [];
-                let list = notificationServer.notificationList;
+                let list = Notifications.notificationList;
                 let groups = {};
                 let order = [];
                 for (let i = 0; i < list.length; i++) {
@@ -775,9 +623,9 @@ PanelWindow {
                                         onReleased: {
                                             if (isSwiping && Math.abs(stackedTopCard.x) > 80) {
                                                 if (group.notifications.length === 1) {
-                                                    notificationServer.dismiss(stackedTopCard.notif.id);
+                                                    Notifications.dismiss(stackedTopCard.notif.id);
                                                 } else {
-                                                    notificationServer.dismissByApp(group.appName);
+                                                    Notifications.dismissByApp(group.appName);
                                                 }
                                             } else if (!isSwiping) {
                                                 if (group.notifications.length > 1) {
@@ -851,7 +699,7 @@ PanelWindow {
                                             width: 16
                                             height: 16
                                             sourceSize: Qt.size(16, 16)
-                                            source: shellRoot.icon("go-up-symbolic")
+                                            source: Icons.icon("go-up-symbolic")
                                             opacity: collapseHeaderMouse.containsMouse ? 1.0 : 0.6
                                             Behavior on opacity {
                                                 NumberAnimation {
@@ -886,7 +734,7 @@ PanelWindow {
                                             width: 16
                                             height: 16
                                             sourceSize: Qt.size(16, 16)
-                                            source: shellRoot.icon("edit-clear-all-symbolic")
+                                            source: Icons.icon("edit-clear-all-symbolic")
                                             opacity: groupClearMouse.containsMouse ? 1.0 : 0.5
                                             Behavior on opacity {
                                                 NumberAnimation {
@@ -900,7 +748,7 @@ PanelWindow {
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
-                                            onClicked: notificationServer.dismissByApp(group.appName)
+                                            onClicked: Notifications.dismissByApp(group.appName)
                                         }
                                     }
                                 }
@@ -1035,7 +883,7 @@ PanelWindow {
                                                             width: 14
                                                             height: 14
                                                             sourceSize: Qt.size(16, 16)
-                                                            source: shellRoot.icon("window-close-symbolic")
+                                                            source: Icons.icon("window-close-symbolic")
                                                             opacity: closeBtnMouse.containsMouse ? 1.0 : 0.6
                                                         }
 
@@ -1044,7 +892,7 @@ PanelWindow {
                                                             anchors.fill: parent
                                                             anchors.margins: -6
                                                             hoverEnabled: true
-                                                            onClicked: notificationServer.dismiss(notif.id)
+                                                            onClicked: Notifications.dismiss(notif.id)
                                                         }
                                                     }
                                                 }
@@ -1103,7 +951,7 @@ PanelWindow {
                                         Timer {
                                             id: dismissTimer
                                             interval: 250
-                                            onTriggered: notificationServer.dismiss(swipeContainer.notif.id)
+                                            onTriggered: Notifications.dismiss(swipeContainer.notif.id)
                                         }
                                     }
                                 }
@@ -1118,7 +966,7 @@ PanelWindow {
                         text: "No new notifications"
                         color: Qt.rgba(1, 1, 1, 0.4)
                         font.pixelSize: 16
-                        visible: notificationServer.notificationList.length === 0
+                        visible: Notifications.notificationList.length === 0
                     }
                 }
             }
@@ -1251,14 +1099,14 @@ PanelWindow {
             }
 
             Connections {
-                target: shellRoot
+                target: ConfigStore
                 function onConfigLoadCompleteChanged() {
-                    console.log("[QuickSettings] Config load complete:", shellRoot.configLoadComplete);
-                    console.log("[QuickSettings] Layout from shell:", JSON.stringify(shellRoot.controlCenterLayout));
-                    if (controlPanel.layoutApplied || !shellRoot.configLoadComplete) return;
-                    if (shellRoot.controlCenterLayout && shellRoot.controlCenterLayout.length > 0) {
+                    console.log("[QuickSettings] Config load complete:", ConfigStore.configLoadComplete);
+                    console.log("[QuickSettings] Layout from shell:", JSON.stringify(ConfigStore.controlCenterLayout));
+                    if (controlPanel.layoutApplied || !ConfigStore.configLoadComplete) return;
+                    if (ConfigStore.controlCenterLayout && ConfigStore.controlCenterLayout.length > 0) {
                         console.log("[QuickSettings] Applying saved layout");
-                        controlPanel.applyLayout(shellRoot.controlCenterLayout);
+                        controlPanel.applyLayout(ConfigStore.controlCenterLayout);
                     } else {
                         console.log("[QuickSettings] Applying default layout");
                         controlPanel.applyLayout(controlPanel.defaultLayout);
@@ -1267,9 +1115,9 @@ PanelWindow {
             }
 
             Component.onCompleted: {
-                if (shellRoot.configLoadComplete && !controlPanel.layoutApplied) {
-                    if (shellRoot.controlCenterLayout && shellRoot.controlCenterLayout.length > 0) {
-                        controlPanel.applyLayout(shellRoot.controlCenterLayout);
+                if (ConfigStore.configLoadComplete && !controlPanel.layoutApplied) {
+                    if (ConfigStore.controlCenterLayout && ConfigStore.controlCenterLayout.length > 0) {
+                        controlPanel.applyLayout(ConfigStore.controlCenterLayout);
                     } else {
                         controlPanel.applyLayout(controlPanel.defaultLayout);
                     }
@@ -1366,8 +1214,8 @@ PanelWindow {
                         rowSpan: item.rowSpan
                     });
                 }
-                shellRoot.controlCenterLayout = items;
-                shellRoot.saveConfig();
+                ConfigStore.controlCenterLayout = items;
+                ConfigStore.saveConfig();
             }
 
             function resetLayout() {
@@ -1425,14 +1273,14 @@ PanelWindow {
                         // Replicate Status Icons from StatusBar.qml
                         // Bluetooth
                         Item {
-                            width: (shellRoot.bluetoothEnabled && shellRoot.bluetoothConnected) ? 20 : 0
+                            width: (BTSvc.bluetoothEnabled && BTSvc.bluetoothConnected) ? 20 : 0
                             height: 20
                             visible: width > 0
                             anchors.verticalCenter: parent.verticalCenter
                             Image {
                                 id: btIconMorph
                                 anchors.fill: parent
-                                source: shellRoot.icon(shellRoot.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
+                                source: Icons.icon(BTSvc.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
                                 sourceSize: Qt.size(24, 24)
                                 visible: false
                             }
@@ -1445,7 +1293,7 @@ PanelWindow {
 
                         // Network
                         Item {
-                            width: shellRoot.networkConnected ? 20 : 0
+                            width: NetSvc.networkConnected ? 20 : 0
                             height: 20
                             visible: width > 0
                             anchors.verticalCenter: parent.verticalCenter
@@ -1453,13 +1301,13 @@ PanelWindow {
                                 id: networkIconMorph
                                 anchors.fill: parent
                                 source: {
-                                    if (shellRoot.networkType === "ethernet") {
-                                        return shellRoot.icon("network-wired-symbolic");
+                                    if (NetSvc.networkType === "ethernet") {
+                                        return Icons.icon("network-wired-symbolic");
                                     }
 
                                     let levels = ["none", "weak", "ok", "good", "excellent"];
-                                    let level = levels[shellRoot.networkSignalLevel] || "none";
-                                    return shellRoot.icon("network-wireless-signal-" + level + "-symbolic");
+                                    let level = levels[NetSvc.networkSignalLevel] || "none";
+                                    return Icons.icon("network-wireless-signal-" + level + "-symbolic");
                                 }
                                 sourceSize: Qt.size(24, 24)
                                 visible: false
@@ -1483,17 +1331,17 @@ PanelWindow {
                                     id: battIconMorph
                                     anchors.fill: parent
                                     source: {
-                                        let isCharging = qs.batteryStatus === "Charging";
-                                        let pct = qs.batteryPct;
+                                        let isCharging = Battery.batteryStatus === "Charging";
+                                        let pct = Battery.batteryPct;
                                         if (pct < 0)
-                                            return shellRoot.icon("battery-missing-symbolic");
+                                            return Icons.icon("battery-missing-symbolic");
                                         let level = Math.max(0, Math.min(100, Math.round(pct / 10) * 10));
                                         let sLevel = (level < 100 ? (level < 10 ? "00" : "0") : "") + level;
                                         let name = "battery-" + sLevel;
                                         if (isCharging)
                                             name += "-charging";
                                         name += "-symbolic";
-                                        return shellRoot.icon(name);
+                                        return Icons.icon(name);
                                     }
                                     sourceSize: Qt.size(24, 24)
                                     visible: false
@@ -1505,7 +1353,7 @@ PanelWindow {
                                 }
                             }
                             Text {
-                                text: qs.batteryPct >= 0 ? qs.batteryPct + "%" : "—"
+                                text: Battery.batteryPct >= 0 ? Battery.batteryPct + "%" : "—"
                                 color: "white"
                                 font.pixelSize: 15
                                 font.bold: true
@@ -1741,7 +1589,7 @@ PanelWindow {
                                                         return false;
                                                     return !!widgetLoader.item.isActive;
                                                 }
-                                                accentColor: (widgetLoader.item && widgetLoader.item.activeColor) ? widgetLoader.item.activeColor : (shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0))
+                                                accentColor: (widgetLoader.item && widgetLoader.item.activeColor) ? widgetLoader.item.activeColor : (Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0))
                                             }
 
 // ── Geometry Behaviors (Phase E consolidated) ──
@@ -1930,7 +1778,7 @@ Behavior on radius {
                                                             visible: model.colSpan > 1
                                                             isToggleCircle: true
                                                             isActive: widgetLoader.item ? !!widgetLoader.item.isActive : false
-                                                            accentColor: (widgetLoader.item && widgetLoader.item.activeColor) ? widgetLoader.item.activeColor : (shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0))
+                                                            accentColor: (widgetLoader.item && widgetLoader.item.activeColor) ? widgetLoader.item.activeColor : (Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0))
                                                         }
 
                                                         Item {
@@ -2004,7 +1852,7 @@ Behavior on radius {
                                                             radius: parent.radius
                                                             isToggleCircle: true
                                                             isActive: widgetLoader.item ? !!widgetLoader.item.isActive : false
-                                                            accentColor: (widgetLoader.item && widgetLoader.item.activeColor) ? widgetLoader.item.activeColor : (shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0))
+                                                            accentColor: (widgetLoader.item && widgetLoader.item.activeColor) ? widgetLoader.item.activeColor : (Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0))
                                                         }
 
                                                         Item {
@@ -2374,7 +2222,7 @@ Behavior on radius {
                                 width: 16
                                 height: 16
                                 sourceSize: Qt.size(24, 24)
-                                source: shellRoot.icon("window-close-symbolic")
+                                source: Icons.icon("window-close-symbolic")
                             }
                             MouseArea {
                                 anchors.fill: parent
@@ -3147,14 +2995,14 @@ Behavior on radius {
 
             // Bluetooth
             Item {
-                width: (shellRoot.bluetoothEnabled && shellRoot.bluetoothConnected) ? 20 : 0
+                width: (BTSvc.bluetoothEnabled && BTSvc.bluetoothConnected) ? 20 : 0
                 height: 20
                 visible: width > 0
                 anchors.verticalCenter: parent.verticalCenter
                 Image {
                     id: morphBtIcon
                     anchors.fill: parent
-                    source: shellRoot.icon(shellRoot.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
+                    source: Icons.icon(BTSvc.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
                     sourceSize: Qt.size(24, 24)
                     visible: false
                 }
@@ -3167,7 +3015,7 @@ Behavior on radius {
 
             // Network
             Item {
-                width: shellRoot.networkConnected ? 20 : 0
+                width: NetSvc.networkConnected ? 20 : 0
                 height: 20
                 visible: width > 0
                 anchors.verticalCenter: parent.verticalCenter
@@ -3175,11 +3023,11 @@ Behavior on radius {
                     id: morphNetIcon
                     anchors.fill: parent
                     source: {
-                        if (shellRoot.networkType === "ethernet")
-                            return shellRoot.icon("network-wired-symbolic");
+                        if (NetSvc.networkType === "ethernet")
+                            return Icons.icon("network-wired-symbolic");
                         let levels = ["none", "weak", "ok", "good", "excellent"];
-                        let level = levels[shellRoot.networkSignalLevel] || "none";
-                        return shellRoot.icon("network-wireless-signal-" + level + "-symbolic");
+                        let level = levels[NetSvc.networkSignalLevel] || "none";
+                        return Icons.icon("network-wireless-signal-" + level + "-symbolic");
                     }
                     sourceSize: Qt.size(24, 24)
                     visible: false
@@ -3202,15 +3050,15 @@ Behavior on radius {
                         id: morphBattIcon
                         anchors.fill: parent
                         source: {
-                            let isCharging = qs.batteryStatus === "Charging";
-                            let pct = qs.batteryPct;
-                            if (pct < 0) return shellRoot.icon("battery-missing-symbolic");
+                            let isCharging = Battery.batteryStatus === "Charging";
+                            let pct = Battery.batteryPct;
+                            if (pct < 0) return Icons.icon("battery-missing-symbolic");
                             let level = Math.max(0, Math.min(100, Math.round(pct / 10) * 10));
                             let sLevel = (level < 100 ? (level < 10 ? "00" : "0") : "") + level;
                             let name = "battery-" + sLevel;
                             if (isCharging) name += "-charging";
                             name += "-symbolic";
-                            return shellRoot.icon(name);
+                            return Icons.icon(name);
                         }
                         sourceSize: Qt.size(24, 24)
                         visible: false
@@ -3222,7 +3070,7 @@ Behavior on radius {
                     }
                 }
                 Text {
-                    text: qs.batteryPct >= 0 ? qs.batteryPct + "%" : "—"
+                    text: Battery.batteryPct >= 0 ? Battery.batteryPct + "%" : "—"
                     color: "white"
                     font.pixelSize: 15
                     font.bold: true

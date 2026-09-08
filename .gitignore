@@ -6,4 +6,4 @@ config/
 elipsis-shell.wiki/
 .agents/
 skills-lock.json
-AGENTS.md
+.commandcode/

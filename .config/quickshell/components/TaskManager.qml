@@ -6,10 +6,11 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
+import "../services"
 
 PanelWindow {
     id: root
-    visible: shellRoot.switcherOpen
+    visible: UIState.switcherOpen
     color: "transparent"
 
     function sanitizeAddr(addr) {
@@ -42,7 +43,7 @@ PanelWindow {
         Qt.callLater(() => { _screenRefreshQueued = false; screenDimensions = ({}); });
     }
     Connections {
-        target: shellRoot
+        target: UIState
         function onSwitcherOpenChanged() {
             // Background blur is managed globally by shellRoot
         }
@@ -68,12 +69,12 @@ PanelWindow {
     Image {
         id: bgBlur
         anchors.fill: parent
-        source: shellRoot.blurredWallpaperPath
+        source: Wallpapers.blurredWallpaperPath
         cache: false
         fillMode: Image.PreserveAspectCrop
         
         Connections {
-            target: shellRoot
+            target: Wallpapers
             function onBlurVersionChanged() {
                 let s = bgBlur.source
                 bgBlur.source = ""
@@ -81,7 +82,7 @@ PanelWindow {
             }
         }
         
-        visible: shellRoot.usePrecomputedBlur && shellRoot.staticBlurEnabled
+        visible: Wallpapers.usePrecomputedBlur && Wallpapers.staticBlurEnabled
         opacity: root.visible ? 1.0 : 0.0
         Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
         
@@ -96,7 +97,7 @@ PanelWindow {
         id: bg
         anchors.fill: parent
         color: Qt.rgba(0, 0, 0, 0.6)
-        opacity: root.visible && !shellRoot.usePrecomputedBlur ? 1.0 : 0.0
+        opacity: root.visible && !Wallpapers.usePrecomputedBlur ? 1.0 : 0.0
 
         Behavior on opacity {
             NumberAnimation { duration: 400; easing.type: Easing.OutCubic }
@@ -104,7 +105,7 @@ PanelWindow {
 
         MouseArea {
             anchors.fill: parent
-            onClicked: shellRoot.switcherOpen = false
+            onClicked: UIState.switcherOpen = false
         }
     }
 
@@ -194,7 +195,7 @@ PanelWindow {
                         Image {
                             id: rowWallpaperImg
                             anchors.fill: parent
-                            source: shellRoot.wallpaperPath ? "file://" + shellRoot.wallpaperPath : ""
+                            source: Wallpapers.wallpaperPath ? "file://" + Wallpapers.wallpaperPath : ""
                             fillMode: Image.PreserveAspectCrop
                             visible: false
                         }
@@ -344,7 +345,7 @@ PanelWindow {
 
             // Background tap to dismiss
             TapHandler {
-                onTapped: shellRoot.switcherOpen = false
+                onTapped: UIState.switcherOpen = false
             }
 
             delegate: Item {
@@ -648,7 +649,7 @@ PanelWindow {
                                 }
                                 contentItem: Image {
                                     anchors.centerIn: parent
-                                    source: shellRoot.icon("window-close-symbolic")
+                                    source: Icons.icon("window-close-symbolic")
                                     sourceSize: Qt.size(14, 14)
                                     opacity: closeBtn.hovered ? 1.0 : 0.6
                                 }
@@ -747,7 +748,7 @@ PanelWindow {
             
             // Background tap to dismiss
             TapHandler {
-                onTapped: shellRoot.switcherOpen = false
+                onTapped: UIState.switcherOpen = false
             }
             
             model: (Hyprland.workspaces && Hyprland.workspaces.values) ? Hyprland.workspaces.values : []
@@ -787,7 +788,7 @@ PanelWindow {
                                 Layout.preferredHeight: 24
                                 sourceSize: Qt.size(32, 32)
                                 fillMode: Image.PreserveAspectFit
-                                source: shellRoot.icon("view-app-grid-symbolic")
+                                source: Icons.icon("view-app-grid-symbolic")
                                 opacity: 0.8
                             }
 
@@ -836,7 +837,7 @@ PanelWindow {
                                 Image {
                                     id: wallpaperImg
                                     anchors.fill: parent
-                                    source: shellRoot.wallpaperPath ? "file://" + shellRoot.wallpaperPath : ""
+                                    source: Wallpapers.wallpaperPath ? "file://" + Wallpapers.wallpaperPath : ""
                                     fillMode: Image.PreserveAspectCrop
                                     visible: false
                                 }
@@ -929,6 +930,6 @@ PanelWindow {
     Timer {
         id: closeTimer
         interval: 50
-        onTriggered: shellRoot.switcherOpen = false
+        onTriggered: UIState.switcherOpen = false
     }
 }
