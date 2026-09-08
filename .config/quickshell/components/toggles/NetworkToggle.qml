@@ -47,7 +47,7 @@ Item {
 
             // Enable wifi scanner while expanded view is open
             Binding {
-                target: Network.wifiDevice
+                target: Network.wifiDevice ? Network.wifiDevice : null
                 property: "scannerEnabled"
                 value: root.isActive && expandedOverlay.isExpanded
                 when: Network.wifiDevice !== undefined && Network.wifiDevice !== null
@@ -224,7 +224,7 @@ Item {
                                     width: refreshRow.implicitWidth
                                     height: 24
 
-                                    property bool isScanning: Network.isScanningNetwork
+                                    property bool isScanning: !!Network.isScanningNetwork
 
                                     Row {
                                         id: refreshRow
