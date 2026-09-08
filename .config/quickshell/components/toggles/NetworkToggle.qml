@@ -8,29 +8,35 @@ import "../reusables"
 import "../../services"
 
 Item {
+    // Local alias to disambiguate from Quickshell.Networking's built-in
+    // Network type (collision causes `Property 'toggleWifi' of object
+    // Quickshell.Networking/Network is not a function` errors when the
+    // singleton binding isn't resolved yet during initial evaluation).
+    property var Net: NetSvc
+
     id: root
     property bool isControlWidget: true
     property bool isSimpleToggle: true
-    property bool isWired: !!Network.ethernetConnected
+    property bool isWired: !!Net.ethernetConnected
 
     // Dynamic Title support
     property string titleText: {
         if (isWired) return "Ethernet";
-        let name = Network.networkName;
+        let name = Net.networkName;
         return (name && name !== "") ? String(name) : "Networks";
     }
     property string toggleName: "Network"
 
     property string subtitleText: {
         if (isWired) return "Connected";
-        if (Network.networkName !== "") return "Connected";
-        return Network.wifiEnabled ? "Not Connected" : "Off";
+        if (Net.networkName !== "") return "Connected";
+        return Net.wifiEnabled ? "Not Connected" : "Off";
     }
     property string iconSource: {
         if (isWired) return Icons.icon("network-wired-symbolic");
-        return Icons.icon(Network.wifiEnabled ? "network-wireless-symbolic" : "network-wireless-offline-symbolic");
+        return Icons.icon(Net.wifiEnabled ? "network-wireless-symbolic" : "network-wireless-offline-symbolic");
     }
-    property bool isActive: !!Network.wifiEnabled || isWired
+    property bool isActive: !!Net.wifiEnabled || isWired
     property color activeColor: Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
 
     // Expanded view support
@@ -47,10 +53,10 @@ Item {
 
             // Enable wifi scanner while expanded view is open
             Binding {
-                target: Network.wifiDevice ? Network.wifiDevice : null
+                target: Net.wifiDevice ? Net.wifiDevice : null
                 property: "scannerEnabled"
                 value: root.isActive && expandedOverlay.isExpanded
-                when: Network.wifiDevice !== undefined && Network.wifiDevice !== null
+                when: Net.wifiDevice !== undefined && Net.wifiDevice !== null
                 restoreMode: Binding.RestoreBindingOrValue
             }
 
@@ -121,13 +127,13 @@ Item {
 
                         Component.onCompleted: {
                             if (root.isActive) {
-                                Network.refreshNetwork();
+                                Net.refreshNetwork();
                             }
                         }
 
                         // Internal filtered models to avoid redundant expensive filtering
                         property var allNetworks: {
-                            let nets = Network.wifiDevice ? Network.wifiDevice.networks.values : [];
+                            let nets = Net.wifiDevice ? Net.wifiDevice.networks.values : [];
                             return nets.slice().sort((a, b) => {
                                 if (a.connected)
                                     return -1;
@@ -143,7 +149,7 @@ Item {
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 2
-                            visible: !!Network.ethernetConnected
+                            visible: !!Net.ethernetConnected
 
                             Text {
                                 text: "Ethernet"
@@ -155,22 +161,22 @@ Item {
 
                             ToggleListItem {
                                 title: {
-                                    let ae = Network.activeEthernetName;
-                                    let iface = Network.ethernetIface;
+                                    let ae = Net.activeEthernetName;
+                                    let iface = Net.ethernetIface;
                                     if (ae && ae !== "") return ae;
                                     if (iface && iface !== "") return iface;
                                     return "Wired Connection";
                                 }
-                                subtitle: !!Network.ethernetConnected ? "Connected" : "Disconnected"
-                                subtitleColor: !!Network.ethernetConnected ? root.activeColor : Qt.rgba(1, 1, 1, 0.6)
-                                iconSource: Icons.icon(!!Network.ethernetConnected ? "network-wired-symbolic" : "network-wired-offline-symbolic")
-                                iconOpacity: !!Network.ethernetConnected ? 1.0 : 0.6
-                                showCheckmark: !!Network.ethernetConnected
+                                subtitle: !!Net.ethernetConnected ? "Connected" : "Disconnected"
+                                subtitleColor: !!Net.ethernetConnected ? root.activeColor : Qt.rgba(1, 1, 1, 0.6)
+                                iconSource: Icons.icon(!!Net.ethernetConnected ? "network-wired-symbolic" : "network-wired-offline-symbolic")
+                                iconOpacity: !!Net.ethernetConnected ? 1.0 : 0.6
+                                showCheckmark: !!Net.ethernetConnected
                                 onClicked: {
-                                    if (Network.ethernetConnected) {
-                                        Network.disconnectEthernet();
+                                    if (Net.ethernetConnected) {
+                                        Net.disconnectEthernet();
                                     } else {
-                                        Network.connectEthernet();
+                                        Net.connectEthernet();
                                     }
                                 }
                             }
@@ -224,7 +230,7 @@ Item {
                                     width: refreshRow.implicitWidth
                                     height: 24
 
-                                    property bool isScanning: !!Network.isScanningNetwork
+                                    property bool isScanning: !!Net.isScanningNetwork
 
                                     Row {
                                         id: refreshRow
@@ -258,7 +264,7 @@ Item {
                                         id: refreshMouse
                                         anchors.fill: parent
                                         hoverEnabled: true
-                                        onClicked: Network.refreshNetwork()
+                                        onClicked: Net.refreshNetwork()
                                     }
                                 }
                             }
@@ -391,12 +397,5 @@ Item {
     }
 
     signal toggled()
-    onToggled: {
-        // Guard: `Network` could shadow to Quickshell.Networking/Network type
-        // if the singleton binding hasn't resolved yet. Verify it's the
-        // singleton and has the toggleWifi method before calling.
-        if (Network && typeof Network.toggleWifi === "function") {
-            Network.toggleWifi();
-        }
-    }
+    onToggled: Net.toggleWifi()
 }
