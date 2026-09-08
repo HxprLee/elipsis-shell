@@ -51,16 +51,6 @@ Item {
         }
     }
 
-    // ── Also react to dynamic device changes via Connections ──
-    // Handles hotplug / NetworkManager restarts after initial boot.
-    Connections {
-        target: Networking
-        function onDevicesChanged() {
-            network.wifiDevice = network._findWifiDevice();
-            network.ethernetDevice = network._findEthDevice();
-        }
-    }
-
     // ── Polling ──
     Process {
         id: netPollProc
@@ -101,7 +91,12 @@ Item {
         interval: 3000
         running: true
         repeat: true
-        onTriggered: netPollProc.running = true
+        onTriggered: {
+            netPollProc.running = true;
+            // Re-check devices in case of hotplug / NetworkManager restart
+            network.wifiDevice = network._findWifiDevice();
+            network.ethernetDevice = network._findEthDevice();
+        }
     }
 
     Process { id: ethToggleProc; running: false }
