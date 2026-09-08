@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
-import Quickshell.Networking
 import ".."
 import "../reusables"
 import "../../services"
@@ -391,5 +390,7 @@ Item {
     }
 
     signal toggled
-    onToggled: Network.toggleWifi()
+    onToggled: {
+        if (Network && Network.toggleWifi) Network.toggleWifi();
+    }
 }
