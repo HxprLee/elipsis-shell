@@ -50,7 +50,7 @@ Item {
                 target: Network.wifiDevice
                 property: "scannerEnabled"
                 value: root.isActive && expandedOverlay.isExpanded
-                when: Network.wifiDevice !== null
+                when: Network.wifiDevice !== undefined && Network.wifiDevice !== null
                 restoreMode: Binding.RestoreBindingOrValue
             }
 
@@ -143,7 +143,7 @@ Item {
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 2
-                            visible: Network.ethernetConnected
+                            visible: !!Network.ethernetConnected
 
                             Text {
                                 text: "Ethernet"
@@ -154,12 +154,18 @@ Item {
                             }
 
                             ToggleListItem {
-                                title: Network.activeEthernetName !== "" ? Network.activeEthernetName : (Network.ethernetIface !== "" ? Network.ethernetIface : "Wired Connection")
-                                subtitle: Network.ethernetConnected ? "Connected" : "Disconnected"
-                                subtitleColor: Network.ethernetConnected ? root.activeColor : Qt.rgba(1, 1, 1, 0.6)
-                                iconSource: Icons.icon(Network.ethernetConnected ? "network-wired-symbolic" : "network-wired-offline-symbolic")
-                                iconOpacity: Network.ethernetConnected ? 1.0 : 0.6
-                                showCheckmark: Network.ethernetConnected
+                                title: {
+                                    let ae = Network.activeEthernetName;
+                                    let iface = Network.ethernetIface;
+                                    if (ae && ae !== "") return ae;
+                                    if (iface && iface !== "") return iface;
+                                    return "Wired Connection";
+                                }
+                                subtitle: !!Network.ethernetConnected ? "Connected" : "Disconnected"
+                                subtitleColor: !!Network.ethernetConnected ? root.activeColor : Qt.rgba(1, 1, 1, 0.6)
+                                iconSource: Icons.icon(!!Network.ethernetConnected ? "network-wired-symbolic" : "network-wired-offline-symbolic")
+                                iconOpacity: !!Network.ethernetConnected ? 1.0 : 0.6
+                                showCheckmark: !!Network.ethernetConnected
                                 onClicked: {
                                     if (Network.ethernetConnected) {
                                         Network.disconnectEthernet();

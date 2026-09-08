@@ -130,7 +130,7 @@ Item {
                                     width: refreshRow.implicitWidth
                                     height: 24
                                     
-                                    property bool isScanning: !!(Bluetooth.adapter && Bluetooth.adapter.discovering) || Bluetooth.bluetoothScanningManual
+                                    property bool isScanning: (Bluetooth.adapter && Bluetooth.adapter.discovering) === true || !!Bluetooth.bluetoothScanningManual
 
                                     Row {
                                         id: refreshRow
