@@ -390,8 +390,6 @@ Item {
         }
     }
 
-    signal toggled
-    onToggled: {
-        if (Network && Network.toggleWifi) Network.toggleWifi();
-    }
+    signal toggled()
+    onToggled: Network.toggleWifi()
 }

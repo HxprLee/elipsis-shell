@@ -5,33 +5,61 @@ import Quickshell.Networking
 import QtQuick
 
 // Network singleton — wifi/ethernet state via Quickshell.Networking + nmcli.
-// Owns wifi/ethernet properties, polling timer, nmcli-backed scan/toggle.
 Item {
     id: network
 
     // ── Wifi ──
-    property var wifiDevice: {
+    property var wifiDevice: _findWifiDevice()
+    function _findWifiDevice() {
         const devices = Networking.devices.values;
         for (let i = 0; i < devices.length; i++) {
             if (devices[i].type === DeviceType.Wifi) return devices[i];
         }
         return null;
     }
-
     property bool wifiEnabled: Networking.wifiEnabled ?? false
     property bool wifiConnected: !!(wifiDevice && wifiDevice.connected)
 
     // ── Ethernet ──
-    property var ethernetDevice: {
+    property var ethernetDevice: _findEthDevice()
+    function _findEthDevice() {
         const devices = Networking.devices.values;
         for (let i = 0; i < devices.length; i++) {
             if (devices[i].type === DeviceType.Ethernet) return devices[i];
         }
         return null;
     }
+    property bool ethernetConnected: !!ethernetDevice && (ethernetDevice.connected || activeEthernetName !== "")
     property string networkName: ""
     property string activeEthernetName: ""
     property string ethernetIface: ""
+
+    // ── Re-sync device refs after initial enumeration delay ──
+    // Networking takes ~5s to enumerate devices after startup. Without this
+    // timer, _findWifiDevice() / _findEthDevice() are only called once
+    // (before devices appear) and their return values are cached as bindings.
+    // The timer forces a re-derivation ~6s after startup.
+    Timer {
+        interval: 6000
+        running: true
+        repeat: false
+        onTriggered: {
+            // Force re-evaluation by overwriting the computed properties
+            // with fresh results. This replaces the cached binding values.
+            network.wifiDevice = network._findWifiDevice();
+            network.ethernetDevice = network._findEthDevice();
+        }
+    }
+
+    // ── Also react to dynamic device changes via Connections ──
+    // Handles hotplug / NetworkManager restarts after initial boot.
+    Connections {
+        target: Networking
+        function onDevicesChanged() {
+            network.wifiDevice = network._findWifiDevice();
+            network.ethernetDevice = network._findEthDevice();
+        }
+    }
 
     // ── Polling ──
     Process {
@@ -54,8 +82,6 @@ Item {
                     if (type.includes("wireless") || type.includes("wifi")) {
                         if (wifi === "") wifi = name;
                     } else if (type.includes("ethernet") || type.includes("wired")) {
-                        // nmcli device output format is DEVICE:TYPE
-                        // nmcli con show output format is TYPE:NAME
                         if (line.includes(":") && !name.includes("ethernet") && !name.includes("wired")) {
                             iface = parts[0];
                         } else {
@@ -78,10 +104,7 @@ Item {
         onTriggered: netPollProc.running = true
     }
 
-    Process {
-        id: ethToggleProc
-        running: false
-    }
+    Process { id: ethToggleProc; running: false }
 
     function disconnectEthernet() {
         if (activeEthernetName) {
@@ -97,7 +120,6 @@ Item {
         }
     }
 
-    property bool ethernetConnected: activeEthernetName !== ""
     property bool networkEnabled: wifiConnected || ethernetConnected
     property bool networkConnected: wifiConnected || ethernetConnected
     property string networkType: ethernetConnected ? "ethernet" : "wifi"
@@ -141,7 +163,7 @@ Item {
 
     function toggleWifi() {
         if (wifiToggleProc.running) return;
-        wifiToggleProc.command = ["sh", "-c", "nmcli radio wifi " + (network.wifiEnabled ? "off" : "on")];
+        wifiToggleProc.command = ["sh", "-c", "nmcli radio wifi " + (wifiEnabled ? "off" : "on")];
         wifiToggleProc.running = true;
     }
 }
