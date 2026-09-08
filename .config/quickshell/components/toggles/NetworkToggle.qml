@@ -11,15 +11,26 @@ Item {
     id: root
     property bool isControlWidget: true
     property bool isSimpleToggle: true
-    property bool isWired: Network.ethernetConnected
+    property bool isWired: !!Network.ethernetConnected
 
     // Dynamic Title support
-    property string titleText: isWired ? "Ethernet" : (Network.networkName !== "" ? Network.networkName : "Networks")
+    property string titleText: {
+        if (isWired) return "Ethernet";
+        let name = Network.networkName;
+        return (name && name !== "") ? String(name) : "Networks";
+    }
     property string toggleName: "Network"
 
-    property string subtitleText: isWired ? "Connected" : (Network.networkName !== "" ? "Connected" : (qs.wifiEnabled ? "Not Connected" : "Off"))
-    property string iconSource: Icons.icon(isWired ? "network-wired-symbolic" : (qs.wifiEnabled ? "network-wireless-symbolic" : "network-wireless-offline-symbolic"))
-    property bool isActive: qs.wifiEnabled || isWired
+    property string subtitleText: {
+        if (isWired) return "Connected";
+        if (Network.networkName !== "") return "Connected";
+        return Network.wifiEnabled ? "Not Connected" : "Off";
+    }
+    property string iconSource: {
+        if (isWired) return Icons.icon("network-wired-symbolic");
+        return Icons.icon(Network.wifiEnabled ? "network-wireless-symbolic" : "network-wireless-offline-symbolic");
+    }
+    property bool isActive: !!Network.wifiEnabled || isWired
     property color activeColor: Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
 
     // Expanded view support
@@ -374,5 +385,5 @@ Item {
     }
 
     signal toggled
-    onToggled: qs.toggleWifi()
+    onToggled: Network.toggleWifi()
 }

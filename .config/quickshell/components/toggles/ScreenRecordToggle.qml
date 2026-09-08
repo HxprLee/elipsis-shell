@@ -50,7 +50,7 @@ Item {
     }
 
     Connections {
-        target: shellRoot
+        target: ConfigStore
         function onToggleDataLoadedChanged() {
             if (ConfigStore.toggleDataLoaded) {
                 root.loadSettings();

@@ -36,9 +36,8 @@ Item {
         running: false
         onExited: (code) => {
             if (code === 0) {
-                brightness.backlightDevice = testDeviceProc.deviceName;
-                brightness.maxBrightnessProc.running = true;
-                brightness.brightnessProc.running = true;
+                maxBrightnessProc.running = true;
+                brightnessProc.running = true;
             } else {
                 brightness.backlightProbeIndex++;
                 brightness.detectBacklightDevice();
@@ -162,8 +161,8 @@ Item {
         running: true
         repeat: true
         onTriggered: {
-            brightness.kbdBacklightProc.running = true;
-            brightness.darkModeTimer.running = true;
+            kbdBacklightProc.running = true;
+            darkModeTimer.running = true;
         }
     }
 
@@ -172,6 +171,6 @@ Item {
         interval: 100
         running: true
         repeat: false
-        onTriggered: brightness.kbdBacklightMaxProc.running = true
+        onTriggered: kbdBacklightMaxProc.running = true
     }
 }

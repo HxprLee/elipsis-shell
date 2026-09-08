@@ -15,20 +15,22 @@ Item {
     property bool isSimpleToggle: true
     property string toggleName: "Bluetooth"
     property string titleText: {
-        if (!qs.bluetoothEnabled) return "Bluetooth";
+        if (!Bluetooth.bluetoothEnabled) return "Bluetooth";
         let count = Bluetooth.connectedBluetoothDevices.length;
         if (count === 1) return Bluetooth.bluetoothDeviceName;
         return "Bluetooth";
     }
     property string subtitleText: {
-        if (!qs.bluetoothEnabled) return "Off";
+        if (!Bluetooth.bluetoothEnabled) return "Off";
         let count = Bluetooth.connectedBluetoothDevices.length;
         if (count === 1) return "Connected";
         if (count > 1) return count + " connected";
         return "On";
     }
-    property string iconSource: Icons.icon(qs.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
-    property bool isActive: qs.bluetoothEnabled
+    property string iconSource: {
+        return Icons.icon(Bluetooth.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic");
+    }
+    property bool isActive: !!Bluetooth.bluetoothEnabled
     property color activeColor: Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
     
     // Expanded view support
@@ -209,5 +211,5 @@ Item {
     }
 
     signal toggled()
-    onToggled: qs.toggleBluetooth()
+    onToggled: Bluetooth.toggleBluetooth()
 }
