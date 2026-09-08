@@ -391,5 +391,12 @@ Item {
     }
 
     signal toggled()
-    onToggled: Network.toggleWifi()
+    onToggled: {
+        // Guard: `Network` could shadow to Quickshell.Networking/Network type
+        // if the singleton binding hasn't resolved yet. Verify it's the
+        // singleton and has the toggleWifi method before calling.
+        if (Network && typeof Network.toggleWifi === "function") {
+            Network.toggleWifi();
+        }
+    }
 }
