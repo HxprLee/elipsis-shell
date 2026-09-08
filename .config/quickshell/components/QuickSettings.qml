@@ -58,7 +58,7 @@ PanelWindow {
 
     // ── Connectivity ──
     property bool wifiEnabled: NetSvc.wifiEnabled
-    property bool bluetoothEnabled: Bluetooth.bluetoothEnabled
+    property bool bluetoothEnabled: BTSvc.bluetoothEnabled
 
     property int batteryPct: -1
     property string batteryStatus: ""
@@ -67,7 +67,7 @@ PanelWindow {
         NetSvc.toggleWifi();
     }
     function toggleBluetooth() {
-        Bluetooth.toggleBluetooth();
+        BTSvc.toggleBluetooth();
     }
 
     // ── Brightness ──
@@ -1273,14 +1273,14 @@ PanelWindow {
                         // Replicate Status Icons from StatusBar.qml
                         // Bluetooth
                         Item {
-                            width: (Bluetooth.bluetoothEnabled && Bluetooth.bluetoothConnected) ? 20 : 0
+                            width: (BTSvc.bluetoothEnabled && BTSvc.bluetoothConnected) ? 20 : 0
                             height: 20
                             visible: width > 0
                             anchors.verticalCenter: parent.verticalCenter
                             Image {
                                 id: btIconMorph
                                 anchors.fill: parent
-                                source: Icons.icon(Bluetooth.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
+                                source: Icons.icon(BTSvc.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
                                 sourceSize: Qt.size(24, 24)
                                 visible: false
                             }
@@ -2995,14 +2995,14 @@ Behavior on radius {
 
             // Bluetooth
             Item {
-                width: (Bluetooth.bluetoothEnabled && Bluetooth.bluetoothConnected) ? 20 : 0
+                width: (BTSvc.bluetoothEnabled && BTSvc.bluetoothConnected) ? 20 : 0
                 height: 20
                 visible: width > 0
                 anchors.verticalCenter: parent.verticalCenter
                 Image {
                     id: morphBtIcon
                     anchors.fill: parent
-                    source: Icons.icon(Bluetooth.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
+                    source: Icons.icon(BTSvc.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
                     sourceSize: Qt.size(24, 24)
                     visible: false
                 }

@@ -15,22 +15,22 @@ Item {
     property bool isSimpleToggle: true
     property string toggleName: "Bluetooth"
     property string titleText: {
-        if (!Bluetooth.bluetoothEnabled) return "Bluetooth";
-        let count = Bluetooth.connectedBluetoothDevices.length;
-        if (count === 1) return Bluetooth.bluetoothDeviceName;
+        if (!BTSvc.bluetoothEnabled) return "Bluetooth";
+        let count = BTSvc.connectedBluetoothDevices.length;
+        if (count === 1) return BTSvc.bluetoothDeviceName;
         return "Bluetooth";
     }
     property string subtitleText: {
-        if (!Bluetooth.bluetoothEnabled) return "Off";
-        let count = Bluetooth.connectedBluetoothDevices.length;
+        if (!BTSvc.bluetoothEnabled) return "Off";
+        let count = BTSvc.connectedBluetoothDevices.length;
         if (count === 1) return "Connected";
         if (count > 1) return count + " connected";
         return "On";
     }
     property string iconSource: {
-        return Icons.icon(Bluetooth.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic");
+        return Icons.icon(BTSvc.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic");
     }
-    property bool isActive: !!Bluetooth.bluetoothEnabled
+    property bool isActive: !!BTSvc.bluetoothEnabled
     property color activeColor: Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
     
     // Expanded view support
@@ -42,7 +42,7 @@ Item {
 
             Component.onCompleted: {
                 if (root.isActive) {
-                    Bluetooth.startBluetoothDiscovery()
+                    BTSvc.startBluetoothDiscovery()
                 }
             }
 
@@ -130,7 +130,7 @@ Item {
                                     width: refreshRow.implicitWidth
                                     height: 24
                                     
-                                    property bool isScanning: (Bluetooth.adapter && Bluetooth.adapter.discovering) === true || !!Bluetooth.bluetoothScanningManual
+                                    property bool isScanning: (Bluetooth.adapter && Bluetooth.adapter.discovering) === true || !!BTSvc.bluetoothScanningManual
 
                                     Row {
                                         id: refreshRow
@@ -163,7 +163,7 @@ Item {
                                         anchors.fill: parent
                                         hoverEnabled: true
                                         onClicked: {
-                                            Bluetooth.startBluetoothDiscovery()
+                                            BTSvc.startBluetoothDiscovery()
                                         }
                                     }
                                 }
@@ -211,5 +211,5 @@ Item {
     }
 
     signal toggled()
-    onToggled: Bluetooth.toggleBluetooth()
+    onToggled: BTSvc.toggleBluetooth()
 }

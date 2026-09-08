@@ -14,14 +14,14 @@ Row {
 
     // 2. Bluetooth
     Item {
-        width: (Bluetooth.bluetoothEnabled && Bluetooth.bluetoothConnected) ? 20 : 0
+        width: (BTSvc.bluetoothEnabled && BTSvc.bluetoothConnected) ? 20 : 0
         height: 20
         visible: width > 0
         anchors.verticalCenter: parent.verticalCenter
         Image {
             id: btIcon
             anchors.fill: parent
-            source: Icons.icon(Bluetooth.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
+            source: Icons.icon(BTSvc.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
             sourceSize: Qt.size(24, 24)
             visible: false
         }
