@@ -174,6 +174,8 @@ A `FileView` watcher in `ConfigStore.qml` re-runs `loadConfigProc` when the file
 
 - **`shell.qml` has no state** — all backend state lives in `services/` singletons. `shell.qml` is pure composition. Do not add new `property` declarations or `Process` components to `shell.qml`.
 
+- **PR authorship**: Do **not** add yourself (the agent) as a `Co-authored-by:` trailer to commits or PRs on this repo. Keep commits under the user's own authorship. If you're using a tool that auto-adds a co-author trailer, strip it before committing.
+
 - **Notifications toast bridge**: `shell.qml` owns `NotificationPopup { id: globalToast }` and a `Connections { target: Notifications }` that calls `globalToast.show(item)` when `Notifications.notificationReceived` fires. The `NotificationPopup` itself reads from `Notifications.notificationList` for its popup view.
 
 - **`MaterialSurface` exposes `fgColor` and `iconColor`** — hardcoding `"white"` in components breaks Frosted-Glass active-state inversion.
