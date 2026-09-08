@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import ".."
 import "../reusables"
-import "services"
+import "../../services"
 // BrightnessSlider.qml — Backlight brightness slider using logind/sysfs.
 // Context: shellRoot (icons), qs (brightnessValue, setBrightness), controlPanel (editMode)
 

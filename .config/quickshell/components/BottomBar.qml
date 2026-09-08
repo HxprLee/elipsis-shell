@@ -5,7 +5,7 @@ import Quickshell.Wayland
 import QtQuick
 import QtQuick.Controls
 import Qt5Compat.GraphicalEffects
-import "services"
+import "../services"
 
 // Dock handle + content. Implemented as a bottom-anchored, horizontally
 // centered PanelWindow on the Top layer (no exclusive zone, input masked

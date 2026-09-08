@@ -6,7 +6,7 @@ import QtQuick
 // Wallpapers singleton — wallpaper path query + blur pipeline +
 // appearance properties (materialTheme, accentColor, blurEnabled, ...).
 // ConfigStore reads/writes these via Wallpapers.materialTheme, etc.
-QtObject {
+Item {
     id: wallpapers
 
     property string materialTheme: "Acrylic"

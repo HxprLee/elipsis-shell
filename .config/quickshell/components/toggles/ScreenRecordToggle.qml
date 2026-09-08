@@ -4,7 +4,7 @@ import QtQuick.Controls
 import Quickshell.Io
 import "../reusables"
 import ".."
-import "services"
+import "../../services"
 
 Item {
     id: root

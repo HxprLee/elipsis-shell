@@ -1,6 +1,6 @@
 import QtQuick
 import Quickshell.Io
-import "services"
+import "../../services"
 
 // SettingsToggle.qml — System settings launcher (data-only, styled by the shell).
 

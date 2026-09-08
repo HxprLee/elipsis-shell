@@ -9,7 +9,7 @@ import QtQuick
 // A signal `notificationReceived(item)` is emitted for each new/updated
 // notification so the global toast can react in shell.qml.
 
-QtObject {
+Item {
     id: notifications
 
     property var notificationList: []

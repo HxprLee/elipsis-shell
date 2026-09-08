@@ -6,7 +6,7 @@ import QtQuick
 // PowerProfiles singleton — talks to net.hadess.PowerProfiles D-Bus.
 // Owns the powerProfile state and the busctl get/set processes.
 
-QtObject {
+Item {
     id: powerProfiles
 
     property string powerProfile: "balanced"

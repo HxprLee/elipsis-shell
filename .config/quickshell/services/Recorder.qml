@@ -6,7 +6,7 @@ import QtQuick
 // Recorder singleton — gpu-screen-recorder lifecycle.
 // Owns isScreenRecording flag. Stops via pkill -SIGINT.
 
-QtObject {
+Item {
     id: recorder
 
     property bool isScreenRecording: screenRecordProc.running

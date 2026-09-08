@@ -5,7 +5,7 @@ import Quickshell
 import Quickshell.Services.Mpris
 import ".."
 import "../reusables"
-import "services"
+import "../../services"
 
 // MediaWidget.qml — MPRIS media player with album art, playback controls,
 

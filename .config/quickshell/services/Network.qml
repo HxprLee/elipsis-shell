@@ -6,7 +6,7 @@ import QtQuick
 
 // Network singleton — wifi/ethernet state via Quickshell.Networking + nmcli.
 // Owns wifi/ethernet properties, polling timer, nmcli-backed scan/toggle.
-QtObject {
+Item {
     id: network
 
     // ── Wifi ──

@@ -1,5 +1,5 @@
 import QtQuick
-import "services"
+import "../../services"
 
 // CaffeineToggle.qml — Caffeine toggle (data-only, styled by the shell).
 

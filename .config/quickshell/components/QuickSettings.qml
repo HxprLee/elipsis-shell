@@ -8,7 +8,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Qt.labs.folderlistmodel
 import Qt5Compat.GraphicalEffects
-import "services"
+import "../services"
 
 PanelWindow {
     id: qs
@@ -1099,7 +1099,7 @@ PanelWindow {
             }
 
             Connections {
-                target: shellRoot
+                target: ConfigStore
                 function onConfigLoadCompleteChanged() {
                     console.log("[QuickSettings] Config load complete:", ConfigStore.configLoadComplete);
                     console.log("[QuickSettings] Layout from shell:", JSON.stringify(ConfigStore.controlCenterLayout));

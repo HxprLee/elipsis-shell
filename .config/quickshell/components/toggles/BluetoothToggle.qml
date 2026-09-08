@@ -5,7 +5,7 @@ import Qt5Compat.GraphicalEffects
 import Quickshell.Bluetooth
 import ".."
 import "../reusables"
-import "services"
+import "../../services"
 
 // BluetoothToggle.qml — Bluetooth toggle (data-only, styled by the shell).
 

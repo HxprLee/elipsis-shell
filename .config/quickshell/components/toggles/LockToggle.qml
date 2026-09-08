@@ -1,5 +1,5 @@
 import QtQuick
-import "services"
+import "../../services"
 
 // LockToggle.qml — Screen lock toggle (data-only, styled by the shell).
 

@@ -6,7 +6,7 @@ import QtQuick
 
 // Bluetooth singleton — adapter state via Quickshell.Bluetooth + bluetoothctl
 // polling. Powers scanning and toggle.
-QtObject {
+Item {
     id: bluetooth
 
     property bool bluetoothEnabledManual: false

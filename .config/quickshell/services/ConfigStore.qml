@@ -2,14 +2,13 @@ pragma Singleton
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
-import Quickshell.DesktopEntries
 import QtQuick
 
 // ConfigStore — single source of truth for user-config persisted to config/config.json.
 // Owns pinnedApps, toggleData, controlCenterLayout, mediaPlayerId and the
 // functions that mutate them. Dock refresh is delegated to Dock.refreshDock().
 
-QtObject {
+Item {
     id: configStore
 
     // ── Persisted state ──

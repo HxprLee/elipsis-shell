@@ -1,5 +1,5 @@
 import QtQuick
-import "services"
+import "../../services"
 
 // DndToggle.qml — Do Not Disturb toggle (data-only, styled by the shell).
 

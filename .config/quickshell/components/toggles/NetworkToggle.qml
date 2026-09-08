@@ -5,7 +5,7 @@ import Qt5Compat.GraphicalEffects
 import Quickshell.Networking
 import ".."
 import "../reusables"
-import "services"
+import "../../services"
 
 Item {
     id: root

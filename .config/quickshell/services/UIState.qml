@@ -14,7 +14,7 @@ import QtQuick
 //   - Hyprland-derived: hasWindowsOnCurrentWs, hasSingleTiledWindow
 //   - Per-screen context menu registry + open/close helpers
 
-QtObject {
+Item {
     id: uiState
 
     // ── Panel visibility ──

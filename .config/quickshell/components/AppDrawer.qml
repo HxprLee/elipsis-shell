@@ -7,7 +7,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import "reusables"
-import "services"
+import "../services"
 
 PanelWindow {
     id: root

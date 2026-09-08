@@ -1,5 +1,5 @@
 import QtQuick
-import "services"
+import "../../services"
 
 // PowerToggle.qml — Power menu / shutdown (data-only, styled by the shell).
 

@@ -2,7 +2,7 @@ import Quickshell
 import QtQuick
 import QtQuick.Controls
 import Qt5Compat.GraphicalEffects
-import "services"
+import "../services"
 
 Row {
     id: cluster

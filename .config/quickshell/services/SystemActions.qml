@@ -1,7 +1,6 @@
 pragma Singleton
 import Quickshell
 import Quickshell.Hyprland
-import Quickshell.DesktopEntries
 import Quickshell.Io
 import QtQuick
 
@@ -9,7 +8,7 @@ import QtQuick
 // Owns the underlying Process instances and exposes them as functions.
 // Consumers call SystemActions.powerOff() / launchExec() / etc.
 
-QtObject {
+Item {
     id: systemActions
 
     // ── Power / Lock (used by PowerMenu) ──

@@ -5,7 +5,7 @@ import Qt5Compat.GraphicalEffects
 import Quickshell.Services.Pipewire
 import Quickshell.Io
 import ".."
-import "services"
+import "../../services"
 
 // VolumeSlider.qml — Pipewire audio volume slider.
 // Context: shellRoot (icons), qs (audioNode), controlPanel (editMode)

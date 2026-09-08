@@ -7,7 +7,7 @@ import QtQuick
 // amdgpu_bl0 / ...) + read/write via /sys/class/backlight and login1 D-Bus.
 // Also owns keyboard backlight (dell::kbd_backlight) + dark mode (gsettings).
 
-QtObject {
+Item {
     id: brightness
 
     // ── Display backlight ──

@@ -1,7 +1,6 @@
 pragma Singleton
 import Quickshell
 import Quickshell.Hyprland
-import Quickshell.DesktopEntries
 import QtQuick
 
 // Dock singleton — owns the dockApps ListModel and refreshDock() logic.
@@ -11,7 +10,7 @@ import QtQuick
 //
 // Hyprland event listeners and the heartbeat timer live here too.
 
-QtObject {
+Item {
     id: dock
 
     property alias dockAppsModel: dockApps

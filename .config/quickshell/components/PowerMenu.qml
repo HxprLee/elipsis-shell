@@ -4,7 +4,7 @@ import Quickshell.Io
 import QtQuick
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
-import "services"
+import "../services"
 
 // PowerMenu.qml — Full-screen power menu overlay.
 // Actions: Power Off, Restart, Suspend, Lock

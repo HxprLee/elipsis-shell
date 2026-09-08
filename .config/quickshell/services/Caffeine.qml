@@ -7,7 +7,7 @@ import QtQuick
 // Owns caffeineActive flag. If pkill fails (hypridle not running),
 // reverts the optimistic state update.
 
-QtObject {
+Item {
     id: caffeine
 
     property bool caffeineActive: false

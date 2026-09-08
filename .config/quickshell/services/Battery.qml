@@ -5,7 +5,7 @@ import QtQuick
 // Battery singleton — exposes UPower.displayDevice.percentage and state.
 // Consumers read Battery.batteryPct / Battery.batteryStatus.
 
-QtObject {
+Item {
     id: battery
 
     property int batteryPct: -1

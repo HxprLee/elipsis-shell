@@ -3,7 +3,7 @@ import Quickshell.Hyprland
 import Quickshell.Wayland
 import QtQuick
 import QtQuick.Controls
-import "services"
+import "../services"
 
 // Background strip at the bottom of every screen. Owns the always-reserved
 // 24 px exclusive zone, the dim layer, and the edge-swipe input area that

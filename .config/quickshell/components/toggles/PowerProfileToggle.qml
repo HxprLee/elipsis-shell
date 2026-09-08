@@ -1,7 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import ".."
-import "services"
+import "../../services"
 
 // PowerProfileToggle.qml — Power Profiles toggle (data-only, styled by the shell).
 

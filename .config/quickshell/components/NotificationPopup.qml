@@ -1,7 +1,7 @@
 import Quickshell
 import Quickshell.Wayland
 import QtQuick
-import "services"
+import "../services"
 
 PanelWindow {
     id: popupWindow

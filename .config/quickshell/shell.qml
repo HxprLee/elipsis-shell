@@ -3,6 +3,8 @@
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Services.Pipewire
+import Quickshell.Io
+import Quickshell.Wayland
 import QtQuick
 import "components"
 import "services"
@@ -19,6 +21,13 @@ ShellRoot {
         function toggle(): void { Lock.toggle(); }
         function lock(): void { Lock.lock(); }
         function unlock(): void { Lock.unlock(); }
+    }
+
+    // WlSessionLock needs import "components" to resolve Lockscreen.
+    WlSessionLock {
+        id: sessionLock
+        locked: Lock.isLocked
+        surface: Lockscreen {}
     }
 
     IpcHandler {

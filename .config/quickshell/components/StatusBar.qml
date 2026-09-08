@@ -7,7 +7,7 @@ import Quickshell.Widgets
 import QtQuick
 import QtQuick.Controls
 import Qt5Compat.GraphicalEffects
-import "services"
+import "../services"
 
 PanelWindow {
     id: statusBar
