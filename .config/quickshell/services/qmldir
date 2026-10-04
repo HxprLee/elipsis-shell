@@ -8,6 +8,7 @@ singleton PowerProfiles 1.0 PowerProfiles.qml
 singleton Caffeine 1.0 Caffeine.qml
 singleton Recorder 1.0 Recorder.qml
 singleton Notifications 1.0 Notifications.qml
+singleton PipewireAvailability 1.0 PipewireAvailability.qml
 singleton Dock 1.0 Dock.qml
 singleton SystemActions 1.0 SystemActions.qml
 singleton UIState 1.0 UIState.qml

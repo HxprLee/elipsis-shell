@@ -85,6 +85,7 @@ Item {
     // ── Keyboard backlight (Dell laptop) ──
     property int kbdBacklightValue: 0
     property int kbdBacklightMax: 2
+    property bool kbdBacklightAvailable: false
 
     Process {
         id: kbdBacklightProc
@@ -107,6 +108,9 @@ Item {
                 let v = parseInt(data.trim());
                 if (!isNaN(v) && v > 0) brightness.kbdBacklightMax = v;
             }
+        }
+        onExited: (code) => {
+            brightness.kbdBacklightAvailable = (code === 0 && brightness.kbdBacklightMax > 0);
         }
     }
 
@@ -137,6 +141,10 @@ Item {
     Process { id: setDarkModeProc; running: false }
 
     function setDarkMode(active) {
+        // Optimistic update so the UI reflects the new state instantly
+        // instead of waiting up to 5s for the next poll cycle to re-read gsettings.
+        // The polling timer (darkModeTimer) will correct this if gsettings fails.
+        darkModeActive = active;
         setDarkModeProc.command = ["gsettings", "set", "org.gnome.desktop.interface", "color-scheme", active ? "prefer-dark" : "default"];
         setDarkModeProc.running = true;
     }

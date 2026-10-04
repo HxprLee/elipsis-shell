@@ -97,6 +97,9 @@ Item {
     MouseArea {
         id: bgMouseArea
         anchors.fill: parent
+        // Disable while expanded so presses that propagate through the
+        // morphed card don't re-trigger openExpandedView.
+        enabled: !expandedOverlay.isExpanded
         pressAndHoldInterval: 300
         onClicked: root.expandRequested()
         onPressAndHold: root.expandRequested()
@@ -717,7 +720,7 @@ Item {
                 }
                 MouseArea {
                     anchors.fill: parent
-                    enabled: !controlPanel.editMode && !!activePlayer && (activePlayer.canGoPrevious ?? false)
+                    enabled: !controlPanel.editMode && !expandedOverlay.isExpanded && !!activePlayer && (activePlayer.canGoPrevious ?? false)
                     onClicked: activePlayer.previous()
                 }
             }
@@ -747,7 +750,7 @@ Item {
                     id: playArea2x2
                     anchors.fill: parent
                     anchors.margins: -8
-                    enabled: !controlPanel.editMode && !!activePlayer && (activePlayer.canTogglePlaying ?? false)
+                    enabled: !controlPanel.editMode && !expandedOverlay.isExpanded && !!activePlayer && (activePlayer.canTogglePlaying ?? false)
                     onClicked: activePlayer.togglePlaying()
                 }
             }
@@ -769,7 +772,7 @@ Item {
                 }
                 MouseArea {
                     anchors.fill: parent
-                    enabled: !controlPanel.editMode && !!activePlayer && (activePlayer.canGoNext ?? false)
+                    enabled: !controlPanel.editMode && !expandedOverlay.isExpanded && !!activePlayer && (activePlayer.canGoNext ?? false)
                     onClicked: activePlayer.next()
                 }
             }
@@ -903,7 +906,7 @@ Item {
                             id: skipBackArea
                             anchors.fill: parent
                             anchors.margins: -8
-                            enabled: !controlPanel.editMode && !!activePlayer && (activePlayer.canGoPrevious ?? false)
+                            enabled: !controlPanel.editMode && !expandedOverlay.isExpanded && !!activePlayer && (activePlayer.canGoPrevious ?? false)
                             onClicked: activePlayer.previous()
                         }
                     }
@@ -934,7 +937,7 @@ Item {
                             id: playArea4x2
                             anchors.fill: parent
                             anchors.margins: -12
-                            enabled: !controlPanel.editMode && !!activePlayer && (activePlayer.canTogglePlaying ?? false)
+                            enabled: !controlPanel.editMode && !expandedOverlay.isExpanded && !!activePlayer && (activePlayer.canTogglePlaying ?? false)
                             onClicked: activePlayer.togglePlaying()
                         }
                     }
@@ -965,7 +968,7 @@ Item {
                             id: skipFwdArea
                             anchors.fill: parent
                             anchors.margins: -8
-                            enabled: !controlPanel.editMode && !!activePlayer && (activePlayer.canGoNext ?? false)
+                            enabled: !controlPanel.editMode && !expandedOverlay.isExpanded && !!activePlayer && (activePlayer.canGoNext ?? false)
                             onClicked: activePlayer.next()
                         }
                     }
@@ -1017,7 +1020,7 @@ Item {
                     MouseArea {
                         anchors.fill: parent
                         anchors.margins: -6
-                        enabled: activePlayer && (activePlayer.canSeek ?? false)
+                        enabled: !expandedOverlay.isExpanded && activePlayer && (activePlayer.canSeek ?? false)
 
                         function updatePosition(mouse) {
                             if (activePlayer && activePlayer.lengthSupported) {

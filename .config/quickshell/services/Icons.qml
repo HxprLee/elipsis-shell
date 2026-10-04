@@ -49,11 +49,13 @@ QtObject {
             "mpv":                                 "file:///usr/share/icons/breeze-dark/apps/48/mpv.svg",
             "firefox":                             "file:///usr/share/icons/breeze-dark/apps/48/firefox.svg",
             "chromium":                            "file:///usr/share/icons/breeze-dark/apps/48/chromium-browser.svg",
-            "dark-mode-symbolic":           "file:///usr/share/icons/breeze-dark/status/24/dark-mode-symbolic.svg",
-            "night-light-symbolic":          "file:///usr/share/icons/breeze-dark/status/24/night-light-symbolic.svg",
-            "auto-brightness-symbolic":     "file:///usr/share/icons/breeze-dark/actions/24/auto-brightness-symbolic.svg",
-            "keyboard-brightness-symbolic": "file:///usr/share/icons/breeze-dark/status/24/keyboard-brightness-symbolic.svg",
+            "dark-mode-symbolic":           "file:///usr/share/icons/Qogir/symbolic/actions/dark-mode-symbolic.svg",
+            "night-light-symbolic":          "file:///usr/share/icons/Adwaita/symbolic/status/night-light-symbolic.svg",
+            "auto-brightness-symbolic":     "file:///usr/share/icons/Qogir/symbolic/actions/layout-auto-symbolic.svg",
+            "keyboard-brightness-symbolic": "file:///usr/share/icons/breeze-dark/status/24/input-keyboard-brightness.svg",
             "input-keyboard-symbolic":     "file:///usr/share/icons/breeze-dark/devices/24/input-keyboard-symbolic.svg",
+            "document-edit-symbolic":     "file:///usr/share/icons/breeze-dark/actions/24/document-edit-symbolic.svg",
+            "checkmark-symbolic":         "file:///usr/share/icons/breeze-dark/actions/24/checkmark-symbolic.svg",
             };
 
         if (table[name]) return table[name];

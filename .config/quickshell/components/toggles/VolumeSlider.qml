@@ -32,7 +32,9 @@ Item {
     property Component expandedComponent: Component {
         Item {
             id: expandedRoot
-            implicitHeight: expandedContent.implicitHeight
+            // Static height: matches BluetoothToggle. Card uses expandedHeight
+            // (above) as its morph target; no dynamic resize. Tab content
+            // scrolls inside the card via Flickable.
 
             // Track all device nodes so their volume/mute properties bind
             PwObjectTracker {
@@ -65,7 +67,50 @@ Item {
                 anchors.fill: parent
                 spacing: 16
 
-                // ── Master Volume Slider (4x1 style) ──
+                // ── Master Volume Slider block ──
+                // Header row above the pill: device title (left) + "Active" badge (right)
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 20
+
+                    Text {
+                        id: masterDeviceTitle
+                        anchors.left: parent.left
+                        anchors.right: activeBadge.left
+                        anchors.rightMargin: 12
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: Pipewire.defaultAudioSink ? (Pipewire.defaultAudioSink.nickname || Pipewire.defaultAudioSink.description || Pipewire.defaultAudioSink.name) : "Output"
+                        color: Qt.rgba(1, 1, 1, 0.9)
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                        elide: Text.ElideRight
+                        maximumLineCount: 1
+                    }
+
+                    Rectangle {
+                        id: activeBadge
+                        visible: qs.audioNode !== undefined
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        height: 18
+                        implicitWidth: activeBadgeText.implicitWidth + 12
+                        radius: 9
+                        color: Qt.rgba(1, 1, 1, 0.1)
+                        border.color: Qt.rgba(1, 1, 1, 0.1)
+                        border.width: 1
+
+                        Text {
+                            id: activeBadgeText
+                            anchors.centerIn: parent
+                            text: "Active"
+                            color: Qt.rgba(1, 1, 1, 0.9)
+                            font.pixelSize: 10
+                            font.weight: Font.DemiBold
+                        }
+                    }
+                }
+
+                // Pill slider
                 Item {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 56
@@ -75,8 +120,18 @@ Item {
                         anchors.fill: parent
                         from: 0; to: 100
                         value: qs.audioNode ? qs.audioNode.volume * 100 : 50
+                        property bool didDrag: false
                         onMoved: {
                             if (qs.audioNode) qs.audioNode.volume = value / 100.0
+                            didDrag = true
+                        }
+                        onPressedChanged: {
+                            if (pressed) {
+                                didDrag = false
+                            } else {
+                                if (!didDrag && qs.audioNode) masterSlider.value = qs.audioNode.volume * 100
+                                masterSlider.value = Qt.binding(function() { return qs.audioNode ? qs.audioNode.volume * 100 : 50 })
+                            }
                         }
                         padding: 0
 
@@ -112,10 +167,13 @@ Item {
                                     }
                                 }
 
-                                Rectangle {
+                                MaterialSurface {
+                                    id: masterFillSurface
                                     width: masterSlider.visualPosition * masterBgTrack.width
                                     height: masterBgTrack.height
-                                    color: Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
+                                    radius: 0
+                                    isActive: true
+                                    clip: true
 
                                     Item {
                                         x: 0
@@ -130,7 +188,7 @@ Item {
                                         ColorOverlay {
                                             anchors.fill: masterFgIcon
                                             source: masterFgIcon
-                                            color: "white"
+                                            color: masterFillSurface.iconColor
                                         }
                                     }
                                 }
@@ -173,12 +231,12 @@ Item {
                     color: Qt.rgba(1, 1, 1, 0.1)
                 }
 
-                // ── Pill-style Tab Bar ──
+                // ── Pill-style Tab Bar (inverted selected pill, 40px) ──
                 Rectangle {
                     Layout.fillWidth: true
                     height: 40
                     radius: 20
-                    color: Qt.rgba(1, 1, 1, 0.06)
+                    color: Qt.rgba(1, 1, 1, 0.2)
 
                     Row {
                         anchors.fill: parent
@@ -194,15 +252,15 @@ Item {
                                     anchors.fill: parent
                                     anchors.margins: 1
                                     radius: 17
-                                    color: expandedRoot.currentTab === index ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                                    color: expandedRoot.currentTab === index ? Qt.rgba(1, 1, 1, 0.8) : "transparent"
                                     Behavior on color { ColorAnimation { duration: 200 } }
 
                                     Text {
                                         anchors.centerIn: parent
                                         text: modelData
-                                        color: expandedRoot.currentTab === index ? "white" : Qt.rgba(1, 1, 1, 0.5)
+                                        color: expandedRoot.currentTab === index ? Qt.rgba(0.117, 0.117, 0.117, 0.8) : Qt.rgba(1, 1, 1, 0.8)
                                         font.pixelSize: 13
-                                        font.bold: expandedRoot.currentTab === index
+                                        font.weight: Font.DemiBold
                                         Behavior on color { ColorAnimation { duration: 200 } }
                                     }
                                 }
@@ -256,6 +314,13 @@ Item {
                                     let filtered = nodes.filter(function(n) {
                                         return n && n.isSink && !n.isStream && n.audio;
                                     });
+                                    // Hide unplugged ports (pavucontrol behavior). Always keep the default.
+                                    if (PipewireAvailability.ready) {
+                                        let defSink = Pipewire.defaultAudioSink;
+                                        filtered = filtered.filter(function(n) {
+                                            return n === defSink || !PipewireAvailability.isUnplugged(n.id);
+                                        });
+                                    }
                                     // Sort: default device first
                                     let defSink = Pipewire.defaultAudioSink;
                                     filtered.sort(function(a, b) {
@@ -291,9 +356,17 @@ Item {
                                 id: inputRepeater
                                 model: {
                                     let nodes = Pipewire.nodes ? Pipewire.nodes.values : [];
-                                    return nodes.filter(function(n) {
+                                    let filtered = nodes.filter(function(n) {
                                         return n && !n.isSink && !n.isStream && n.audio;
                                     });
+                                    // Hide unplugged ports. Always keep the default source.
+                                    if (PipewireAvailability.ready) {
+                                        let defSrc = Pipewire.defaultAudioSource;
+                                        filtered = filtered.filter(function(n) {
+                                            return n === defSrc || !PipewireAvailability.isUnplugged(n.id);
+                                        });
+                                    }
+                                    return filtered;
                                 }
                                 delegate: deviceDelegate
                             }
@@ -305,9 +378,16 @@ Item {
                                 model: {
                                     if (inputRepeater.count > 0) return [];
                                     let nodes = Pipewire.nodes ? Pipewire.nodes.values : [];
-                                    return nodes.filter(function(n) {
+                                    let filtered = nodes.filter(function(n) {
                                         return n && !n.isSink && !n.isStream;
                                     });
+                                    if (PipewireAvailability.ready) {
+                                        let defSrc = Pipewire.defaultAudioSource;
+                                        filtered = filtered.filter(function(n) {
+                                            return n === defSrc || !PipewireAvailability.isUnplugged(n.id);
+                                        });
+                                    }
+                                    return filtered;
                                 }
                                 delegate: deviceDelegate
                             }
@@ -366,131 +446,167 @@ Item {
             // ── Device Delegate ──
             Component {
                 id: deviceDelegate
-                Rectangle {
+                Item {
+                    id: rowRoot
                     Layout.fillWidth: true
-                    height: 64
-                    radius: 14
-                    color: deviceMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
-                    Behavior on color { ColorAnimation { duration: 150 } }
+                    Layout.preferredHeight: 56
 
-                    property bool isDefaultSink: Pipewire.defaultAudioSink && modelData && Pipewire.defaultAudioSink === modelData
-                    property bool isDefaultSource: Pipewire.defaultAudioSource && modelData && Pipewire.defaultAudioSource === modelData
-                    property bool isDefault: isDefaultSink || isDefaultSource
+                    readonly property bool isDefault:
+                        (modelData && Pipewire.defaultAudioSink && Pipewire.defaultAudioSink === modelData)
+                        || (modelData && Pipewire.defaultAudioSource && Pipewire.defaultAudioSource === modelData)
 
-                    RowLayout {
+                    // Live volume (0-100) — updated by the slider MouseArea during drag
+                    // and read by the fill rectangle. Binds to the actual volume when
+                    // the user isn't interacting.
+                    property real deviceVolumePercent:
+                        (modelData && modelData.audio) ? modelData.audio.volume * 100 : 0
+
+                    // Pill-shaped slider: track + fill wrapped in an OpacityMask
+                    // so the inner fill is a sharp rectangle clipped to the pill.
+                    Item {
+                        id: deviceTrack
                         anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 12
 
-                        // Mute button
-                        Rectangle {
-                            width: 36; height: 36; radius: 18
-                            color: (modelData && modelData.audio && modelData.audio.muted) ? Qt.rgba(1, 0.3, 0.3, 0.3) : Qt.rgba(1, 1, 1, 0.08)
-                            Behavior on color { ColorAnimation { duration: 200 } }
+                        // Content layer (clipped to pill shape via OpacityMask)
+                        Item {
+                            id: deviceTrackContent
+                            anchors.fill: parent
+                            visible: false
 
-                            Image {
-                                anchors.centerIn: parent
-                                sourceSize: Qt.size(18, 18)
-                                source: Icons.icon((modelData && modelData.audio && modelData.audio.muted) ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
+                            // Track background
+                            Rectangle {
+                                anchors.fill: parent
+                                color: Qt.rgba(1, 1, 1, 0.15)
                             }
 
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: {
-                                    if (modelData && modelData.audio) modelData.audio.muted = !modelData.audio.muted
-                                }
+                            // Filled portion. Active (accent) when not muted, dim/transparent
+                            // when muted. "Default device" no longer affects the fill color —
+                            // every non-muted device row uses the accent.
+                            MaterialSurface {
+                                id: deviceFillSurface
+                                width: (deviceVolumePercent / 100) * deviceTrack.width
+                                height: deviceTrack.height
+                                radius: 0
+                                isActive: !(modelData && modelData.audio && modelData.audio.muted)
+                                opacity: deviceVolumePercent > 0 ? 1.0 : 0.0
+                                visible: opacity > 0
+                                Behavior on opacity { NumberAnimation { duration: 150 } }
                             }
                         }
 
-                        // Name + slider
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 4
+                        // Pill mask
+                        Rectangle {
+                            id: deviceMask
+                            anchors.fill: parent
+                            radius: height / 2
+                            visible: false
+                        }
 
-                            RowLayout {
-                                Layout.fillWidth: true
-                                spacing: 8
+                        OpacityMask {
+                            anchors.fill: parent
+                            source: deviceTrackContent
+                            maskSource: deviceMask
+                        }
+                    }
 
-                                Text {
-                                    text: {
-                                        if (!modelData) return "Unknown";
-                                        return modelData.description || modelData.name || "Audio Device";
-                                    }
-                                    color: "white"
-                                    font.pixelSize: 13
-                                    font.weight: Font.Medium
-                                    Layout.fillWidth: true
-                                    elide: Text.ElideRight
-                                }
-
-                                // Default indicator
-                                Rectangle {
-                                    visible: isDefault
-                                    width: defaultLabel.implicitWidth + 16
-                                    height: 20
-                                    radius: 10
-                                    color: Qt.rgba(0.2, 0.5, 1.0, 0.3)
-
-                                    Text {
-                                        id: defaultLabel
-                                        anchors.centerIn: parent
-                                        text: "Default"
-                                        color: Qt.rgba(0.4, 0.7, 1.0, 1.0)
-                                        font.pixelSize: 10
-                                        font.bold: true
-                                    }
-                                }
+                    // Single MouseArea handles all touch interaction:
+                    //   - clean tap (no drag) → set as default device
+                    //   - horizontal drag     → adjust volume
+                    //   - vertical drag       → ignored (Flickable scrolls the list)
+                    // The visual fill mirrors `rowRoot.deviceVolumePercent`, which
+                    // re-evaluates as `modelData.audio.volume` changes during drag.
+                    // preventStealing + asymmetric deadzone: 8 px to commit to either
+                    // axis, but once a horizontal drag is committed, allow up to 24 px
+                    // of vertical drift before surrendering to the Flickable.
+                    MouseArea {
+                        id: deviceSliderArea
+                        anchors.fill: parent
+                        preventStealing: true
+                        readonly property int hDeadzone: 8
+                        readonly property int vDeadzone: 24
+                        property real startX: 0
+                        property real startY: 0
+                        property bool horizontalDrag: false
+                        property bool verticalDrag: false
+                        onPressed: (mouse) => {
+                            startX = mouse.x
+                            startY = mouse.y
+                            horizontalDrag = false
+                            verticalDrag = false
+                            mouse.accepted = true
+                        }
+                        onPositionChanged: (mouse) => {
+                            if (!horizontalDrag && Math.abs(mouse.x - startX) > hDeadzone)
+                                horizontalDrag = true
+                            if (!verticalDrag && Math.abs(mouse.y - startY) > vDeadzone)
+                                verticalDrag = true
+                            if (horizontalDrag && !verticalDrag && modelData && modelData.audio) {
+                                let pct = Math.max(0, Math.min(100, (mouse.x / width) * 100))
+                                modelData.audio.volume = pct / 100
                             }
-
-                            // Volume slider
-                            Slider {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 20
-                                from: 0; to: 100
-                                value: (modelData && modelData.audio) ? modelData.audio.volume * 100 : 0
-                                onMoved: {
-                                    if (modelData && modelData.audio) modelData.audio.volume = value / 100.0
-                                }
-
-                                background: Rectangle {
-                                    x: parent.leftPadding
-                                    y: parent.topPadding + parent.availableHeight / 2 - height / 2
-                                    width: parent.availableWidth
-                                    height: 8
-                                    radius: 4
-                                    color: Qt.rgba(1, 1, 1, 0.1)
-
-                                    Rectangle {
-                                        width: parent.parent.visualPosition * parent.width
-                                        height: parent.height
-                                        radius: 4
-                                        color: isDefault ? Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0) : Qt.rgba(1, 1, 1, 0.4)
-                                    }
-                                }
-
-                                handle: Rectangle {
-                                    x: parent.leftPadding + parent.visualPosition * (parent.availableWidth - width)
-                                    y: parent.topPadding + parent.availableHeight / 2 - height / 2
-                                    width: 18; height: 18; radius: 9
-                                    color: "white"
-                                    scale: parent.pressed ? 1.2 : 1.0
-                                    Behavior on scale { NumberAnimation { duration: 100 } }
-                                }
+                            mouse.accepted = horizontalDrag || !verticalDrag
+                        }
+                        onReleased: {
+                            if (!horizontalDrag && !verticalDrag) {
+                                SystemActions.setDefaultAudio(modelData ? modelData.id : undefined)
                             }
                         }
                     }
 
-                    MouseArea {
-                        id: deviceMouse
-                        anchors.fill: parent
-                        z: -1
-                        hoverEnabled: true
-                        onClicked: {
-                            // Set as default device via SystemActions
-                            if (modelData && modelData.id !== undefined) {
-                                SystemActions.setDefaultAudio(modelData.id)
+                    // Icon (left) — click to mute, decorative otherwise
+                    Item {
+                        x: 14
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 28; height: 28
+                        z: 2
+
+                        Image {
+                            anchors.fill: parent
+                            sourceSize: Qt.size(28, 28)
+                            source: Icons.icon((modelData && modelData.audio && modelData.audio.muted)
+                                ? "audio-volume-muted-symbolic"
+                                : "audio-volume-high-symbolic")
+                            visible: false
+                        }
+                        ColorOverlay {
+                            anchors.fill: parent
+                            source: parent.children[0]
+                            color: deviceFillSurface.iconColor
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                if (modelData && modelData.audio) modelData.audio.muted = !modelData.audio.muted
                             }
+                        }
+                    }
+
+                    // Name + "Active" subtitle
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 52
+                        anchors.rightMargin: 12
+                        anchors.topMargin: 8
+                        anchors.bottomMargin: 8
+                        spacing: 1
+                        z: 1
+
+                        Text {
+                            text: modelData ? (modelData.nickname || modelData.description || modelData.name || "Audio Device") : ""
+                            color: deviceFillSurface.fgColor
+                            opacity: 0.7
+                            font.pixelSize: 13
+                            font.weight: Font.Medium
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                        }
+                        Text {
+                            visible: rowRoot.isDefault
+                            text: "Active"
+                            color: deviceFillSurface.fgColor
+                            opacity: 0.7
+                            font.pixelSize: 12
+                            font.weight: Font.Medium
                         }
                     }
                 }
@@ -499,98 +615,131 @@ Item {
             // ── Stream (Application) Delegate ──
             Component {
                 id: streamDelegate
-                Rectangle {
+                Item {
+                    id: streamRoot
                     Layout.fillWidth: true
-                    height: 64
-                    radius: 14
-                    color: streamMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
-                    Behavior on color { ColorAnimation { duration: 150 } }
+                    Layout.preferredHeight: 56
 
-                    RowLayout {
+                    // Live volume (0-100). Read by the fill rectangle; updates
+                    // when the user drags the slider or when the stream volume
+                    // changes externally (e.g. app-side).
+                    property real streamVolumePercent:
+                        (modelData && modelData.audio) ? modelData.audio.volume * 100 : 0
+
+                    // Pill-shaped slider: track + fill wrapped in an OpacityMask
+                    // so the inner fill is a sharp rectangle clipped to the pill.
+                    Item {
+                        id: streamTrack
                         anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 12
 
-                        // Mute button
-                        Rectangle {
-                            width: 36; height: 36; radius: 18
-                            color: (modelData && modelData.audio && modelData.audio.muted) ? Qt.rgba(1, 0.3, 0.3, 0.3) : Qt.rgba(1, 1, 1, 0.08)
-                            Behavior on color { ColorAnimation { duration: 200 } }
+                        // Content layer (clipped to pill shape via OpacityMask)
+                        Item {
+                            id: streamTrackContent
+                            anchors.fill: parent
+                            visible: false
 
-                            Image {
-                                anchors.centerIn: parent
-                                sourceSize: Qt.size(18, 18)
-                                source: Icons.icon((modelData && modelData.audio && modelData.audio.muted) ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic")
+                            // Track background
+                            Rectangle {
+                                anchors.fill: parent
+                                color: Qt.rgba(1, 1, 1, 0.15)
                             }
 
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: {
-                                    if (modelData && modelData.audio) modelData.audio.muted = !modelData.audio.muted
-                                }
+                            // Filled portion. Active (accent) when not muted, dim/transparent
+                            // when muted.
+                            MaterialSurface {
+                                id: streamFillSurface
+                                width: (streamVolumePercent / 100) * streamTrack.width
+                                height: streamTrack.height
+                                radius: 0
+                                isActive: !(modelData && modelData.audio && modelData.audio.muted)
+                                opacity: streamVolumePercent > 0 ? 1.0 : 0.0
+                                visible: opacity > 0
+                                Behavior on opacity { NumberAnimation { duration: 150 } }
                             }
                         }
 
-                        // Name + slider
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 4
+                        // Pill mask
+                        Rectangle {
+                            id: streamMask
+                            anchors.fill: parent
+                            radius: height / 2
+                            visible: false
+                        }
 
-                            Text {
-                                text: {
-                                    if (!modelData) return "Unknown";
-                                    return modelData.description || modelData.name || "Application";
-                                }
-                                color: "white"
-                                font.pixelSize: 13
-                                font.weight: Font.Medium
-                                Layout.fillWidth: true
-                                elide: Text.ElideRight
+                        OpacityMask {
+                            anchors.fill: parent
+                            source: streamTrackContent
+                            maskSource: streamMask
+                        }
+                    }
+
+                    // Slider underlay for drag-to-set
+                    Slider {
+                        id: streamSlider
+                        anchors.fill: parent
+                        from: 0; to: 100
+                        value: (modelData && modelData.audio) ? modelData.audio.volume * 100 : 0
+                        property bool didDrag: false
+                        onMoved: {
+                            if (modelData && modelData.audio) modelData.audio.volume = value / 100.0
+                            didDrag = true
+                        }
+                        onPressedChanged: {
+                            if (pressed) {
+                                didDrag = false
+                            } else {
+                                if (!didDrag && modelData && modelData.audio) streamSlider.value = modelData.audio.volume * 100
+                                streamSlider.value = Qt.binding(function() { return (modelData && modelData.audio) ? modelData.audio.volume * 100 : 0 })
                             }
+                        }
+                        padding: 0
+                        handle: Item {}
+                        background: Item {}
+                    }
 
-                            Slider {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 20
-                                from: 0; to: 100
-                                value: (modelData && modelData.audio) ? modelData.audio.volume * 100 : 0
-                                onMoved: {
-                                    if (modelData && modelData.audio) modelData.audio.volume = value / 100.0
-                                }
+                    // Icon (left) — click to mute
+                    Item {
+                        x: 14
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 28; height: 28
+                        z: 2
 
-                                background: Rectangle {
-                                    x: parent.leftPadding
-                                    y: parent.topPadding + parent.availableHeight / 2 - height / 2
-                                    width: parent.availableWidth
-                                    height: 8
-                                    radius: 4
-                                    color: Qt.rgba(1, 1, 1, 0.1)
-
-                                    Rectangle {
-                                        width: parent.parent.visualPosition * parent.width
-                                        height: parent.height
-                                        radius: 4
-                                        color: Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
-                                    }
-                                }
-
-                                handle: Rectangle {
-                                    x: parent.leftPadding + parent.visualPosition * (parent.availableWidth - width)
-                                    y: parent.topPadding + parent.availableHeight / 2 - height / 2
-                                    width: 18; height: 18; radius: 9
-                                    color: "white"
-                                    scale: parent.pressed ? 1.2 : 1.0
-                                    Behavior on scale { NumberAnimation { duration: 100 } }
-                                }
+                        Image {
+                            anchors.fill: parent
+                            sourceSize: Qt.size(28, 28)
+                            source: Icons.icon((modelData && modelData.audio && modelData.audio.muted)
+                                ? "audio-volume-muted-symbolic"
+                                : "audio-volume-high-symbolic")
+                            visible: false
+                        }
+                        ColorOverlay {
+                            anchors.fill: parent
+                            source: parent.children[0]
+                            color: streamFillSurface.iconColor
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                if (modelData && modelData.audio) modelData.audio.muted = !modelData.audio.muted
                             }
                         }
                     }
 
-                    MouseArea {
-                        id: streamMouse
+                    // Name only (no subtitle for streams)
+                    Text {
                         anchors.fill: parent
-                        z: -1
-                        hoverEnabled: true
+                        anchors.leftMargin: 52
+                        anchors.rightMargin: 12
+                        anchors.topMargin: 8
+                        anchors.bottomMargin: 8
+                        verticalAlignment: Text.AlignVCenter
+                        text: modelData ? (modelData.description || modelData.name || "Application") : ""
+                        color: streamFillSurface.fgColor
+                        opacity: 0.7
+                        font.pixelSize: 13
+                        font.weight: Font.Medium
+                        elide: Text.ElideRight
+                        z: 1
                     }
                 }
             }
@@ -605,10 +754,13 @@ Item {
         visible: !root.isVertical
         from: 0; to: 100
         value: qs.audioNode ? qs.audioNode.volume * 100 : 50
+        property bool didDrag: false
         onMoved: {
             if (root.holdTriggered) return;
+            // Cancel hold-to-expand on first movement so swipes don't open expandedUI.
+            holdTimer.stop();
             if (qs.audioNode) qs.audioNode.volume = value / 100.0
-            holdTimer.stop()
+            didDrag = true
         }
         padding: 0
 
@@ -667,13 +819,23 @@ Item {
 
         onPressedChanged: {
             if (pressed) {
+                if (expandedOverlay.isExpanded) return;
                 root.holdTriggered = false
                 holdTimer.restart()
+                didDrag = false
             } else {
                 holdTimer.stop()
+                if (expandedOverlay.isExpanded) {
+                    slider.value = Qt.binding(function() { return qs.audioNode ? qs.audioNode.volume * 100 : 50 })
+                    return
+                }
                 if (!root.holdTriggered) {
-                    // Apply volume on short tap or release
-                    if (qs.audioNode) qs.audioNode.volume = value / 100.0
+                    if (didDrag) {
+                        if (qs.audioNode) qs.audioNode.volume = value / 100.0
+                    } else if (qs.audioNode) {
+                        // Tap: snap value back to current volume
+                        slider.value = qs.audioNode.volume * 100
+                    }
                 }
                 // Restore binding so the slider tracks external volume changes again
                 slider.value = Qt.binding(function() { return qs.audioNode ? qs.audioNode.volume * 100 : 50 })
@@ -689,10 +851,13 @@ Item {
         orientation: Qt.Vertical
         from: 0; to: 100
         value: qs.audioNode ? qs.audioNode.volume * 100 : 50
+        property bool didDrag: false
         onMoved: {
             if (root.holdTriggered) return;
+            // Cancel hold-to-expand on first movement so swipes don't open expandedUI.
+            holdTimer.stop();
             if (qs.audioNode) qs.audioNode.volume = value / 100.0
-            holdTimer.stop()
+            didDrag = true
         }
         padding: 0
 
@@ -759,12 +924,22 @@ Item {
 
         onPressedChanged: {
             if (pressed) {
+                if (expandedOverlay.isExpanded) return;
                 root.holdTriggered = false
                 holdTimer.restart()
+                didDrag = false
             } else {
                 holdTimer.stop()
+                if (expandedOverlay.isExpanded) {
+                    vSlider.value = Qt.binding(function() { return qs.audioNode ? qs.audioNode.volume * 100 : 50 })
+                    return
+                }
                 if (!root.holdTriggered) {
-                    if (qs.audioNode) qs.audioNode.volume = value / 100.0
+                    if (didDrag) {
+                        if (qs.audioNode) qs.audioNode.volume = value / 100.0
+                    } else if (qs.audioNode) {
+                        vSlider.value = qs.audioNode.volume * 100
+                    }
                 }
                 vSlider.value = Qt.binding(function() { return qs.audioNode ? qs.audioNode.volume * 100 : 50 })
             }
@@ -776,6 +951,7 @@ Item {
         id: holdTimer
         interval: 300
         onTriggered: {
+            if (expandedOverlay.isExpanded) return;
             root.holdTriggered = true
             root.expandRequested()
             // Restore visual value so the slider snaps back if the user lifts their finger

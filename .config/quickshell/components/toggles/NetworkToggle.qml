@@ -45,7 +45,9 @@ Item {
     property Component expandedComponent: Component {
         Item {
             id: expandedRoot
-            implicitHeight: contentLayout.implicitHeight
+            // Static height: matches BluetoothToggle. Card uses expandedHeight
+            // (above) as its morph target; no dynamic resize. Networks list
+            // scrolls inside the card via Flickable.
 
             property var selectedNetwork: null
             property string pendingPassword: ""

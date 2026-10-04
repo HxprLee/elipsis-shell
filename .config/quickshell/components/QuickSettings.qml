@@ -1,6 +1,7 @@
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Hyprland
 import Quickshell.Services.Pipewire
 import Quickshell.Services.SystemTray
 import QtQuick
@@ -134,6 +135,18 @@ PanelWindow {
         } else {
             if (expandedOverlay.isExpanded)
                 controlPanel.closeExpandedView();
+            // Reset edit mode on close so the next open starts clean —
+            // otherwise the next open shows minus-bar drag handles on
+            // every toggle, and a tap inside an empty cell drags
+            // instead of activating. saveLayout() persists any pending
+            // changes (so the user doesn't lose work) before clearing.
+            if (controlPanel.editMode) {
+                controlPanel.saveLayout();
+                controlPanel.editMode = false;
+            }
+            if (addControlPopup.opacity > 0) {
+                addControlPopup.close();
+            }
             panelContainer.y = 10;
             panelContainer.bloomScale = 0.85;
             panelContainer.opacity = 0.0;
@@ -176,6 +189,7 @@ PanelWindow {
         }
 
         MouseArea {
+            id: outerArea
             anchors.fill: parent
             enabled: isOpen
             property real startY: 0
@@ -203,8 +217,22 @@ PanelWindow {
                     UIState.panelDragOffset = 0;
                     isDragging = false;
                 } else {
-                    // If expanded view is open, close it instead of the whole panel
-                    if (expandedOverlay.isExpanded) {
+                    // Click in the bgDim strip (outside controlPanel /
+                    // notifPanel). The inner expandedOverlay MouseArea
+                    // already handles all clicks inside controlPanel bounds,
+                    // so this branch only fires for clicks in the bgDim
+                    // region — geographically far from any toggle, so
+                    // there's no risk of opening another toggle's expanded
+                    // view here. Close the panel (or the expanded view if
+                    // one is active).
+                    //
+                    // Exception: while the Add-a-Control popup is open, an
+                    // outside tap dismisses just the popup and leaves the
+                    // control center open. Without this, tapping the dead
+                    // zone beside the popup tore down the whole panel.
+                    if (addControlPopup.opacity > 0) {
+                        addControlPopup.close();
+                    } else if (expandedOverlay.isExpanded) {
                         controlPanel.closeExpandedView();
                     } else {
                         UIState.panelOpen = false;
@@ -1145,10 +1173,76 @@ PanelWindow {
                 doOpenExpandedView(sourceRect, widgetItem, delegateRef);
             }
 
+            // Restore cell-bound geometry bindings on a previously-morphed widgetBg
+            // (the one expandedOverlay.sourceItem referenced before this
+            // call). Used when openExpandedView() is invoked while a
+            // different toggle's expanded view is already open, so the
+            // old widgetBg's broken geometry bindings get re-bound to
+            // its delegateRef synchronously instead of being stranded by
+            // morphCompleteTimer — whose onTriggered early-returns on
+            // any morphState !== "closing", and the new widgetBg's
+            // morphState is "opening" right after open() is called.
+            //
+            // Mirrors morphCompleteTimer.onTriggered (lines ~2925-2996).
+            function restoreCellBoundBindings(prevSourceItem, prevDel) {
+                if (!prevSourceItem)
+                    return;
+                // Skip if the previous widgetBg's cell-bound bindings are
+                // already intact. morphCompleteTimer.onTriggered (lines
+                // ~2925-2996) sets morphState = "idle" and clears
+                // delegateItemRef = null AFTER it restores the bindings,
+                // so morphState === "idle" is the authoritative signal
+                // that bindings are restored. Without this gate, a clean
+                // dismiss (timer fires, delegateItemRef cleared) followed
+                // by opening a different toggle would call this helper
+                // with prevDel = null, hit the no-delegate fallback, and
+                // zero out the previous widgetBg's geometry — making the
+                // previous toggle disappear from the grid. The bug stacks
+                // across repeated dismiss/open cycles, each one zeroing
+                // its predecessor.
+                if (prevSourceItem.morphState === "idle")
+                    return;
+                if (prevSourceItem.morphState === "closing")
+                    expandedOverlay.morphCompleteTimer.stop();
+                prevSourceItem.morphState = "idle";
+                prevSourceItem.scale = 1.0;
+                prevSourceItem.opacity = 1.0;
+                // Capture the widgetBg ref so the scale binding closure
+                // can read its dragOverlay/isItemPressed without
+                // resolving Repeater-child ids from outside that scope.
+                let sRef = prevSourceItem;
+                prevSourceItem.x = Qt.binding(function() { return prevDel.x; });
+                prevSourceItem.y = Qt.binding(function() { return prevDel.y; });
+                prevSourceItem.width = Qt.binding(function() { return prevDel.width; });
+                prevSourceItem.height = Qt.binding(function() { return prevDel.height; });
+                prevSourceItem.radius = Qt.binding(function() {
+                    return (prevDel.colSpan >= 2 && prevDel.rowSpan >= 2)
+                        ? 16
+                        : Math.min(prevDel.width, prevDel.height) / 2;
+                });
+                prevSourceItem.scale = Qt.binding(function() {
+                    return sRef.dragOverlay && sRef.dragOverlay.dragActive
+                        ? 1.05
+                        : (sRef.isItemPressed ? 0.95 : 1.0);
+                });
+            }
+
             // Helper that performs the actual snap. Public entry point is
             // openExpandedView(); replayPendingOpen() drives it after the
             // panel bloom finishes.
             function doOpenExpandedView(sourceRect, widgetItem, delegateRef) {
+                // If we already had an expanded view open, restore the
+                // previous widgetBg's cell-bound bindings and geometry
+                // synchronously BEFORE overwriting sourceItem. Otherwise
+                // the previous widgetBg's x/y/width/height/radius stay at
+                // the open-morph values and morphCompleteTimer — which
+                // gates on morphState === "closing" — early-returns for
+                // any state other than "closing", so the new widgetBg's
+                // "opening" state would strand the old bindings forever.
+                if (expandedOverlay.sourceItem && expandedOverlay.sourceItem !== sourceRect) {
+                    restoreCellBoundBindings(expandedOverlay.sourceItem, expandedOverlay.delegateItemRef);
+                }
+
                 // sourceRect is the widgetBg being morphed. It already
                 // lives under gridWrapper at its cell-bound position
                 // (Phase D no longer needs to reparent a separate card).
@@ -1362,32 +1456,9 @@ PanelWindow {
                         }
                     }
 
-                    // Edit Button
-                    Rectangle {
-                        width: 60
-                        height: 28
-                        radius: 14
-                        color: controlPanel.editMode ? Qt.rgba(0.2, 0.5, 1.0, 1.0) : Qt.rgba(1, 1, 1, 0.1)
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.left: parent.left
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: controlPanel.editMode ? "Done" : "Edit"
-                            color: "white"
-                            font.pixelSize: 12
-                            font.bold: true
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: {
-                                if (controlPanel.editMode) {
-                                    controlPanel.saveLayout();
-                                }
-                                controlPanel.editMode = !controlPanel.editMode;
-                            }
-                        }
-                    }
+                    // ── Status Cluster (visible once morph completes; latched to avoid spring oscillation flicker) ──
+                    // (Edit button used to live here; it's been moved to the
+                    // bottom of the grid in the new design.)
                 }
                 // Toggles Model (populated from JSON at startup)
                 ListModel {
@@ -1399,15 +1470,21 @@ PanelWindow {
                     id: toggleFlickable
                     anchors.top: controlHeader.bottom
                     anchors.topMargin: 16
-                    height: Math.min(parent.height - y - 24, contentHeight || 0)
+                    height: expandedOverlay.isExpanded
+                        ? (parent.height - y - 24)
+                        : Math.min(parent.height - y - 24, contentHeight || 0)
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.leftMargin: 24
                     anchors.rightMargin: 24
                     contentHeight: flickableContent.implicitHeight
-                    clip: true
+                    // Disable clipping while the expandedUI is open so the morphed card
+                    // (now tall enough to fill controlPanel) can paint past the Flickable
+                    // rect. Restored to clip=true when expandedOverlay.isExpanded flips
+                    // back to false, so normal toggle-grid scrolling keeps clipping.
+                    clip: !expandedOverlay.isExpanded
                     opacity: progress // Non-morphing content fades in
-                    interactive: controlPanel.dragIndex === -1 // Allow scrolling even in edit mode, unless dragging
+                    interactive: !expandedOverlay.isExpanded && controlPanel.dragIndex === -1 // Disable scrolling while expanded so MediaWidget's inner Flickable gets wheel events; also allow scrolling in edit mode unless dragging
 
                     ColumnLayout {
                         id: flickableContent
@@ -1685,7 +1762,18 @@ Behavior on radius {
                                             MouseArea {
                                                 id: complexHoldArea
                                                 anchors.fill: parent
-                                                enabled: !controlPanel.editMode && widgetLoader.item !== null && widgetLoader.item.hasExpandedView === true && widgetLoader.item.isSimpleToggle !== true
+                                                // Same guard as simpleToggleMouse: disable while expanded
+                                                // so this MouseArea doesn't intercept clicks meant for
+                                                // the expandedLoader's inner controls (and so
+                                                // complexHoldArea.pressed doesn't return true during
+                                                // the expanded state, which would flip isItemPressed
+                                                // true and trigger an unwanted scale-press animation
+                                                // on the morphed card).
+                                                enabled: !controlPanel.editMode
+                                                    && widgetLoader.item !== null
+                                                    && widgetLoader.item.hasExpandedView === true
+                                                    && widgetLoader.item.isSimpleToggle !== true
+                                                    && !expandedOverlay.isExpanded
                                                 pressAndHoldInterval: 300
                                                 onPressAndHold: {
                                                     controlPanel.openExpandedView(widgetBg, widgetLoader.item, delegateItem);
@@ -1717,10 +1805,15 @@ Behavior on radius {
                                                     }
                                                 }
                                                 onLoaded: {
-                                                    // Connect expandRequested signal for widgets that handle their own hold detection
+                                                    // Connect expandRequested signal for widgets that handle their own hold detection.
+                                                    // Gate on !expandedOverlay.isExpanded so a press that
+                                                    // propagates through the morphed card into the widget's
+                                                    // internal hold MA (VolumeSlider holdTimer, BrightnessSlider
+                                                    // holdTimer, MediaWidget bgMouseArea) cannot re-trigger
+                                                    // openExpandedView while an expanded view is already showing.
                                                     if (item && item.expandRequested) {
                                                         item.expandRequested.connect(function () {
-                                                            if (!controlPanel.editMode && item.hasExpandedView) {
+                                                            if (!controlPanel.editMode && item.hasExpandedView && !expandedOverlay.isExpanded) {
                                                                 controlPanel.openExpandedView(widgetBg, item, delegateItem);
                                                             }
                                                         });
@@ -1931,6 +2024,32 @@ Behavior on radius {
                                                 }
                                             }
 
+                                            // ── Click absorber: blocks press/click fall-through ──
+                                            // When expandedOverlay.isExpanded is true, this MouseArea
+                                            // sits between toggleChrome (z = N) and expandedLoader
+                                            // (z = N+1) at z=0. Any press that
+                                            // expandedOverlay.MouseArea forwards down through
+                                            // expandedLoader's empty card-area gaps lands here,
+                                            // NOT on the underlying widgetLoader's bgMouseArea /
+                                            // Slider press handler.
+                                            //
+                                            // Forward press events so that inner Flickable drag
+                                            // works — without this, the absorber auto-accepts
+                                            // the press and the Flickable never sees the drag.
+                                            // Absorb click so it doesn't reach MediaWidget.bgMouseArea
+                                            // (the bug from the previous fix). Qt auto-accepts
+                                            // composed events when there's no handler; an empty
+                                            // handler explicitly accepts without re-propagating.
+                                            MouseArea {
+                                                id: expandedClickAbsorber
+                                                enabled: expandedOverlay.isExpanded
+                                                anchors.fill: parent
+                                                propagateComposedEvents: true
+                                                onPressed: (mouse) => { mouse.accepted = false; }
+                                                onClicked: (mouse) => { /* absorb */ }
+                                                onPressAndHold: (mouse) => { /* absorb */ }
+                                            }
+
                                             // ── Expanded view content (Phase D) ──
                                             // Lives INSIDE widgetBg (same parent as widgetLoader +
                                             // toggleChrome), so the expanded view appears inside
@@ -1976,7 +2095,11 @@ Behavior on radius {
                                                     // +48 matches expandedLoader's
                                                     // anchors.margins: 24 top + 24 bottom.
                                                     let desired = implH + 48;
-                                                    let maxH = Math.min(gridWrapper.height - 40, 680);
+                                                    // Use controlPanel.height (830) as the upper bound
+                                                    // instead of gridWrapper.height (~320). The card
+                                                    // should be able to fill the visible panel, not
+                                                    // just the small grid area.
+                                                    let maxH = Math.min(controlPanel.height - 40, 680);
                                                     if (maxH > 0)
                                                         desired = Math.min(desired, maxH);
                                                     // Skip the tween if we're already there
@@ -1991,7 +2114,13 @@ Behavior on radius {
                                                     // the latched "open" state once the tween
                                                     // is in flight.
                                                     widgetBg.morphState = "opening";
-                                                    widgetBg.y = (gridWrapper.height - desired) / 2;
+                                                    // Center vertically against controlPanel (the
+                                                    // visible panel rect), not gridWrapper. Since
+                                                    // widgetBg.parent === gridWrapper, subtract
+                                                    // gridWrapper's top offset inside controlPanel
+                                                    // to get the right y in gridWrapper coords.
+                                                    let gridTopInPanel = gridWrapper.mapToItem(controlPanel, 0, 0).y;
+                                                    widgetBg.y = (controlPanel.height - desired) / 2 - gridTopInPanel;
                                                     widgetBg.height = desired;
                                                     expandedOverlay.computedTargetHeight = desired;
                                                     Qt.callLater(() => {
@@ -2080,56 +2209,233 @@ Behavior on radius {
                             } // closes GridLayout
                         } // closes gridWrapper
 
-                        // ── Add a Control Button ──
-                        Rectangle {
-                            Layout.alignment: Qt.AlignHCenter
+                        // ── Bottom Row: Edit + Background Apps Placeholder ──
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.leftMargin: 0
+                            Layout.rightMargin: 0
+                            Layout.topMargin: 8
                             Layout.bottomMargin: 48
-                            width: 160
-                            height: 36
-                            radius: 18
-                            color: Qt.rgba(0.15, 0.15, 0.2, 0.8)
-                            border.color: Qt.rgba(1, 1, 1, 0.1)
-                            border.width: 1
-                            visible: controlPanel.editMode
-
-                            Row {
-                                anchors.centerIn: parent
-                                spacing: 8
-                                Rectangle {
-                                    width: 16
-                                    height: 16
-                                    radius: 8
-                                    color: "transparent"
-                                    border.color: "white"
-                                    border.width: 1
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    Rectangle {
-                                        width: 8
-                                        height: 2
-                                        radius: 1
-                                        color: "white"
-                                        anchors.centerIn: parent
-                                    }
-                                    Rectangle {
-                                        width: 2
-                                        height: 8
-                                        radius: 1
-                                        color: "white"
-                                        anchors.centerIn: parent
-                                    }
-                                }
-                                Text {
-                                    text: "Add a Control"
-                                    color: "white"
-                                    font.pixelSize: 14
-                                    anchors.verticalCenter: parent.verticalCenter
+                            spacing: 12
+                            // Hide the bottom row while a toggle's expanded view
+                            // is open — the morphed card fills the panel and the
+                            // edit/bg-apps chrome would otherwise peek through
+                            // below it. visible gates input; opacity drives the
+                            // Behavior crossfade.
+                            opacity: expandedOverlay.isExpanded ? 0.0 : 1.0
+                            visible: opacity > 0.01
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: 200
+                                    easing.type: Easing.OutExpo
                                 }
                             }
 
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: {
-                                    addControlPopup.open();
+                            // ── Edit button (moved from header) ──
+                            // Icon swaps to a tick in edit mode (the click
+                            // then becomes "Done" — exit edit mode).
+                            // Scale wrapper provides the same shrink-on-tap
+                            // animation as the toggle grid cards.
+                            MaterialSurface {
+                                id: editToggleButton
+                                Layout.preferredWidth: 50
+                                Layout.preferredHeight: 50
+                                radius: 48
+
+                                scale: editToggleMouse.pressed ? 0.95 : 1.0
+                                Behavior on scale {
+                                    NumberAnimation {
+                                        duration: 150
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
+
+                                Image {
+                                    width: 20
+                                    height: 20
+                                    anchors.centerIn: parent
+                                    sourceSize: Qt.size(20, 20)
+                                    source: controlPanel.editMode
+                                        ? Icons.icon("checkmark-symbolic")
+                                        : Icons.icon("document-edit-symbolic")
+                                }
+
+                                MouseArea {
+                                    id: editToggleMouse
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        if (controlPanel.editMode) {
+                                            controlPanel.saveLayout();
+                                        }
+                                        controlPanel.editMode = !controlPanel.editMode;
+                                    }
+                                }
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            // ── Background apps placeholder ──
+                            // Shows a count of toplevels on the focused workspace
+                            // (excluding any floating fullscreen windows), with
+                            // up to 2 app-icon thumbnails. Click to open the
+                            // task switcher (UIState.switcherOpen).
+                            // Scale wrapper provides the same shrink-on-tap
+                            // animation as the toggle grid cards.
+                            MaterialSurface {
+                                id: bgAppsPlaceholder
+                                Layout.preferredHeight: 50
+                                Layout.preferredWidth: bgAppsRow.implicitWidth + 30
+                                radius: 48
+
+                                scale: bgAppsMouse.pressed ? 0.95 : 1.0
+                                Behavior on scale {
+                                    NumberAnimation {
+                                        duration: 150
+                                        easing.type: Easing.OutCubic
+                                    }
+                                }
+                               
+
+                                // Hide the placeholder when there are no background
+                                // windows (e.g. only the dashboard is open), but
+                                // always show it in edit mode so the user can
+                                // tap "Add a Control" regardless of workspace state.
+                                visible: bgAppsPlaceholder.shouldShow
+
+                                readonly property int bgCount: {
+                                    const ws = Hyprland.focusedWorkspace;
+                                    if (!ws) return 0;
+                                    const tls = ws.toplevels.values;
+                                    // Count any toplevel — the panel itself lives
+                                    // on a separate surface and won't appear here.
+                                    return tls.length;
+                                }
+
+                                readonly property bool shouldShow: controlPanel.editMode || bgCount > 0
+
+                                Row {
+                                    id: bgAppsRow
+                                    anchors.centerIn: parent
+                                    spacing: 6
+
+                                    // Edit-mode content: plus icon + label.
+                                    // Contributes to bgAppsRow.implicitWidth so the
+                                    // outer MaterialSurface resizes itself as the
+                                    // right pill swaps between the two layouts.
+                                    Row {
+                                        spacing: 8
+                                        visible: controlPanel.editMode
+                                        Item {
+                                            width: 16
+                                            height: 16
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            Rectangle {
+                                                width: 8
+                                                height: 2
+                                                radius: 1
+                                                color: "white"
+                                                anchors.centerIn: parent
+                                            }
+                                            Rectangle {
+                                                width: 2
+                                                height: 8
+                                                radius: 1
+                                                color: "white"
+                                                anchors.centerIn: parent
+                                            }
+                                        }
+                                        Text {
+                                            text: "Add a Control"
+                                            color: "white"
+                                            font.pixelSize: 14
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                    }
+
+                                    // Normal-mode content: up to 2 app thumbs + count label.
+                                    // Hidden (not just collapsed) in edit mode so it
+                                    // doesn't pad bgAppsRow.implicitWidth and make the
+                                    // pill oversize on the edit-mode swap.
+                                    Row {
+                                        spacing: 6
+                                        visible: !controlPanel.editMode
+
+                                        Repeater {
+                                            model: {
+                                                const ws = Hyprland.focusedWorkspace;
+                                                if (!ws) return [];
+                                                const tls = ws.toplevels.values;
+                                                return tls.slice(0, 2);
+                                            }
+
+                                            delegate: Item {
+                                                id: bgThumb
+                                                width: 22
+                                                height: 22
+
+                                                property var ipc: modelData ? modelData.lastIpcObject : null
+                                                property string appIcon: {
+                                                    let identifiers = [];
+                                                    let ipc = bgThumb.ipc;
+                                                    if (ipc) {
+                                                        if (ipc.class) identifiers.push(ipc.class);
+                                                        if (ipc.initialClass) identifiers.push(ipc.initialClass);
+                                                    }
+                                                    let wcls = (modelData ? (modelData.initialClass || modelData.appId || (modelData.wayland ? modelData.wayland.appId : "") || "") : "");
+                                                    if (wcls) identifiers.push(wcls);
+
+                                                    for (let id of identifiers) {
+                                                        let entry = DesktopEntries.heuristicLookup(id);
+                                                        if (entry && entry.icon)
+                                                            return (entry.icon.startsWith("/") ? "file://" + entry.icon : "image://icon/" + entry.icon);
+                                                    }
+
+                                                    let appId = (modelData ? (modelData.appId || modelData.initialClass || "") : "");
+                                                    return appId !== "" ? "image://icon/" + appId : "";
+                                                }
+
+                                                Rectangle {
+                                                    anchors.fill: parent
+                                                    radius: width / 2
+                                                    color: Qt.rgba(1, 1, 1, 0.12)
+                                                    border.color: Qt.rgba(1, 1, 1, 0.18)
+                                                    border.width: 1
+                                                }
+                                                Image {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 3
+                                                    source: bgThumb.appIcon
+                                                    sourceSize: Qt.size(22, 22)
+                                                    fillMode: Image.PreserveAspectFit
+                                                    visible: bgThumb.appIcon !== ""
+                                                }
+                                            }
+                                        }
+
+                                        Text {
+                                            text: bgAppsPlaceholder.bgCount + (bgAppsPlaceholder.bgCount === 1 ? " app" : " apps") + " in background"
+                                            color: Qt.rgba(1, 1, 1, 0.7)
+                                            font.pixelSize: 12
+                                            anchors.verticalCenter: parent.verticalCenter
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: bgAppsMouse
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        if (controlPanel.editMode) {
+                                            // Toggle: tapping the Add-a-control
+                                            // pill again closes the popup.
+                                            if (addControlPopup.opacity > 0)
+                                                addControlPopup.close();
+                                            else
+                                                addControlPopup.open();
+                                        } else {
+                                            UIState.switcherOpen = !UIState.switcherOpen;
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -2143,431 +2449,6 @@ Behavior on radius {
                 folder: Qt.resolvedUrl("toggles")
                 nameFilters: ["*.qml"]
                 showDirs: false
-            }
-
-            Rectangle {
-                id: addControlPopup
-                anchors.fill: parent
-                radius: 16
-                color: "transparent"
-                visible: opacity > 0
-
-                MaterialSurface {
-                    anchors.fill: parent
-                    radius: parent.radius
-                }
-                opacity: 0
-                z: 100
-                scale: opacity > 0.5 ? 1.0 : 0.9
-
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: 200
-                    }
-                }
-                Behavior on scale {
-                    NumberAnimation {
-                        duration: 200
-                        easing.type: Easing.OutBack
-                    }
-                }
-
-                function open() {
-                    opacity = 1.0;
-                }
-                function close() {
-                    opacity = 0.0;
-                }
-
-                // Preview metrics — matches the real grid math
-                readonly property real realCellSize: 76  // (400 - 48 - 48) / 4
-                readonly property real realGridSpacing: 16
-                readonly property real pvScale: 1
-
-                function realW(cs) {
-                    return cs * realCellSize + (cs - 1) * realGridSpacing;
-                }
-                function realH(rs) {
-                    return rs * realCellSize + (rs - 1) * realGridSpacing;
-                }
-                function pvW(cs) {
-                    return realW(cs) * pvScale;
-                }
-                function pvH(rs) {
-                    return realH(rs) * pvScale;
-                }
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 24
-                    spacing: 16
-
-                    // ── Header ──
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Text {
-                            text: "Add a Control"
-                            color: "white"
-                            font.pixelSize: 20
-                            font.bold: true
-                            Layout.fillWidth: true
-                        }
-                        Rectangle {
-                            width: 32
-                            height: 32
-                            radius: 16
-                            color: Qt.rgba(1, 1, 1, 0.1)
-                            Image {
-                                anchors.centerIn: parent
-                                width: 16
-                                height: 16
-                                sourceSize: Qt.size(24, 24)
-                                source: Icons.icon("window-close-symbolic")
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: addControlPopup.close()
-                            }
-                        }
-                    }
-
-                    // ── Scrollable toggle sections ──
-                    Flickable {
-                        id: addControlFlickable
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        clip: true
-                        contentHeight: addSectionsColumn.implicitHeight
-                        ScrollBar.vertical: ScrollBar {}
-
-                        ColumnLayout {
-                            id: addSectionsColumn
-                            width: addControlFlickable.width
-                            spacing: 24
-
-                            Repeater {
-                                model: togglesFolderModel
-
-                                delegate: ColumnLayout {
-                                    id: toggleSection
-                                    Layout.fillWidth: true
-                                    spacing: 10
-
-                                    // Hide this section until the inspector confirms isControlWidget
-                                    visible: !!(sectionInspector.item && sectionInspector.item.isControlWidget)
-                                    Layout.preferredHeight: visible ? implicitHeight : 0
-
-                                    property string toggleSource: "toggles/" + model.fileName
-
-                                    // Inspector — loads once to read toggle properties
-                                    Loader {
-                                        id: sectionInspector
-                                        source: Qt.resolvedUrl(toggleSection.toggleSource)
-                                        asynchronous: true
-                                        visible: false
-                                        property var modelData: ({
-                                                colSpan: 2,
-                                                rowSpan: 1
-                                            })
-                                    }
-
-                                    property bool isSimple: !!(sectionInspector.item && sectionInspector.item.isSimpleToggle)
-
-                                    property var sizes: {
-                                        if (!sectionInspector.item)
-                                            return [
-                                                {
-                                                    colSpan: 1,
-                                                    rowSpan: 1
-                                                }
-                                            ];
-                                        let item = sectionInspector.item;
-                                        if (item.availableSizes && Array.isArray(item.availableSizes) && item.availableSizes.length > 0)
-                                            return item.availableSizes;
-                                        if (item.isSimpleToggle)
-                                            return [
-                                                {
-                                                    colSpan: 1,
-                                                    rowSpan: 1
-                                                },
-                                                {
-                                                    colSpan: 2,
-                                                    rowSpan: 1
-                                                },
-                                                {
-                                                    colSpan: 2,
-                                                    rowSpan: 2
-                                                }
-                                            ];
-                                        return [
-                                            {
-                                                colSpan: 2,
-                                                rowSpan: 1
-                                            }
-                                        ];
-                                    }
-
-                                    property string sectionName: {
-                                        if (sectionInspector.item)
-                                            return sectionInspector.item.toggleName || sectionInspector.item.titleText || model.fileName.replace(".qml", "");
-                                        return model.fileName.replace(".qml", "");
-                                    }
-
-                                    // ── Section header ──
-                                    Text {
-                                        text: toggleSection.sectionName
-                                        color: Qt.rgba(1, 1, 1, 0.5)
-                                        font.pixelSize: 13
-                                        font.bold: true
-                                        font.letterSpacing: 0.5
-                                        Layout.fillWidth: true
-                                    }
-
-                                    // ── Size previews in a horizontal flow ──
-                                    Flow {
-                                        Layout.fillWidth: true
-                                        spacing: 12
-
-                                        Repeater {
-                                            model: toggleSection.sizes
-
-                                            delegate: ColumnLayout {
-                                                spacing: 6
-
-                                                property int pColSpan: modelData.colSpan
-                                                property int pRowSpan: modelData.rowSpan
-                                                property real pW: addControlPopup.pvW(pColSpan)
-                                                property real pH: addControlPopup.pvH(pRowSpan)
-                                                property real rW: addControlPopup.realW(pColSpan)
-                                                property real rH: addControlPopup.realH(pRowSpan)
-                                                property real sc: addControlPopup.pvScale
-
-                                                // ── Preview cell ──
-                                                Item {
-                                                    Layout.preferredWidth: pW
-                                                    Layout.preferredHeight: pH
-                                                    clip: true
-
-                                                    // Scale wrapper — renders at real grid size, scaled down
-                                                    Item {
-                                                        width: rW
-                                                        height: rH
-                                                        scale: sc
-                                                        transformOrigin: Item.TopLeft
-
-                                                        Rectangle {
-                                                            id: pvBg
-                                                            anchors.fill: parent
-                                                            property bool isCircle: pColSpan === 1 && pRowSpan === 1
-                                                            radius: isCircle ? Math.min(width, height) / 2 : ((pColSpan >= 2 && pRowSpan >= 2) ? 24 : Math.min(width, height) / 2)
-                                                            color: Qt.rgba(0.15, 0.15, 0.2, 0.8)
-                                                            clip: true
-
-                                                             layer.enabled: qs.isOpen || qs.dragOffset > 0
-                                                             layer.effect: OpacityMask {
-                                                                 maskSource: Rectangle {
-                                                                     width: pvBg.width
-                                                                     height: pvBg.height
-                                                                     radius: pvBg.radius
-                                                                 }
-                                                             }
-
-                                                            // Toggle content loader
-                                                            Loader {
-                                                                id: pvLoader
-                                                                anchors.fill: parent
-                                                                property var modelData: ({
-                                                                        colSpan: pColSpan,
-                                                                        rowSpan: pRowSpan
-                                                                    })
-                                                                source: toggleSection.toggleSource
-                                                                asynchronous: true
-                                                            }
-
-                                                            // ── Shell chrome for simple toggles ──
-                                                            Rectangle {
-                                                                id: pvChrome
-                                                                anchors.fill: parent
-                                                                visible: pvLoader.item && pvLoader.item.isSimpleToggle === true
-                                                                radius: pvBg.radius
-                                                                color: {
-                                                                    if (!pvLoader.item || !pvLoader.item.isSimpleToggle)
-                                                                        return "transparent";
-                                                                    if (pColSpan === 2 && pRowSpan === 2)
-                                                                        return "transparent";
-                                                                    return pvLoader.item.isActive ? (pvLoader.item.activeColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)) : "transparent";
-                                                                }
-
-                                                                // ── Non-2x2 layout (1x1 circles, 2x1 pills) ──
-                                                                GridLayout {
-                                                                    visible: !(pColSpan === 2 && pRowSpan === 2)
-                                                                    anchors.verticalCenter: parent.verticalCenter
-                                                                    x: pColSpan > pRowSpan ? (parent.height / 2 - 16) : 8
-                                                                    width: pColSpan > pRowSpan ? (parent.width - x - 16) : (parent.width - 16)
-                                                                    columns: pColSpan > pRowSpan ? 2 : 1
-                                                                    rowSpacing: 8
-                                                                    columnSpacing: 12
-
-                                                                    Image {
-                                                                        Layout.alignment: Qt.AlignCenter
-                                                                        width: (pColSpan === 1 && pRowSpan === 1) ? 24 : 32
-                                                                        height: width
-                                                                        sourceSize: Qt.size(width, width)
-                                                                        source: (pvLoader.item && pvLoader.item.iconSource) || ""
-                                                                    }
-
-                                                                    ColumnLayout {
-                                                                        visible: pColSpan > 1
-                                                                        Layout.alignment: pColSpan > pRowSpan ? Qt.AlignVCenter | Qt.AlignLeft : Qt.AlignHCenter
-                                                                        Layout.fillWidth: pColSpan > pRowSpan
-                                                                        spacing: 0
-
-                                                                        Text {
-                                                                            text: (pvLoader.item && (pvLoader.item.titleText !== undefined ? pvLoader.item.titleText : pvLoader.item.toggleName)) || ""
-                                                                            color: "white"
-                                                                            font.pixelSize: 14
-                                                                            font.bold: true
-                                                                            Layout.fillWidth: true
-                                                                            horizontalAlignment: pColSpan > pRowSpan ? Text.AlignLeft : Text.AlignHCenter
-                                                                            elide: Text.ElideRight
-                                                                        }
-
-                                                                        Text {
-                                                                            text: (pvLoader.item && pvLoader.item.subtitleText) || ""
-                                                                            visible: text !== ""
-                                                                            color: Qt.rgba(1, 1, 1, 0.6)
-                                                                            font.pixelSize: 12
-                                                                            Layout.fillWidth: true
-                                                                            horizontalAlignment: pColSpan > pRowSpan ? Text.AlignLeft : Text.AlignHCenter
-                                                                            elide: Text.ElideRight
-                                                                        }
-                                                                    }
-                                                                }
-
-                                                                // ── 2x2 layout ──
-                                                                Item {
-                                                                    anchors.fill: parent
-                                                                    visible: pColSpan === 2 && pRowSpan === 2
-
-                                                                    Rectangle {
-                                                                        width: 48
-                                                                        height: 48
-                                                                        radius: 24
-                                                                        anchors.top: parent.top
-                                                                        anchors.topMargin: 16
-                                                                        anchors.left: parent.left
-                                                                        anchors.leftMargin: 16
-                                                                        color: {
-                                                                            if (!pvLoader.item || !pvLoader.item.isSimpleToggle)
-                                                                                return Qt.rgba(1, 1, 1, 0.1);
-                                                                            return pvLoader.item.isActive ? (pvLoader.item.activeColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)) : Qt.rgba(1, 1, 1, 0.1);
-                                                                        }
-
-                                                                        Image {
-                                                                            anchors.centerIn: parent
-                                                                            width: 24
-                                                                            height: 24
-                                                                            sourceSize: Qt.size(24, 24)
-                                                                            source: (pvLoader.item && pvLoader.item.iconSource) || ""
-                                                                        }
-                                                                    }
-
-                                                                    ColumnLayout {
-                                                                        anchors.bottom: parent.bottom
-                                                                        anchors.bottomMargin: 16
-                                                                        anchors.left: parent.left
-                                                                        anchors.leftMargin: 16
-                                                                        anchors.right: parent.right
-                                                                        anchors.rightMargin: 16
-                                                                        spacing: 0
-
-                                                                        Text {
-                                                                            text: (pvLoader.item && (pvLoader.item.titleText !== undefined ? pvLoader.item.titleText : pvLoader.item.toggleName)) || ""
-                                                                            color: "white"
-                                                                            font.pixelSize: 14
-                                                                            font.bold: true
-                                                                            Layout.fillWidth: true
-                                                                            elide: Text.ElideRight
-                                                                        }
-
-                                                                        Text {
-                                                                            text: (pvLoader.item && pvLoader.item.subtitleText) || ""
-                                                                            visible: text !== ""
-                                                                            color: Qt.rgba(1, 1, 1, 0.6)
-                                                                            font.pixelSize: 12
-                                                                            Layout.fillWidth: true
-                                                                            elide: Text.ElideRight
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-
-                                                            // Block all interaction on preview
-                                                            MouseArea {
-                                                                anchors.fill: parent
-                                                                z: 100
-                                                            }
-                                                        }
-                                                    }
-
-                                                    // Clickable overlay — tapping adds at this size
-                                                    Rectangle {
-                                                        anchors.fill: parent
-                                                        radius: pvBg.radius * sc
-                                                        color: pvAddMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
-                                                        border.color: pvAddMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.2) : "transparent"
-                                                        border.width: 1
-                                                        Behavior on color {
-                                                            ColorAnimation {
-                                                                duration: 150
-                                                            }
-                                                        }
-                                                        Behavior on border.color {
-                                                            ColorAnimation {
-                                                                duration: 150
-                                                            }
-                                                        }
-
-                                                        MouseArea {
-                                                            id: pvAddMouse
-                                                            anchors.fill: parent
-                                                            hoverEnabled: true
-                                                            cursorShape: Qt.PointingHandCursor
-                                                            onClicked: {
-                                                                togglesModel.append({
-                                                                    source: toggleSection.toggleSource,
-                                                                    colSpan: pColSpan,
-                                                                    rowSpan: pRowSpan
-                                                                });
-                                                                addControlPopup.close();
-                                                            }
-                                                        }
-                                                    }
-                                                }
-
-                                                // Size label
-                                                Text {
-                                                    text: pColSpan + "×" + pRowSpan
-                                                    color: Qt.rgba(1, 1, 1, 0.3)
-                                                    font.pixelSize: 10
-                                                    Layout.alignment: Qt.AlignHCenter
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // Divider between sections
-                                    Rectangle {
-                                        Layout.fillWidth: true
-                                        Layout.topMargin: 4
-                                        height: 1
-                                        color: Qt.rgba(1, 1, 1, 0.06)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
             }
 
             // ── Expanded View Overlay (Phase D slimmed) ──
@@ -2585,8 +2466,11 @@ Behavior on radius {
             Item {
                 id: expandedOverlay
                 anchors.fill: parent
-                visible: opacity > 0
-                opacity: 0
+                // Visible only during open/close animation — otherwise
+                // it blocks clicks on the toggle grid below.
+                // The inner MouseArea stays interactive throughout because
+                // we animate overlayFadeBg.opacity, not this Item's own opacity.
+                visible: isExpanded
                 z: 200
 
                 property var sourceItem: null
@@ -2631,7 +2515,13 @@ Behavior on radius {
                 // animate the geometry changes written here.
                 function open() {
                     isExpanded = true;
-                    opacity = 1.0;
+                    // Ensure visible is set before any geometry/opacity animation
+                    // so the inner MouseArea is ready to catch out-of-card clicks.
+                    expandedOverlay.visible = true;
+                    // Drive the background fade Rectangle (not this Item's
+                    // own opacity, which was previously used for visibility
+                    // but would disable the inner MouseArea during animation).
+                    overlayFadeBg.opacity = 1.0;
 
                     // Resolve the expanded component (already lives inside
                     // widgetBg now, so no sourceComponent assignment is
@@ -2649,7 +2539,9 @@ Behavior on radius {
                     let explicitH = (w && w.expandedHeight > 0) ? w.expandedHeight : 0;
                     let targetH = explicitH > 0 ? explicitH : 420;
 
-                    let maxH = Math.min(gridWrapper.height - 40, 680);
+                    // Use controlPanel.height (830) instead of gridWrapper.height
+                    // (~320) so the expanded card can fill the visible panel.
+                    let maxH = Math.min(controlPanel.height - 40, 680);
                     if (maxH > 0) {
                         targetH = Math.min(targetH, maxH);
                     }
@@ -2676,7 +2568,13 @@ Behavior on radius {
                         // rounding visibly lags behind the geometry morph.
                         sourceItem.radius = 16;
                         sourceItem.x = 0;
-                        sourceItem.y = (gridWrapper.height - targetH) / 2;
+                        // Center vertically against controlPanel (the visible
+                        // panel rect, 830 px tall), not gridWrapper (~320 px).
+                        // Since sourceItem.parent === gridWrapper, subtract
+                        // gridWrapper's top offset inside controlPanel to get
+                        // the right y in gridWrapper coords.
+                        let gridTopInPanel = gridWrapper.mapToItem(controlPanel, 0, 0).y;
+                        sourceItem.y = (controlPanel.height - targetH) / 2 - gridTopInPanel;
                         sourceItem.width = gridWrapper.width;
                         sourceItem.height = targetH;
                         // Cancel any residual press-scale so the morph
@@ -2790,7 +2688,13 @@ Behavior on radius {
                     }
 
                     isExpanded = false;
-                    opacity = 0.0;
+                    // Fade out the visual layer (not this Item's opacity,
+                    // which must stay visible to keep the inner MouseArea
+                    // interactive during the animation).
+                    overlayFadeBg.opacity = 0;
+                    // Keep the Item visible during the 400ms close animation
+                    // so the inner MouseArea stays interactive. Hidden by
+                    // the binding visible: isExpanded after animation ends.
 
                     // After the close morph lands, snap the widgetBg
                     // geometry bindings back to the cell-bound form. Using
@@ -2890,6 +2794,11 @@ Behavior on radius {
                                 : (s.isItemPressed ? 0.95 : 1.0);
                         });
                         expandedOverlay.delegateItemRef = null;
+                        // Hide the overlay after the close animation finishes.
+                        // Must be here, not in close() where visible = isExpanded
+                        // would fire immediately and hide the overlay before
+                        // the 400ms animation plays.
+                        expandedOverlay.visible = false;
                     }
                 }
 
@@ -2910,21 +2819,66 @@ Behavior on radius {
                     }
                 }
 
+                // ── Visual fade layer (does NOT affect hit-testing) ──
+                // Fades from 1→0 over 400ms during close(), keeping
+                // the inner MouseArea interactive throughout the animation.
+                // Without this, Qt disables MouseArea hit-testing when
+                // the overlay's own opacity reaches 0, letting clicks
+                // slip through to complexHoldArea/MediaWidget below.
+                Rectangle {
+                    id: overlayFadeBg
+                    anchors.fill: parent
+                    // Dark semi-transparent backdrop for the expanded view.
+                    // Not bgSurface.color (Frosted Glass = rgba(255,255,255,0.1))
+                    // which produces a white-wash over the expanded card.
+                    color: Qt.rgba(0, 0, 0, 0)
+                    opacity: 0
+                    Behavior on opacity {
+                        enabled: !controlPanel.editMode
+                        NumberAnimation {
+                            duration: 400
+                            easing.type: Easing.OutExpo
+                        }
+                    }
+                }
+
                 MouseArea {
-                    // Phase G4: forward in-card touches to inner Flickables
-                    // so touch scrolling works inside the expanded view
-                    // (Network wifi list, Bluetooth device list, etc.).
+                    // Phase G2: forward in-card clicks to inner MouseAreas
+                    // (ExpandedHeader switch, MediaWidget play controls,
+                    // BrightnessSlider track, network rows, etc.) by
+                    // enabling composed-event propagation and rejecting
+                    // in-card clicks in both onPressed AND onClicked.
                     //
-                    // Phase G2 used propagateComposedEvents + onClicked's
-                    // `mouse.accepted = false` to pass CLICKS through.
-                    // Touch SCROLLS (press → move → release) need an
-                    // explicit onPressed reject — without it the outer
-                    // MouseArea implicitly claims the press (because
-                    // onClicked is attached), the inner Flickable never
-                    // receives the gesture, and scrolling silently fails.
-                    // Out-of-card presses are still claimed by default
-                    // (mouse.accepted = true), so dismiss-on-click-outside
-                    // continues to work.
+                    // Without propagateComposedEvents: true, the composed
+                    // `clicked` event is auto-accepted by THIS MouseArea
+                    // (Qt default for composed events), so even though the
+                    // press propagates via mouse.accepted = false in
+                    // onPressed, the click does NOT reach inner MouseAreas.
+                    // Result: every click inside the morphed card is
+                    // swallowed here, inner controls never see the click,
+                    // and the entire expandedUI feels click-through.
+                    //
+                    // Per Qt docs: composed events (clicked, pressAndHold)
+                    // require propagateComposedEvents: true to be forwarded.
+                    // With it on, setting mouse.accepted = false in
+                    // onClicked causes the click to propagate down the
+                    // stacking order to the next MouseArea beneath us
+                    // (i.e. expandedLoader.item's inner controls).
+                    //
+                    // Why pressAndHold doesn't need explicit rejection:
+                    // this MouseArea has no onPressAndHold handler, so
+                    // Qt's default (don't auto-accept composed events
+                    // when there's no handler) lets pressAndHold pass
+                    // through naturally once propagateComposedEvents is
+                    // enabled. We don't need the complexHoldArea guard
+                    // we had before — complexHoldArea.enabled now also
+                    // checks !expandedOverlay.isExpanded so it doesn't
+                    // reactivate during the expanded state.
+                    //
+                    // Out-of-card clicks: do nothing in onPressed and
+                    // let auto-accept consume the click, then call
+                    // close() in onClicked.
+                    enabled: isExpanded
                     anchors.fill: parent
                     acceptedButtons: Qt.LeftButton
                     propagateComposedEvents: true
@@ -2932,33 +2886,535 @@ Behavior on radius {
                         let s = expandedOverlay.sourceItem;
                         if (!s)
                             return;
-                        let inside = mouse.x >= s.x
-                                  && mouse.x <  s.x + s.width
-                                  && mouse.y >= s.y
-                                  && mouse.y <  s.y + s.height;
+                        let p = expandedOverlay.mapToItem(s, mouse.x, mouse.y);
+                        let inside = p.x >= 0 && p.x < s.width
+                                  && p.y >= 0 && p.y < s.height;
                         if (inside)
-                            mouse.accepted = false;  // forward to Flickable / inner MouseAreas
-                        // else: leave accepted = true (default), so
-                        // onClicked will fire on release without movement → dismiss
+                            mouse.accepted = false;  // forward to inner MouseAreas
+                        else
+                            mouse.accepted = true;  // explicitly consume (dismiss click)
                     }
                     onClicked: (mouse) => {
-                        // Only fires for out-of-card presses now (in-card
-                        // presses were rejected in onPressed).
                         let s = expandedOverlay.sourceItem;
                         if (!s) {
                             expandedOverlay.close();
                             return;
                         }
-                        let inside = mouse.x >= s.x
-                                  && mouse.x <  s.x + s.width
-                                  && mouse.y >= s.y
-                                  && mouse.y <  s.y + s.height;
-                        if (!inside)
+                        let p = expandedOverlay.mapToItem(s, mouse.x, mouse.y);
+                        let inside = p.x >= 0 && p.x < s.width
+                                  && p.y >= 0 && p.y < s.height;
+                        if (inside) {
+                            // Forward the composed click event down to the
+                            // expandedLoader's inner MouseAreas. Without
+                            // this, propagateComposedEvents: true has no
+                            // effect — Qt only forwards when the receiver
+                            // explicitly rejects the composed event.
+                            mouse.accepted = false;
+                        } else {
+                            // Out-of-card click: dismiss the expanded view.
+                            // mouse.accepted stays true (auto-accepted by
+                            // the composed-events machinery) — no
+                            // propagation needed.
                             expandedOverlay.close();
+                        }
                     }
                 }
             }
         } // closes controlPanel
+
+        // ── Add Control Popup (sibling of controlPanel, anchored to its left) ──
+        Rectangle {
+            id: addControlPopup
+            // Closed: tucked against controlPanel's left edge. Open: slid out 16px to the left.
+            x: controlPanel.x - width - (opacity > 0 ? 16 : 0)
+            y: controlPanel.y
+            width: 400
+            height: controlPanel.height
+            radius: 18
+            color: "transparent"
+            visible: opacity > 0
+            opacity: 0
+            // Match the controlPanel's bloom scale so the popup shrinks/expands together
+            // with the rest of the panel container.
+            scale: panelContainer.bloomScale
+            transformOrigin: Item.TopRight
+
+            MaterialSurface {
+                anchors.fill: parent
+                radius: parent.radius
+            }
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 200
+                    easing.type: Easing.OutExpo
+                }
+            }
+            Behavior on x {
+                NumberAnimation {
+                    duration: 250
+                    easing.type: Easing.OutExpo
+                }
+            }
+
+            // Click outside the popup (on the popup's own transparent rect,
+            // not panelContainer) to close. z is below the inner ColumnLayout
+            // so clicks inside the popup content still hit it.
+            MouseArea {
+                anchors.fill: parent
+                z: -1
+                enabled: addControlPopup.opacity > 0.5
+                onClicked: addControlPopup.close()
+            }
+
+            function open() {
+                opacity = 1.0;
+            }
+            function close() {
+                opacity = 0.0;
+            }
+
+            // Preview metrics — matches the real grid math
+            readonly property real realCellSize: 76  // (400 - 48 - 48) / 4
+            readonly property real realGridSpacing: 16
+            readonly property real pvScale: 1
+
+            function realW(cs) {
+                return cs * realCellSize + (cs - 1) * realGridSpacing;
+            }
+            function realH(rs) {
+                return rs * realCellSize + (rs - 1) * realGridSpacing;
+            }
+            function pvW(cs) {
+                return realW(cs) * pvScale;
+            }
+            function pvH(rs) {
+                return realH(rs) * pvScale;
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 24
+                spacing: 16
+
+                // ── Header ──
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        text: "Add a Control"
+                        color: "white"
+                        font.pixelSize: 20
+                        font.bold: true
+                        Layout.fillWidth: true
+                    }
+                    Rectangle {
+                        width: 32
+                        height: 32
+                        radius: 16
+                        color: Qt.rgba(1, 1, 1, 0.1)
+                        Image {
+                            anchors.centerIn: parent
+                            width: 16
+                            height: 16
+                            sourceSize: Qt.size(24, 24)
+                            source: Icons.icon("window-close-symbolic")
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: addControlPopup.close()
+                        }
+                    }
+                }
+
+                // ── Scrollable toggle sections ──
+                Flickable {
+                    id: addControlFlickable
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+                    contentHeight: addSectionsColumn.implicitHeight
+                    ScrollBar.vertical: ScrollBar {}
+
+                    ColumnLayout {
+                        id: addSectionsColumn
+                        width: addControlFlickable.width
+                        spacing: 24
+
+                        Repeater {
+                            model: togglesFolderModel
+
+                            delegate: ColumnLayout {
+                                id: toggleSection
+                                Layout.fillWidth: true
+                                spacing: 10
+
+                                // Hide this section until the inspector confirms isControlWidget
+                                visible: !!(sectionInspector.item && sectionInspector.item.isControlWidget)
+                                Layout.preferredHeight: visible ? implicitHeight : 0
+
+                                property string toggleSource: "toggles/" + model.fileName
+
+                                // Inspector — loads once to read toggle properties
+                                Loader {
+                                    id: sectionInspector
+                                    source: Qt.resolvedUrl(toggleSection.toggleSource)
+                                    asynchronous: true
+                                    visible: false
+                                    property var modelData: ({
+                                            colSpan: 2,
+                                            rowSpan: 1
+                                        })
+                                }
+
+                                property bool isSimple: !!(sectionInspector.item && sectionInspector.item.isSimpleToggle)
+
+                                property var sizes: {
+                                    if (!sectionInspector.item)
+                                        return [
+                                            {
+                                                colSpan: 1,
+                                                rowSpan: 1
+                                            }
+                                        ];
+                                    let item = sectionInspector.item;
+                                    if (item.availableSizes && Array.isArray(item.availableSizes) && item.availableSizes.length > 0)
+                                        return item.availableSizes;
+                                    if (item.isSimpleToggle)
+                                        return [
+                                            {
+                                                colSpan: 1,
+                                                rowSpan: 1
+                                            },
+                                            {
+                                                colSpan: 2,
+                                                rowSpan: 1
+                                            },
+                                            {
+                                                colSpan: 2,
+                                                rowSpan: 2
+                                            }
+                                        ];
+                                    return [
+                                        {
+                                            colSpan: 2,
+                                            rowSpan: 1
+                                        }
+                                    ];
+                                }
+
+                                property string sectionName: {
+                                    if (sectionInspector.item)
+                                        return sectionInspector.item.toggleName || sectionInspector.item.titleText || model.fileName.replace(".qml", "");
+                                    return model.fileName.replace(".qml", "");
+                                }
+
+                                // ── Section header ──
+                                Text {
+                                    text: toggleSection.sectionName
+                                    color: Qt.rgba(1, 1, 1, 0.5)
+                                    font.pixelSize: 13
+                                    font.bold: true
+                                    font.letterSpacing: 0.5
+                                    Layout.fillWidth: true
+                                }
+
+                                // ── Size previews in a horizontal flow ──
+                                Flow {
+                                    Layout.fillWidth: true
+                                    spacing: 12
+
+                                    Repeater {
+                                        model: toggleSection.sizes
+
+                                        delegate: ColumnLayout {
+                                            spacing: 6
+
+                                            property int pColSpan: modelData.colSpan
+                                            property int pRowSpan: modelData.rowSpan
+                                            property real pW: addControlPopup.pvW(pColSpan)
+                                            property real pH: addControlPopup.pvH(pRowSpan)
+                                            property real rW: addControlPopup.realW(pColSpan)
+                                            property real rH: addControlPopup.realH(pRowSpan)
+                                            property real sc: addControlPopup.pvScale
+
+                                            // ── Preview cell ──
+                                            Item {
+                                                Layout.preferredWidth: pW
+                                                Layout.preferredHeight: pH
+                                                clip: true
+
+                                                // Scale wrapper — renders at real grid size, scaled down
+                                                Item {
+                                                    width: rW
+                                                    height: rH
+                                                    scale: sc
+                                                    transformOrigin: Item.TopLeft
+
+                                                    Rectangle {
+                                                        id: pvBg
+                                                        anchors.fill: parent
+                                                        property bool isCircle: pColSpan === 1 && pRowSpan === 1
+                                                        radius: isCircle ? Math.min(width, height) / 2 : ((pColSpan >= 2 && pRowSpan >= 2) ? 24 : Math.min(width, height) / 2)
+                                                        color: "transparent"
+                                                        clip: true
+
+                                                        layer.enabled: qs.isOpen || qs.dragOffset > 0
+                                                        layer.effect: OpacityMask {
+                                                            maskSource: Rectangle {
+                                                                width: pvBg.width
+                                                                height: pvBg.height
+                                                                radius: pvBg.radius
+                                                            }
+                                                        }
+
+                                                        // Cell background — matches the control center's bgSurface
+                                                        // so the preview is visually identical to the real cell.
+                                                        MaterialSurface {
+                                                            id: pvCellSurface
+                                                            anchors.fill: parent
+                                                            radius: pvBg.radius
+                                                        }
+
+                                                        // Toggle content loader
+                                                        Loader {
+                                                            id: pvLoader
+                                                            anchors.fill: parent
+                                                            property var modelData: ({
+                                                                    colSpan: pColSpan,
+                                                                    rowSpan: pRowSpan
+                                                                })
+                                                            source: toggleSection.toggleSource
+                                                            asynchronous: true
+                                                        }
+
+                                                        // ── Shell chrome for simple toggles ──
+                                                        // Mirrors controlPanel's toggleChrome: transparent
+                                                        // wrapper that hosts the inner icon circle and text.
+                                                        Item {
+                                                            id: pvChrome
+                                                            anchors.fill: parent
+                                                            visible: pvLoader.item && pvLoader.item.isSimpleToggle === true
+
+                                                            // ── Layout for non-2x2 toggles (1x1 circles, 2x1 pills) ──
+                                                            GridLayout {
+                                                                visible: !(pColSpan === 2 && pRowSpan === 2)
+                                                                anchors.verticalCenter: parent.verticalCenter
+                                                                x: 14
+                                                                width: parent.width - x - 14
+
+                                                                columns: pColSpan > pRowSpan ? 2 : 1
+                                                                rowSpacing: 8
+                                                                columnSpacing: 12
+
+                                                                Rectangle {
+                                                                    Layout.alignment: Qt.AlignCenter
+                                                                    width: (pColSpan > 1) ? 48 : 24
+                                                                    height: (pColSpan > 1) ? 48 : 24
+                                                                    radius: width / 2
+                                                                    color: "transparent"
+
+                                                                    MaterialSurface {
+                                                                        id: pvInnerSurface
+                                                                        anchors.fill: parent
+                                                                        radius: parent.radius
+                                                                        visible: pColSpan > 1
+                                                                        isToggleCircle: true
+                                                                        isActive: pvLoader.item ? !!pvLoader.item.isActive : false
+                                                                        accentColor: (pvLoader.item && pvLoader.item.activeColor) ? pvLoader.item.activeColor : (Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0))
+                                                                    }
+
+                                                                    Item {
+                                                                        anchors.centerIn: parent
+                                                                        width: 28
+                                                                        height: 28
+
+                                                                        Image {
+                                                                            id: pvChromeIcon
+                                                                            anchors.fill: parent
+                                                                            sourceSize: Qt.size(28, 28)
+                                                                            source: (pvLoader.item && pvLoader.item.iconSource) || ""
+                                                                            visible: false
+                                                                        }
+                                                                        ColorOverlay {
+                                                                            anchors.fill: pvChromeIcon
+                                                                            source: pvChromeIcon
+                                                                            color: pColSpan > 1 ? pvInnerSurface.iconColor : pvCellSurface.iconColor
+                                                                        }
+                                                                    }
+                                                                }
+
+                                                                ColumnLayout {
+                                                                    visible: pColSpan > 1
+                                                                    Layout.alignment: pColSpan > pRowSpan ? Qt.AlignVCenter | Qt.AlignLeft : Qt.AlignHCenter
+                                                                    Layout.fillWidth: pColSpan > pRowSpan
+                                                                    spacing: 0
+
+                                                                    Text {
+                                                                        text: (pvLoader.item && (pvLoader.item.titleText !== undefined ? pvLoader.item.titleText : pvLoader.item.toggleName)) || ""
+                                                                        color: pvCellSurface.fgColor
+                                                                        font.pixelSize: 14
+                                                                        font.bold: true
+                                                                        Layout.fillWidth: true
+                                                                        horizontalAlignment: pColSpan > pRowSpan ? Text.AlignLeft : Text.AlignHCenter
+                                                                        elide: Text.ElideRight
+                                                                    }
+
+                                                                    Text {
+                                                                        text: (pvLoader.item && pvLoader.item.subtitleText) || ""
+                                                                        visible: text !== ""
+                                                                        color: pvCellSurface.fgColor
+                                                                        font.pixelSize: 13
+                                                                        font.bold: true
+                                                                        Layout.fillWidth: true
+                                                                        horizontalAlignment: pColSpan > pRowSpan ? Text.AlignLeft : Text.AlignHCenter
+                                                                        elide: Text.ElideRight
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            // ── Layout for 2x2 toggles ──
+                                                            Item {
+                                                                anchors.fill: parent
+                                                                visible: pColSpan === 2 && pRowSpan === 2
+
+                                                                Rectangle {
+                                                                    id: pvToggleCircle
+                                                                    width: 48
+                                                                    height: 48
+                                                                    radius: 24
+                                                                    anchors.top: parent.top
+                                                                    anchors.topMargin: 16
+                                                                    anchors.left: parent.left
+                                                                    anchors.leftMargin: 16
+                                                                    color: "transparent"
+
+                                                                    MaterialSurface {
+                                                                        id: pvCircleSurface
+                                                                        anchors.fill: parent
+                                                                        radius: parent.radius
+                                                                        isToggleCircle: true
+                                                                        isActive: pvLoader.item ? !!pvLoader.item.isActive : false
+                                                                        accentColor: (pvLoader.item && pvLoader.item.activeColor) ? pvLoader.item.activeColor : (Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0))
+                                                                    }
+
+                                                                    Item {
+                                                                        anchors.centerIn: parent
+                                                                        width: 28
+                                                                        height: 28
+
+                                                                        Image {
+                                                                            id: pvCircleIcon
+                                                                            anchors.fill: parent
+                                                                            sourceSize: Qt.size(28, 28)
+                                                                            source: (pvLoader.item && pvLoader.item.iconSource) || ""
+                                                                            visible: false
+                                                                        }
+                                                                        ColorOverlay {
+                                                                            anchors.fill: pvCircleIcon
+                                                                            source: pvCircleIcon
+                                                                            color: pvCircleSurface.iconColor
+                                                                        }
+                                                                    }
+                                                                }
+
+                                                                ColumnLayout {
+                                                                    anchors.bottom: parent.bottom
+                                                                    anchors.bottomMargin: 16
+                                                                    anchors.left: parent.left
+                                                                    anchors.leftMargin: 16
+                                                                    anchors.right: parent.right
+                                                                    anchors.rightMargin: 16
+                                                                    spacing: 0
+
+                                                                    Text {
+                                                                        text: (pvLoader.item && (pvLoader.item.titleText !== undefined ? pvLoader.item.titleText : pvLoader.item.toggleName)) || ""
+                                                                        color: pvCellSurface.fgColor
+                                                                        font.pixelSize: 14
+                                                                        font.bold: true
+                                                                        Layout.fillWidth: true
+                                                                        elide: Text.ElideRight
+                                                                    }
+
+                                                                    Text {
+                                                                        text: (pvLoader.item && pvLoader.item.subtitleText) || ""
+                                                                        visible: text !== ""
+                                                                        color: pvCellSurface.fgColor
+                                                                        font.pixelSize: 13
+                                                                        font.bold: true
+                                                                        Layout.fillWidth: true
+                                                                        elide: Text.ElideRight
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+
+                                                        // Block all interaction on preview
+                                                        MouseArea {
+                                                            anchors.fill: parent
+                                                            z: 100
+                                                        }
+                                                    }
+                                                }
+
+                                                // Clickable overlay — tapping adds at this size
+                                                Rectangle {
+                                                    anchors.fill: parent
+                                                    radius: pvBg.radius * sc
+                                                    color: pvAddMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.08) : "transparent"
+                                                    border.color: pvAddMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.2) : "transparent"
+                                                    border.width: 1
+                                                    Behavior on color {
+                                                        ColorAnimation {
+                                                            duration: 150
+                                                        }
+                                                    }
+                                                    Behavior on border.color {
+                                                        ColorAnimation {
+                                                            duration: 150
+                                                        }
+                                                    }
+
+                                                    MouseArea {
+                                                        id: pvAddMouse
+                                                        anchors.fill: parent
+                                                        hoverEnabled: true
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: {
+                                                            togglesModel.append({
+                                                                source: toggleSection.toggleSource,
+                                                                colSpan: pColSpan,
+                                                                rowSpan: pRowSpan
+                                                            });
+                                                            addControlPopup.close();
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            // Size label
+                                            Text {
+                                                text: pColSpan + "×" + pRowSpan
+                                                color: Qt.rgba(1, 1, 1, 0.3)
+                                                font.pixelSize: 10
+                                                Layout.alignment: Qt.AlignHCenter
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Divider between sections
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.topMargin: 4
+                                    height: 1
+                                    color: Qt.rgba(1, 1, 1, 0.06)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         // ── Morph Layer: Status Icons (from StatusCluster → control header) ──
         Row {
