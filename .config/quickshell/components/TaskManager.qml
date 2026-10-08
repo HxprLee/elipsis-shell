@@ -268,7 +268,7 @@ PanelWindow {
                     }
 
                     onDropped: (drop) => {
-                        console.log("DROP EVENT FIRED!");
+                        console.debug("DROP EVENT FIRED!");
                         
                         let addr = "";
                         if (drop.source && drop.source.windowAddr) {
@@ -284,18 +284,18 @@ PanelWindow {
                             }
                             let safeAddr = root.sanitizeAddr(finalAddr);
                             
-                            console.log("SUCCESS: Moving window " + safeAddr + " to workspace " + workspace.id);
+                            console.debug("SUCCESS: Moving window " + safeAddr + " to workspace " + workspace.id);
                             Hyprland.dispatch("hl.dsp.window.move({ workspace = " + workspace.id + ", window = '" + safeAddr + "', follow = false })");
                             drop.accept(Qt.MoveAction);
                         } else {
-                            console.log("ERROR: Drop had no payload. Source exists: " + !!drop.source);
+                            console.debug("ERROR: Drop had no payload. Source exists: " + !!drop.source);
                         }
                         
                         Qt.callLater(root.forceResetDrag);
                     }
                     
                     onEntered: (drag) => {
-                        console.log("DRAG ENTERED workspace " + workspace.id);
+                        console.debug("DRAG ENTERED workspace " + workspace.id);
                         drag.accept(); // Explicitly accept to be safe
                     }
 
@@ -544,9 +544,9 @@ PanelWindow {
                         }
                     }
 
-                    Drag.onDragStarted: console.log("DRAG STARTED for window: " + windowAddr)
+                    Drag.onDragStarted: console.debug("DRAG STARTED for window: " + windowAddr)
                     Drag.onDragFinished: (dropAction) => {
-                        console.log("DRAG FINISHED with action: " + dropAction)
+                        console.debug("DRAG FINISHED with action: " + dropAction)
                         Qt.callLater(() => { cardMouse.dragEnabled = false; })
                     }
 

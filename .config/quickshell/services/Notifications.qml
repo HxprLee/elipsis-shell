@@ -30,7 +30,7 @@ Item {
                 timeout: notification.expireTimeout,
                 timestamp: Date.now()
             };
-            console.log("Notification received: ", item.summary);
+            console.debug("Notification received: ", item.summary);
             let copy = notifications.notificationList.slice();
             let found = false;
             for (let i = 0; i < copy.length; i++) {

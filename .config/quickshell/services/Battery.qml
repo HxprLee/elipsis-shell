@@ -23,8 +23,8 @@ Item {
     }
 
     Component.onCompleted: {
-        console.log("UPower displayDevice:", UPower.displayDevice);
-        console.log("UPower displayDevice percentage:", UPower.displayDevice?.percentage);
-        console.log("UPower displayDevice state:", UPower.displayDevice?.state);
+        console.debug("UPower displayDevice:", UPower.displayDevice);
+        console.debug("UPower displayDevice percentage:", UPower.displayDevice?.percentage);
+        console.debug("UPower displayDevice state:", UPower.displayDevice?.state);
     }
 }

@@ -1385,14 +1385,14 @@ PanelWindow {
             Connections {
                 target: ConfigStore
                 function onConfigLoadCompleteChanged() {
-                    console.log("[QuickSettings] Config load complete:", ConfigStore.configLoadComplete);
-                    console.log("[QuickSettings] Pages from shell:", JSON.stringify(ConfigStore.controlCenterPages));
+                    console.debug("[QuickSettings] Config load complete:", ConfigStore.configLoadComplete);
+                    console.debug("[QuickSettings] Pages from shell:", JSON.stringify(ConfigStore.controlCenterPages));
                     if (controlPanel.layoutApplied || !ConfigStore.configLoadComplete) return;
                     if (ConfigStore.controlCenterPages && ConfigStore.controlCenterPages.length > 0) {
-                        console.log("[QuickSettings] Applying saved pages");
+                        console.debug("[QuickSettings] Applying saved pages");
                         controlPanel.applyLayout(ConfigStore.controlCenterPages);
                     } else {
-                        console.log("[QuickSettings] Applying default layout");
+                        console.debug("[QuickSettings] Applying default layout");
                         controlPanel.applyLayout([controlPanel.defaultLayout]);
                     }
                 }
@@ -3936,7 +3936,6 @@ Behavior on radius {
                             mouse.accepted = true;  // explicitly consume (dismiss click)
                     }
                     onClicked: (mouse) => {
-                        console.log("[DBG] expandedMA onClicked isExpanded=", expandedOverlay.isExpanded, "x=", mouse.x, "y=", mouse.y, "pressOpenedExpanded=", expandedOverlay.pressOpenedExpanded);
                         // Ignore the release of the long-press that
                         // opened this view. The finger is at the original
                         // cell position, which is now outside the morphed
@@ -3946,7 +3945,6 @@ Behavior on radius {
                         // real clicks after this release (e.g. tapping
                         // outside to dismiss) are handled normally.
                         if (expandedOverlay.pressOpenedExpanded) {
-                            console.log("[DBG] expandedMA onClicked: pressOpenedExpanded guard consumed");
                             expandedOverlay.pressOpenedExpanded = false;
                             mouse.accepted = true;  // consume, don't propagate
                             return;
@@ -3959,21 +3957,18 @@ Behavior on radius {
                         let p = expandedOverlay.mapToItem(s, mouse.x, mouse.y);
                         let inside = p.x >= 0 && p.x < s.width
                                   && p.y >= 0 && p.y < s.height;
-                        console.log("[DBG] expandedMA onClicked inside=", inside, "p=", p.x, p.y, "s=", s.width, s.height);
                         if (inside) {
                             // Forward the composed click event down to the
                             // expandedLoader's inner MouseAreas. Without
                             // this, propagateComposedEvents: true has no
                             // effect — Qt only forwards when the receiver
                             // explicitly rejects the composed event.
-                            console.log("[DBG] expandedMA onClicked: inside=true, forwarding");
                             mouse.accepted = false;
                         } else {
                             // Out-of-card click: dismiss the expanded view.
                             // mouse.accepted stays true (auto-accepted by
                             // the composed-events machinery) — no
                             // propagation needed.
-                            console.log("[DBG] expandedMA onClicked: inside=false, calling close()");
                             expandedOverlay.close();
                         }
                     }

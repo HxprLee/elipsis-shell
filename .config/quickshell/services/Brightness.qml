@@ -152,14 +152,14 @@ Item {
     // ── Night light (placeholder — Hyprland, no backend yet) ──
     property bool nightLightActive: false
     function setNightLight(active) {
-        console.log("Night Light: placeholder only (Hyprland backend not implemented)");
+        console.debug("Night Light: placeholder only (Hyprland backend not implemented)");
         // TODO: implement with gammastep or equivalent
     }
 
     // ── Auto-brightness (placeholder — Hyprland, no backend yet) ──
     property bool autoBrightnessActive: false
     function setAutoBrightness(active) {
-        console.log("Auto Brightness: placeholder only (Hyprland backend not implemented)");
+        console.debug("Auto Brightness: placeholder only (Hyprland backend not implemented)");
         // TODO: implement with ambient-light-sensor or equivalent
     }
 

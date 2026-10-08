@@ -603,7 +603,7 @@ PanelWindow {
                         }
 
                         onClicked: {
-                            console.log("Dock button clicked: " + model.name);
+                            console.debug("Dock button clicked: " + model.name);
                             if (root.screen) {
                                 UIState.closeContextMenu(root.screen);
                             }

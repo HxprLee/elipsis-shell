@@ -34,10 +34,10 @@ Item {
         stdout: StdioCollector {
             onStreamFinished: {
                 configStore._loadingConfig = true;
-                console.log("[Config] Raw:", text);
+                console.debug("[Config] Raw:", text);
                 try {
                     let cfg = JSON.parse(text) || {};
-                    console.log("[Config] Parsed:", JSON.stringify(cfg));
+                    console.debug("[Config] Parsed:", JSON.stringify(cfg));
 
                     if (cfg.pinnedApps) configStore.pinnedApps = cfg.pinnedApps;
                     if (cfg.toggleData) {
@@ -77,16 +77,16 @@ Item {
                         configStore.controlCenterPages = cfg.pages;
                     } else if (cfg.layout && cfg.layout.length > 0) {
                         configStore.controlCenterPages = [cfg.layout];
-                        console.log("[Config] Migrated legacy flat layout to single page");
+                        console.debug("[Config] Migrated legacy flat layout to single page");
                     } else {
                         configStore.controlCenterPages = [];
                     }
                     if (cfg.mediaPlayerId) configStore.mediaPlayerId = cfg.mediaPlayerId;
-                    console.log("[Config] Pages:", JSON.stringify(configStore.controlCenterPages));
+                    console.debug("[Config] Pages:", JSON.stringify(configStore.controlCenterPages));
 
                     Dock.refreshDock();
                     configStore.configLoadComplete = true;
-                    console.log("[Config] Loaded successfully");
+                    console.debug("[Config] Loaded successfully");
                 } catch (e) {
                     console.error("Config load error:", e);
                     configStore.configLoadComplete = true;

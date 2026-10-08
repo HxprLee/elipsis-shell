@@ -79,7 +79,7 @@ Item {
     function toggleBluetooth() {
         if (btToggleProc.running) return;
         let cmd = "bluetoothctl power " + (bluetooth.bluetoothEnabled ? "off" : "on");
-        console.log("Bluetooth Toggle Command:", cmd);
+        console.debug("Bluetooth Toggle Command:", cmd);
         btToggleProc.command = ["sh", "-c", cmd];
         btToggleProc.running = true;
     }
