@@ -14,14 +14,14 @@ Row {
 
     // 2. Bluetooth
     Item {
-        width: (BTSvc.bluetoothEnabled && BTSvc.bluetoothConnected) ? 20 : 0
+        width: (Bluetooth.bluetoothEnabled && Bluetooth.bluetoothConnected) ? 20 : 0
         height: 20
         visible: width > 0
         anchors.verticalCenter: parent.verticalCenter
         Image {
             id: btIcon
             anchors.fill: parent
-            source: Icons.icon(BTSvc.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
+            source: Icons.icon(Bluetooth.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
             sourceSize: Qt.size(24, 24)
             visible: false
         }
@@ -35,7 +35,7 @@ Row {
 
     // 3. Network
     Item {
-        width: NetSvc.networkConnected ? 20 : 0
+        width: Network.networkConnected ? 20 : 0
         height: 20
         visible: width > 0
         anchors.verticalCenter: parent.verticalCenter
@@ -43,12 +43,12 @@ Row {
             id: networkIcon
             anchors.fill: parent
             source: {
-                if (NetSvc.networkType === "ethernet") {
+                if (Network.networkType === "ethernet") {
                     return Icons.icon("network-wired-symbolic");
                 }
 
                 let levels = ["none", "weak", "ok", "good", "excellent"];
-                let level = levels[NetSvc.networkSignalLevel] || "none";
+                let level = levels[Network.networkSignalLevel] || "none";
                 return Icons.icon("network-wireless-signal-" + level + "-symbolic");
             }
             sourceSize: Qt.size(24, 24)
@@ -61,8 +61,8 @@ Row {
             Behavior on color { ColorAnimation { duration: 400 } }
         }
 
-        ToolTip.visible: networkMouse.containsMouse && (NetSvc.ethernetConnected || NetSvc.networkName !== "")
-        ToolTip.text: NetSvc.ethernetConnected ? "Ethernet" : NetSvc.networkName
+        ToolTip.visible: networkMouse.containsMouse && (Network.ethernetConnected || Network.networkName !== "")
+        ToolTip.text: Network.ethernetConnected ? "Ethernet" : Network.networkName
         MouseArea {
             id: networkMouse
             anchors.fill: parent

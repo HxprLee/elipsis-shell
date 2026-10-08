@@ -12,7 +12,7 @@ Item {
     // Network type (collision causes `Property 'toggleWifi' of object
     // Quickshell.Networking/Network is not a function` errors when the
     // singleton binding isn't resolved yet during initial evaluation).
-    property var net: NetSvc
+    property var net: Network
 
     id: root
     property bool isControlWidget: true
