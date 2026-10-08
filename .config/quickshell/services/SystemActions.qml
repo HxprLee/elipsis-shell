@@ -33,9 +33,11 @@ Item {
         running: false
     }
 
-    function powerOff() { powerOffProc.running = true; }
-    function reboot() { restartProc.running = true; }
-    function suspend() { suspendProc.running = true; }
+    // Power off / reboot / suspend end the session, so flush any debounced
+    // config write first — otherwise an edit made in the last 600ms is lost.
+    function powerOff() { ConfigStore.flushSave(); powerOffProc.running = true; }
+    function reboot() { ConfigStore.flushSave(); restartProc.running = true; }
+    function suspend() { ConfigStore.flushSave(); suspendProc.running = true; }
     function lockScreen() { lockProc.running = true; }
 
     // ── Audio default device (used by VolumeSlider) ──
