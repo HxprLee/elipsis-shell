@@ -24,12 +24,13 @@ ComboBox {
         elide: Text.ElideRight
     }
 
-    indicator: Text {
+    indicator: Image {
         x: control.width - width - 12
         y: (control.height - height) / 2
-        text: "▼"
-        color: Qt.rgba(1, 1, 1, 0.5)
-        font.pixelSize: 10
+        width: 12; height: 12
+        source: Icons.icon("go-down-symbolic")
+        sourceSize: Qt.size(12, 12)
+        opacity: 0.5
     }
 
     delegate: ItemDelegate {

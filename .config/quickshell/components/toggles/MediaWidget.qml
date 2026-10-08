@@ -234,10 +234,10 @@ Item {
                                     }
 
                                     // Small chevron to indicate menu
-                                    Text {
-                                        text: "▾"
-                                        color: Qt.rgba(1, 1, 1, 0.5)
-                                        font.pixelSize: 12
+                                    Image {
+                                        source: Icons.icon("go-down-symbolic")
+                                        sourceSize: Qt.size(12, 12)
+                                        opacity: 0.5
                                         visible: Mpris.players.values.length > 1
                                     }
                                 }

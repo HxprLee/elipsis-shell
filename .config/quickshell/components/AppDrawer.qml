@@ -175,11 +175,10 @@ PanelWindow {
                     anchors.rightMargin: 20
                     spacing: 12
 
-                    Text {
-                        text: "🔍"
-                        font.pixelSize: 20
+                    Image {
+                        source: Icons.icon("system-search-symbolic")
+                        sourceSize: Qt.size(20, 20)
                         opacity: 0.6
-                        color: "white"
                     }
 
                     TextField {
@@ -204,9 +203,12 @@ PanelWindow {
 
                     Button {
                         visible: searchField.text !== ""
-                        text: "✕"
                         flat: true
-                        palette.buttonText: "white"
+                        contentItem: Image {
+                            source: Icons.icon("window-close-symbolic")
+                            sourceSize: Qt.size(16, 16)
+                            anchors.centerIn: parent
+                        }
                         onClicked: searchField.text = ""
                     }
                 }
@@ -344,19 +346,30 @@ PanelWindow {
                                 }
 
                                 // Fallback icons if image fails
+                                Image {
+                                    anchors.centerIn: parent
+                                    width: 64; height: 64
+                                    sourceSize: Qt.size(128, 128)
+                                    fillMode: Image.PreserveAspectFit
+                                    visible: !appIcon.visible
+                                    source: {
+                                        let n = entry.name.toLowerCase();
+                                        if (n.includes("browser")) return Icons.icon("web-browser-symbolic");
+                                        if (n.includes("file")) return Icons.icon("folder-symbolic");
+                                        if (n.includes("terminal")) return Icons.icon("terminal-symbolic");
+                                        if (n.includes("settings")) return Icons.icon("preferences-system-symbolic");
+                                        return "";
+                                    }
+                                }
+
+                                // Pure text fallback when no icon is available at all —
+                                // first letter of the entry name, in lieu of an emoji.
                                 Text {
                                     anchors.centerIn: parent
-                                    visible: !appIcon.visible
+                                    visible: !appIcon.visible && parent.parent.source === ""
                                     font.pixelSize: 32
                                     color: "white"
-                                    text: {
-                                        let n = entry.name.toLowerCase();
-                                        if (n.includes("browser")) return "🌐";
-                                        if (n.includes("file")) return "📂";
-                                        if (n.includes("terminal")) return "📟";
-                                        if (n.includes("settings")) return "⚙️";
-                                        return entry.name.charAt(0).toUpperCase();
-                                    }
+                                    text: entry.name.charAt(0).toUpperCase()
                                 }
                                 
                                 // Visual indicator if already running
