@@ -85,10 +85,10 @@ Item {
     // Auto-save appearance settings on change.
     Connections {
         target: wallpapers
-        function onMaterialThemeChanged() { ConfigStore.saveAppearance(); }
-        function onBlurEnabledChanged() { ConfigStore.saveAppearance(); }
-        function onAccentColorChanged() { ConfigStore.saveAppearance(); }
-        function onWallpaperPathChanged() { ConfigStore.saveAppearance(); }
-        function onStaticBlurEnabledChanged() { ConfigStore.saveAppearance(); }
+        function onMaterialThemeChanged() { ConfigStore.saveConfig(); }
+        function onBlurEnabledChanged() { ConfigStore.saveConfig(); }
+        function onAccentColorChanged() { ConfigStore.saveConfig(); }
+        function onWallpaperPathChanged() { ConfigStore.saveConfig(); }
+        function onStaticBlurEnabledChanged() { ConfigStore.saveConfig(); }
     }
 }

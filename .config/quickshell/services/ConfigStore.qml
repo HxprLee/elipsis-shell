@@ -5,7 +5,7 @@ import Quickshell.Io
 import QtQuick
 
 // ConfigStore — single source of truth for user-config persisted to config/config.json.
-// Owns pinnedApps, toggleData, controlCenterLayout, mediaPlayerId and the
+// Owns pinnedApps, toggleData, controlCenterPages, mediaPlayerId and the
 // functions that mutate them. Dock refresh is delegated to Dock.refreshDock().
 
 Item {
@@ -16,16 +16,15 @@ Item {
     property var runningAppIds: []
     property var toggleData: ({})
     property bool toggleDataLoaded: false
-    property var controlCenterLayout: []
+    // Paginated control-center layout. Each element is a page = an ordered
+    // array of {source, colSpan, rowSpan} entries, capped at a 4x8 grid.
+    // Empty array means "no saved pages" — the consumer falls back to its
+    // built-in default. Replaces the flat `layout` key; see loadConfigProc
+    // for the one-way migration from legacy `layout`.
+    property var controlCenterPages: []
     property string mediaPlayerId: ""
     property bool configLoadComplete: false
     property bool _loadingConfig: false
-
-    // ── Appearance state — also lives here for read-side ownership ──
-    // Wallpapers singleton mutates these via loadConfig / saveConfig.
-    // Properties are declared here so reads from any consumer reach
-    // the same instance through the ConfigStore.qml singleton.
-    // (Wallpapers re-exports them via its own property bindings.)
 
     // ── Load / Save plumbing ──
     Process {
@@ -70,9 +69,20 @@ Item {
                     }
                     if (app.wallpaperPath !== undefined) Wallpapers.wallpaperPath = app.wallpaperPath;
 
-                    if (cfg.layout && cfg.layout.length > 0) configStore.controlCenterLayout = cfg.layout;
+                    // Paginated layout wins when present. Otherwise migrate the
+                    // legacy flat `layout` array by wrapping it as a single
+                    // page, so an existing config is never silently dropped.
+                    // The wrapper is only persisted back on the next save.
+                    if (cfg.pages && Array.isArray(cfg.pages) && cfg.pages.length > 0) {
+                        configStore.controlCenterPages = cfg.pages;
+                    } else if (cfg.layout && cfg.layout.length > 0) {
+                        configStore.controlCenterPages = [cfg.layout];
+                        console.log("[Config] Migrated legacy flat layout to single page");
+                    } else {
+                        configStore.controlCenterPages = [];
+                    }
                     if (cfg.mediaPlayerId) configStore.mediaPlayerId = cfg.mediaPlayerId;
-                    console.log("[Config] Layout:", JSON.stringify(configStore.controlCenterLayout));
+                    console.log("[Config] Pages:", JSON.stringify(configStore.controlCenterPages));
 
                     Dock.refreshDock();
                     configStore.configLoadComplete = true;
@@ -96,7 +106,30 @@ Item {
 
     Process { id: saveConfigProc; running: false }
 
+    // Debounces the config.json write. Every control-center edit (resize, move,
+    // add, remove) calls saveLayout() -> saveConfig(), and each write shells
+    // out AND trips the FileView watcher, which re-reads and re-parses the
+    // whole file. During a drag or a run of resizes that is dozens of redundant
+    // round-trips. Coalescing them into one write keeps the UI responsive.
+    Timer {
+        id: saveConfigDebounce
+        interval: 600
+        repeat: false
+        onTriggered: configStore._writeConfig()
+    }
+
+    // A write is pending if the debounce timer is running. Exposed so shutdown
+    // can flush it — otherwise the last edit before quitting is lost.
+    readonly property bool savePending: saveConfigDebounce.running
+
+    // Schedules a write. Cheap to call repeatedly — each call just restarts
+    // the timer, so a burst of edits lands as a single write.
     function saveConfig() {
+        if (!configStore.configLoadComplete || configStore._loadingConfig) return;
+        saveConfigDebounce.restart();
+    }
+
+    function _writeConfig() {
         if (!configStore.configLoadComplete || configStore._loadingConfig) return;
         let accentColorHex = null;
         if (Wallpapers.accentColor) {
@@ -117,7 +150,7 @@ Item {
                 accentColor: accentColorHex,
                 wallpaperPath: Wallpapers.wallpaperPath || ""
             },
-            layout: configStore.controlCenterLayout,
+            pages: configStore.controlCenterPages,
             mediaPlayerId: configStore.mediaPlayerId
         };
         let path = Qt.resolvedUrl("../config/config.json").toString().replace("file://", "");
@@ -125,9 +158,13 @@ Item {
         saveConfigProc.running = true;
     }
 
-    function savePinnedApps() { saveConfig(); }
-    function saveToggleData() { saveConfig(); }
-    function saveAppearance() { saveConfig(); }
+    function flushSave() {
+        // Writes any debounced save immediately. Call before anything that can end
+        // the process (power off, reboot, quit) so the final edit isn't lost.
+        if (!configStore.savePending) return;
+        saveConfigDebounce.stop();
+        configStore._writeConfig();
+    }
 
     function getToggleSetting(toggleId, key, defaultValue) {
         if (!toggleData[toggleId]) return defaultValue;
@@ -165,7 +202,7 @@ Item {
         }
 
         pinnedApps = copy.filter((v, i, a) => a.indexOf(v) === i);
-        savePinnedApps();
+        saveConfig();
         Dock.refreshDock();
     }
 
@@ -179,7 +216,7 @@ Item {
             copy.splice(index, 1);
         }
         pinnedApps = copy;
-        savePinnedApps();
+        saveConfig();
         Dock.refreshDock();
     }
 }

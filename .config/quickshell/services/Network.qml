@@ -115,7 +115,6 @@ Item {
         }
     }
 
-    property bool networkEnabled: wifiConnected || ethernetConnected
     property bool networkConnected: wifiConnected || ethernetConnected
     property string networkType: ethernetConnected ? "ethernet" : "wifi"
 
