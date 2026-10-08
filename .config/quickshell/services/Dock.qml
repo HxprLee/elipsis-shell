@@ -73,7 +73,7 @@ Item {
         }
 
         for (let app of runningApps) {
-            app.windowCount = Math.min(windowCounts[app.id] || 1, 5);
+            app.windowCount = Math.min(windowCounts[app.id] || 0, 5);
             app.isFocused = (app.id === focusedEntryId);
         }
 

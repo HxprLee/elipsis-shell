@@ -47,6 +47,11 @@ Item {
     Process {
         id: blurGenerator
         function startBlur() {
+            // Ignore reentrant calls: assigning `command` mid-run would
+            // overwrite the in-flight pipeline, and `onExited` only fires
+            // for the last invocation, so any earlier wallpaper would
+            // silently never bump blurVersion.
+            if (running) return;
             if (wallpapers.wallpaperPath === "") return;
             // High-speed optimization:
             // 1. Use -sample for ultra-fast downscaling (5%)

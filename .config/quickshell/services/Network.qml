@@ -151,6 +151,12 @@ Item {
         id: networkScanProc
         command: ["nmcli", "device", "wifi", "rescan"]
         running: false
+        // Drain stdout to prevent pipe-buffer deadlock when nmcli emits
+        // more than the 64KB pipe can hold before the process exits. The
+        // output isn't useful here.
+        stdout: SplitParser {
+            onRead: data => {}
+        }
     }
 
     Process { id: wifiToggleProc; running: false }

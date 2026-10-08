@@ -2761,12 +2761,11 @@ Behavior on radius {
                                                 focus: true
                                                 asynchronous: true
                                                 // Phase E: only the morph-target cell
-                                                // instantiates the expanded view. Phase D
-                                                // moved this Loader from a singleton (inside
-                                                // the deleted expandedCard) into per-cell
-                                                // widgetBg but forgot to gate active/opacity
-                                                // on the source check, so every cell ended
-                                                // up showing the expanded view simultaneously.
+                                                // instantiates the expanded view. The gate
+                                                // below ensures only the cell whose widgetBg
+                                                // matches expandedOverlay.sourceItem loads
+                                                // the component; without it, every cell
+                                                // would show the expanded view at once.
                                                 active: expandedOverlay.sourceItem === widgetBg
                                                 sourceComponent: (expandedOverlay.isExpanded && widgetLoader.item) ? widgetLoader.item.expandedComponent : null
                                                 opacity: (expandedOverlay.isExpanded && expandedOverlay.sourceItem === widgetBg) ? 1.0 : 0.0
@@ -3696,6 +3695,13 @@ Behavior on radius {
                             radiusAnim.duration = 400;
                             radiusAnim.easing.type = Easing.OutExpo;
                             radiusAnim.start();
+                            // Explicit cleanup: morphCompleteTimer
+                            // releases sourceItem and the radius binding
+                            // restores, but the dynamic animation object
+                            // itself would otherwise linger until the
+                            // delegate is destroyed. .finished fires on
+                            // the animation's natural completion.
+                            radiusAnim.finished.connect(() => radiusAnim.destroy());
                         }
                         // Phase G2: keep radius BEFORE width/height for
                         // symmetry with open(). The radius binding is

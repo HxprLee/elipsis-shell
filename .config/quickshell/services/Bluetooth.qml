@@ -67,6 +67,11 @@ Item {
         id: btScanProc
         command: ["sh", "-c", "bluetoothctl --timeout 15 scan on"]
         running: false
+        // Drain stdout to prevent pipe-buffer deadlock when bluetoothctl
+        // emits more than the 64KB pipe can hold before the timeout fires.
+        stdout: SplitParser {
+            onRead: data => {}
+        }
     }
 
     Process { id: btToggleProc; running: false }
