@@ -20,7 +20,9 @@ Item {
     }
 
     Timer {
-        interval: 2500; running: true; repeat: true
+        // Aligned with PipewireAvailability + Network; faster feedback when
+        // a user toggles the adapter via the panel.
+        interval: 2000; running: true; repeat: true
         triggeredOnStart: true
         onTriggered: btStatusProc.running = true
     }

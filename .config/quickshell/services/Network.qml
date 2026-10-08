@@ -88,7 +88,9 @@ Item {
     }
 
     Timer {
-        interval: 3000
+        // Aligned with Bluetooth and PipewireAvailability; cuts the
+        // time-to-display for a fresh wifi-connect from up to 3s to 2.5s.
+        interval: 2500
         running: true
         repeat: true
         onTriggered: {

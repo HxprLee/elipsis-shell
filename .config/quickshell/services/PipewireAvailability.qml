@@ -16,7 +16,9 @@ Item {
     function isUnplugged(id) { return id !== undefined && unpluggedIds[String(id)] === true; }
 
     Timer {
-        interval: 2500
+        // Aligned with Wallpapers' 2s wallpaper poll so the two long-running
+        // pollers (pw-dump + awww query) breathe in the same phase.
+        interval: 2000
         running: true
         repeat: true
         triggeredOnStart: true
