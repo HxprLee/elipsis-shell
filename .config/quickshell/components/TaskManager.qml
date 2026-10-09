@@ -6,10 +6,11 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
+import "../services"
 
 PanelWindow {
     id: root
-    visible: shellRoot.switcherOpen
+    visible: UIState.switcherOpen
     color: "transparent"
 
     function sanitizeAddr(addr) {
@@ -17,12 +18,8 @@ PanelWindow {
         return addr.toString().replace(/[^0-9a-fA-Fx]/g, "");
     }
 
-    function getScreen() {
-        return root.screen || (Quickshell.screens.length > 0 ? Quickshell.screens[0] : null);
-    }
-
     property var screenDimensions: {
-        let s = root.getScreen();
+        let s = root.screen || (Quickshell.screens.length > 0 ? Quickshell.screens[0] : null);
         return s ? { width: s.width, height: s.height } : { width: 1920, height: 1080 };
     }
 
@@ -33,16 +30,8 @@ PanelWindow {
 
     property int viewMode: 0 // 0: Windows, 1: Workspaces
     signal forceResetDrag()
-    onScreenChanged: refreshScreenDims()
-    property bool _screenRefreshQueued: false
-    function refreshScreenDims() {
-        // Force re-evaluation of screenDimensions when screen changes
-        if (_screenRefreshQueued) return;
-        _screenRefreshQueued = true;
-        Qt.callLater(() => { _screenRefreshQueued = false; screenDimensions = ({}); });
-    }
     Connections {
-        target: shellRoot
+        target: UIState
         function onSwitcherOpenChanged() {
             // Background blur is managed globally by shellRoot
         }
@@ -68,12 +57,12 @@ PanelWindow {
     Image {
         id: bgBlur
         anchors.fill: parent
-        source: shellRoot.blurredWallpaperPath
+        source: Wallpapers.blurredWallpaperPath
         cache: false
         fillMode: Image.PreserveAspectCrop
         
         Connections {
-            target: shellRoot
+            target: Wallpapers
             function onBlurVersionChanged() {
                 let s = bgBlur.source
                 bgBlur.source = ""
@@ -81,7 +70,7 @@ PanelWindow {
             }
         }
         
-        visible: shellRoot.usePrecomputedBlur && shellRoot.staticBlurEnabled
+        visible: Wallpapers.usePrecomputedBlur && Wallpapers.staticBlurEnabled
         opacity: root.visible ? 1.0 : 0.0
         Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
         
@@ -96,7 +85,7 @@ PanelWindow {
         id: bg
         anchors.fill: parent
         color: Qt.rgba(0, 0, 0, 0.6)
-        opacity: root.visible && !shellRoot.usePrecomputedBlur ? 1.0 : 0.0
+        opacity: root.visible && !Wallpapers.usePrecomputedBlur ? 1.0 : 0.0
 
         Behavior on opacity {
             NumberAnimation { duration: 400; easing.type: Easing.OutCubic }
@@ -104,7 +93,7 @@ PanelWindow {
 
         MouseArea {
             anchors.fill: parent
-            onClicked: shellRoot.switcherOpen = false
+            onClicked: UIState.switcherOpen = false
         }
     }
 
@@ -194,7 +183,7 @@ PanelWindow {
                         Image {
                             id: rowWallpaperImg
                             anchors.fill: parent
-                            source: shellRoot.wallpaperPath ? "file://" + shellRoot.wallpaperPath : ""
+                            source: Wallpapers.wallpaperPath ? "file://" + Wallpapers.wallpaperPath : ""
                             fillMode: Image.PreserveAspectCrop
                             visible: false
                         }
@@ -267,7 +256,7 @@ PanelWindow {
                     }
 
                     onDropped: (drop) => {
-                        console.log("DROP EVENT FIRED!");
+                        console.debug("DROP EVENT FIRED!");
                         
                         let addr = "";
                         if (drop.source && drop.source.windowAddr) {
@@ -283,18 +272,18 @@ PanelWindow {
                             }
                             let safeAddr = root.sanitizeAddr(finalAddr);
                             
-                            console.log("SUCCESS: Moving window " + safeAddr + " to workspace " + workspace.id);
+                            console.debug("SUCCESS: Moving window " + safeAddr + " to workspace " + workspace.id);
                             Hyprland.dispatch("hl.dsp.window.move({ workspace = " + workspace.id + ", window = '" + safeAddr + "', follow = false })");
                             drop.accept(Qt.MoveAction);
                         } else {
-                            console.log("ERROR: Drop had no payload. Source exists: " + !!drop.source);
+                            console.debug("ERROR: Drop had no payload. Source exists: " + !!drop.source);
                         }
                         
                         Qt.callLater(root.forceResetDrag);
                     }
                     
                     onEntered: (drag) => {
-                        console.log("DRAG ENTERED workspace " + workspace.id);
+                        console.debug("DRAG ENTERED workspace " + workspace.id);
                         drag.accept(); // Explicitly accept to be safe
                     }
 
@@ -344,7 +333,7 @@ PanelWindow {
 
             // Background tap to dismiss
             TapHandler {
-                onTapped: shellRoot.switcherOpen = false
+                onTapped: UIState.switcherOpen = false
             }
 
             delegate: Item {
@@ -543,9 +532,9 @@ PanelWindow {
                         }
                     }
 
-                    Drag.onDragStarted: console.log("DRAG STARTED for window: " + windowAddr)
+                    Drag.onDragStarted: console.debug("DRAG STARTED for window: " + windowAddr)
                     Drag.onDragFinished: (dropAction) => {
-                        console.log("DRAG FINISHED with action: " + dropAction)
+                        console.debug("DRAG FINISHED with action: " + dropAction)
                         Qt.callLater(() => { cardMouse.dragEnabled = false; })
                     }
 
@@ -648,7 +637,7 @@ PanelWindow {
                                 }
                                 contentItem: Image {
                                     anchors.centerIn: parent
-                                    source: shellRoot.icon("window-close-symbolic")
+                                    source: Icons.icon("window-close-symbolic")
                                     sourceSize: Qt.size(14, 14)
                                     opacity: closeBtn.hovered ? 1.0 : 0.6
                                 }
@@ -747,7 +736,7 @@ PanelWindow {
             
             // Background tap to dismiss
             TapHandler {
-                onTapped: shellRoot.switcherOpen = false
+                onTapped: UIState.switcherOpen = false
             }
             
             model: (Hyprland.workspaces && Hyprland.workspaces.values) ? Hyprland.workspaces.values : []
@@ -787,7 +776,7 @@ PanelWindow {
                                 Layout.preferredHeight: 24
                                 sourceSize: Qt.size(32, 32)
                                 fillMode: Image.PreserveAspectFit
-                                source: shellRoot.icon("view-app-grid-symbolic")
+                                source: Icons.icon("view-app-grid-symbolic")
                                 opacity: 0.8
                             }
 
@@ -836,7 +825,7 @@ PanelWindow {
                                 Image {
                                     id: wallpaperImg
                                     anchors.fill: parent
-                                    source: shellRoot.wallpaperPath ? "file://" + shellRoot.wallpaperPath : ""
+                                    source: Wallpapers.wallpaperPath ? "file://" + Wallpapers.wallpaperPath : ""
                                     fillMode: Image.PreserveAspectCrop
                                     visible: false
                                 }
@@ -929,6 +918,6 @@ PanelWindow {
     Timer {
         id: closeTimer
         interval: 50
-        onTriggered: shellRoot.switcherOpen = false
+        onTriggered: UIState.switcherOpen = false
     }
 }

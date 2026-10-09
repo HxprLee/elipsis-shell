@@ -2,6 +2,7 @@ import Quickshell
 import QtQuick
 import QtQuick.Controls
 import Qt5Compat.GraphicalEffects
+import "../services"
 
 Row {
     id: cluster
@@ -13,14 +14,14 @@ Row {
 
     // 2. Bluetooth
     Item {
-        width: (shellRoot.bluetoothEnabled && shellRoot.bluetoothConnected) ? 20 : 0
+        width: (BTSvc.bluetoothEnabled && BTSvc.bluetoothConnected) ? 20 : 0
         height: 20
         visible: width > 0
         anchors.verticalCenter: parent.verticalCenter
         Image {
             id: btIcon
             anchors.fill: parent
-            source: shellRoot.icon(shellRoot.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
+            source: Icons.icon(BTSvc.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic")
             sourceSize: Qt.size(24, 24)
             visible: false
         }
@@ -34,7 +35,7 @@ Row {
 
     // 3. Network
     Item {
-        width: shellRoot.networkConnected ? 20 : 0
+        width: NetSvc.networkConnected ? 20 : 0
         height: 20
         visible: width > 0
         anchors.verticalCenter: parent.verticalCenter
@@ -42,13 +43,13 @@ Row {
             id: networkIcon
             anchors.fill: parent
             source: {
-                if (shellRoot.networkType === "ethernet") {
-                    return shellRoot.icon("network-wired-symbolic");
+                if (NetSvc.networkType === "ethernet") {
+                    return Icons.icon("network-wired-symbolic");
                 }
 
                 let levels = ["none", "weak", "ok", "good", "excellent"];
-                let level = levels[shellRoot.networkSignalLevel] || "none";
-                return shellRoot.icon("network-wireless-signal-" + level + "-symbolic");
+                let level = levels[NetSvc.networkSignalLevel] || "none";
+                return Icons.icon("network-wireless-signal-" + level + "-symbolic");
             }
             sourceSize: Qt.size(24, 24)
             visible: false
@@ -60,8 +61,8 @@ Row {
             Behavior on color { ColorAnimation { duration: 400 } }
         }
 
-        ToolTip.visible: networkMouse.containsMouse && (shellRoot.ethernetConnected || shellRoot.networkName !== "")
-        ToolTip.text: shellRoot.ethernetConnected ? "Ethernet" : shellRoot.networkName
+        ToolTip.visible: networkMouse.containsMouse && (NetSvc.ethernetConnected || NetSvc.networkName !== "")
+        ToolTip.text: NetSvc.ethernetConnected ? "Ethernet" : NetSvc.networkName
         MouseArea {
             id: networkMouse
             anchors.fill: parent
@@ -72,14 +73,14 @@ Row {
 
     // 3.5 Power Profile
     Item {
-        width: shellRoot.powerProfile !== "" ? 20 : 0
+        width: PowerProfiles.powerProfile !== "" ? 20 : 0
         height: 20
         visible: width > 0
         anchors.verticalCenter: parent.verticalCenter
         Image {
             id: profileIcon
             anchors.fill: parent
-            source: shellRoot.icon("power-profile-" + shellRoot.powerProfile)
+            source: Icons.icon("power-profile-" + PowerProfiles.powerProfile)
             sourceSize: Qt.size(24, 24)
             visible: false
         }
@@ -104,7 +105,7 @@ Row {
                 source: {
                     let isCharging = cluster.batteryStatus === "Charging"
                     let pct = cluster.batteryPct
-                    if (pct < 0) return shellRoot.icon("battery-missing-symbolic")
+                    if (pct < 0) return Icons.icon("battery-missing-symbolic")
 
                     let level = Math.max(0, Math.min(100, Math.round(pct / 10) * 10))
                     let sLevel = (level < 100 ? (level < 10 ? "00" : "0") : "") + level
@@ -113,7 +114,7 @@ Row {
                     if (isCharging) name += "-charging"
                     name += "-symbolic"
 
-                    return shellRoot.icon(name)
+                    return Icons.icon(name)
                 }
                 sourceSize: Qt.size(24, 24)
                 visible: false

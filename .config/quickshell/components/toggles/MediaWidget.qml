@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Services.Mpris
 import ".."
 import "../reusables"
+import "../../services"
 
 // MediaWidget.qml — MPRIS media player with album art, playback controls,
 
@@ -13,8 +14,8 @@ Item {
     property bool isControlWidget: true
     property var modelData: parent ? parent.modelData : ({})
     property var activePlayer: {
-        if (shellRoot.mediaPlayerId) {
-            let found = Mpris.players.values.find(p => p.identity === shellRoot.mediaPlayerId);
+        if (ConfigStore.mediaPlayerId) {
+            let found = Mpris.players.values.find(p => p.identity === ConfigStore.mediaPlayerId);
             if (found) return found;
         }
         return Mpris.players.values.length > 0 ? Mpris.players.values[0] : null;
@@ -96,6 +97,9 @@ Item {
     MouseArea {
         id: bgMouseArea
         anchors.fill: parent
+        // Disable while expanded so presses that propagate through the
+        // morphed card don't re-trigger openExpandedView.
+        enabled: !expandedOverlay.isExpanded
         pressAndHoldInterval: 300
         onClicked: root.expandRequested()
         onPressAndHold: root.expandRequested()
@@ -196,7 +200,7 @@ Item {
                                     anchors.fill: parent
                                     source: pillBlurSource
                                     radius: 48
-                                    visible: shellRoot.blurEnabled
+                                    visible: Wallpapers.blurEnabled
                                 }
 
                                 // Overlay border (to keep it sharp and above the blur)
@@ -230,10 +234,10 @@ Item {
                                     }
 
                                     // Small chevron to indicate menu
-                                    Text {
-                                        text: "▾"
-                                        color: Qt.rgba(1, 1, 1, 0.5)
-                                        font.pixelSize: 12
+                                    Image {
+                                        source: Icons.icon("go-down-symbolic")
+                                        sourceSize: Qt.size(12, 12)
+                                        opacity: 0.5
                                         visible: Mpris.players.values.length > 1
                                     }
                                 }
@@ -267,8 +271,8 @@ Item {
                                                 text: p.identity,
                                                 icon: root.getAppIcon(p),
                                                 action: function () {
-                                                    shellRoot.mediaPlayerId = p.identity;
-                                                    shellRoot.saveConfig();
+                                                    ConfigStore.mediaPlayerId = p.identity;
+                                                    ConfigStore.saveConfig();
                                                 }
                                             });
                                         }
@@ -418,7 +422,7 @@ Item {
                         Image {
                             id: expandedPrevIcon
                             anchors.centerIn: parent
-                            source: shellRoot.icon("media-skip-backward-symbolic")
+                            source: Icons.icon("media-skip-backward-symbolic")
                             sourceSize: Qt.size(28, 28)
                             visible: false
                         }
@@ -448,7 +452,7 @@ Item {
                         Image {
                             id: expandedPlayIcon
                             anchors.centerIn: parent
-                            source: shellRoot.icon(expandedRoot.player && expandedRoot.player.isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic")
+                            source: Icons.icon(expandedRoot.player && expandedRoot.player.isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic")
                             sourceSize: Qt.size(48, 48)
                             visible: false
                         }
@@ -486,7 +490,7 @@ Item {
                         Image {
                             id: expandedNextIcon
                             anchors.centerIn: parent
-                            source: shellRoot.icon("media-skip-forward-symbolic")
+                            source: Icons.icon("media-skip-forward-symbolic")
                             sourceSize: Qt.size(28, 28)
                             visible: false
                         }
@@ -529,7 +533,7 @@ Item {
                     visible: expandedRoot.player && (expandedRoot.player.volumeSupported ?? false)
 
                     Image {
-                        source: shellRoot.icon("audio-volume-low-symbolic")
+                        source: Icons.icon("audio-volume-low-symbolic")
                         sourceSize: Qt.size(22, 22)
                         opacity: 0.45
                     }
@@ -580,7 +584,7 @@ Item {
                     }
 
                     Image {
-                        source: shellRoot.icon("audio-volume-high-symbolic")
+                        source: Icons.icon("audio-volume-high-symbolic")
                         sourceSize: Qt.size(22, 22)
                         opacity: 0.45
                     }
@@ -615,7 +619,7 @@ Item {
         anchors.fill: parent
         source: compactBgImg
         radius: 64
-        visible: compactBgImg.status === Image.Ready && shellRoot.blurEnabled
+        visible: compactBgImg.status === Image.Ready && Wallpapers.blurEnabled
     }
 
     // Dark overlay for readability
@@ -705,7 +709,7 @@ Item {
                 Image {
                     id: skipBackIcon2x2
                     anchors.fill: parent
-                    source: shellRoot.icon("media-skip-backward-symbolic")
+                    source: Icons.icon("media-skip-backward-symbolic")
                     sourceSize: Qt.size(24, 24)
                     visible: false
                 }
@@ -716,7 +720,7 @@ Item {
                 }
                 MouseArea {
                     anchors.fill: parent
-                    enabled: !controlPanel.editMode && !!activePlayer && (activePlayer.canGoPrevious ?? false)
+                    enabled: !controlPanel.editMode && !expandedOverlay.isExpanded && !!activePlayer && (activePlayer.canGoPrevious ?? false)
                     onClicked: activePlayer.previous()
                 }
             }
@@ -727,7 +731,7 @@ Item {
                 Image {
                     id: playIcon2x2
                     anchors.fill: parent
-                    source: shellRoot.icon(activePlayer && activePlayer.isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic")
+                    source: Icons.icon(activePlayer && activePlayer.isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic")
                     sourceSize: Qt.size(32, 32)
                     visible: false
                 }
@@ -746,7 +750,7 @@ Item {
                     id: playArea2x2
                     anchors.fill: parent
                     anchors.margins: -8
-                    enabled: !controlPanel.editMode && !!activePlayer && (activePlayer.canTogglePlaying ?? false)
+                    enabled: !controlPanel.editMode && !expandedOverlay.isExpanded && !!activePlayer && (activePlayer.canTogglePlaying ?? false)
                     onClicked: activePlayer.togglePlaying()
                 }
             }
@@ -757,7 +761,7 @@ Item {
                 Image {
                     id: skipFwdIcon2x2
                     anchors.fill: parent
-                    source: shellRoot.icon("media-skip-forward-symbolic")
+                    source: Icons.icon("media-skip-forward-symbolic")
                     sourceSize: Qt.size(24, 24)
                     visible: false
                 }
@@ -768,7 +772,7 @@ Item {
                 }
                 MouseArea {
                     anchors.fill: parent
-                    enabled: !controlPanel.editMode && !!activePlayer && (activePlayer.canGoNext ?? false)
+                    enabled: !controlPanel.editMode && !expandedOverlay.isExpanded && !!activePlayer && (activePlayer.canGoNext ?? false)
                     onClicked: activePlayer.next()
                 }
             }
@@ -889,7 +893,7 @@ Item {
                         Image {
                             id: skipBackIcon4x2
                             anchors.fill: parent
-                            source: shellRoot.icon("media-skip-backward-symbolic")
+                            source: Icons.icon("media-skip-backward-symbolic")
                             sourceSize: Qt.size(24, 24)
                             visible: false
                         }
@@ -902,7 +906,7 @@ Item {
                             id: skipBackArea
                             anchors.fill: parent
                             anchors.margins: -8
-                            enabled: !controlPanel.editMode && !!activePlayer && (activePlayer.canGoPrevious ?? false)
+                            enabled: !controlPanel.editMode && !expandedOverlay.isExpanded && !!activePlayer && (activePlayer.canGoPrevious ?? false)
                             onClicked: activePlayer.previous()
                         }
                     }
@@ -920,7 +924,7 @@ Item {
                         Image {
                             id: playIcon4x2
                             anchors.fill: parent
-                            source: shellRoot.icon(activePlayer && activePlayer.isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic")
+                            source: Icons.icon(activePlayer && activePlayer.isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic")
                             sourceSize: Qt.size(32, 32)
                             visible: false
                         }
@@ -933,7 +937,7 @@ Item {
                             id: playArea4x2
                             anchors.fill: parent
                             anchors.margins: -12
-                            enabled: !controlPanel.editMode && !!activePlayer && (activePlayer.canTogglePlaying ?? false)
+                            enabled: !controlPanel.editMode && !expandedOverlay.isExpanded && !!activePlayer && (activePlayer.canTogglePlaying ?? false)
                             onClicked: activePlayer.togglePlaying()
                         }
                     }
@@ -951,7 +955,7 @@ Item {
                         Image {
                             id: skipFwdIcon4x2
                             anchors.fill: parent
-                            source: shellRoot.icon("media-skip-forward-symbolic")
+                            source: Icons.icon("media-skip-forward-symbolic")
                             sourceSize: Qt.size(24, 24)
                             visible: false
                         }
@@ -964,7 +968,7 @@ Item {
                             id: skipFwdArea
                             anchors.fill: parent
                             anchors.margins: -8
-                            enabled: !controlPanel.editMode && !!activePlayer && (activePlayer.canGoNext ?? false)
+                            enabled: !controlPanel.editMode && !expandedOverlay.isExpanded && !!activePlayer && (activePlayer.canGoNext ?? false)
                             onClicked: activePlayer.next()
                         }
                     }
@@ -1016,7 +1020,7 @@ Item {
                     MouseArea {
                         anchors.fill: parent
                         anchors.margins: -6
-                        enabled: activePlayer && (activePlayer.canSeek ?? false)
+                        enabled: !expandedOverlay.isExpanded && activePlayer && (activePlayer.canSeek ?? false)
 
                         function updatePosition(mouse) {
                             if (activePlayer && activePlayer.lengthSupported) {

@@ -7,10 +7,11 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Qt5Compat.GraphicalEffects
 import "reusables"
+import "../services"
 
 PanelWindow {
     id: root
-    visible: shellRoot.appDrawerOpen
+    visible: UIState.appDrawerOpen
     color: "transparent"
 
     property string selectedCategory: "All"
@@ -58,7 +59,7 @@ PanelWindow {
         } else {
             // Closing the drawer should also dismiss the shared menu on
             // our screen so a stale overlay doesn't linger.
-            shellRoot.closeContextMenu(root.screen);
+            UIState.closeContextMenu(root.screen);
         }
     }
 
@@ -88,19 +89,19 @@ PanelWindow {
         Image {
             id: bgBlur
             anchors.fill: parent
-            source: shellRoot.blurredWallpaperPath
+            source: Wallpapers.blurredWallpaperPath
             cache: false
             fillMode: Image.PreserveAspectCrop
             
             Connections {
-                target: shellRoot
+                target: Wallpapers
                 function onBlurVersionChanged() {
                     let s = bgBlur.source
                     bgBlur.source = ""
                     bgBlur.source = s
                 }
             }
-            visible: shellRoot.usePrecomputedBlur && shellRoot.staticBlurEnabled
+            visible: Wallpapers.usePrecomputedBlur && Wallpapers.staticBlurEnabled
         }
 
         Rectangle {
@@ -110,21 +111,21 @@ PanelWindow {
         
         MouseArea {
             anchors.fill: parent
-            onClicked: shellRoot.appDrawerOpen = false
+            onClicked: UIState.appDrawerOpen = false
         }
     }
 
     function buildAppMenuModel(app) {
         let menuModel = []
-        let isPinned = shellRoot.pinnedApps.includes(app.id.toLowerCase())
+        let isPinned = ConfigStore.pinnedApps.includes(app.id.toLowerCase())
 
         // Pin/Unpin item
         menuModel.push({
             text: isPinned ? "Unpin from Dock" : "Add to Dock",
-            icon: shellRoot.icon(isPinned ? "window-close-symbolic" : "view-app-grid-symbolic"), // Placeholders
+            icon: Icons.icon(isPinned ? "window-close-symbolic" : "view-app-grid-symbolic"), // Placeholders
             action: () => {
-                shellRoot.togglePin(app.id)
-                shellRoot.closeContextMenu(root.screen)
+                ConfigStore.togglePin(app.id)
+                UIState.closeContextMenu(root.screen)
             }
         })
 
@@ -174,11 +175,10 @@ PanelWindow {
                     anchors.rightMargin: 20
                     spacing: 12
 
-                    Text {
-                        text: "🔍"
-                        font.pixelSize: 20
+                    Image {
+                        source: Icons.icon("system-search-symbolic")
+                        sourceSize: Qt.size(20, 20)
                         opacity: 0.6
-                        color: "white"
                     }
 
                     TextField {
@@ -192,7 +192,7 @@ PanelWindow {
                         focus: root.visible
                         
                         Keys.onEscapePressed: {
-                            shellRoot.appDrawerOpen = false
+                            UIState.appDrawerOpen = false
                             searchField.text = ""
                         }
 
@@ -203,9 +203,12 @@ PanelWindow {
 
                     Button {
                         visible: searchField.text !== ""
-                        text: "✕"
                         flat: true
-                        palette.buttonText: "white"
+                        contentItem: Image {
+                            source: Icons.icon("window-close-symbolic")
+                            sourceSize: Qt.size(16, 16)
+                            anchors.centerIn: parent
+                        }
                         onClicked: searchField.text = ""
                     }
                 }
@@ -343,19 +346,30 @@ PanelWindow {
                                 }
 
                                 // Fallback icons if image fails
+                                Image {
+                                    anchors.centerIn: parent
+                                    width: 64; height: 64
+                                    sourceSize: Qt.size(128, 128)
+                                    fillMode: Image.PreserveAspectFit
+                                    visible: !appIcon.visible
+                                    source: {
+                                        let n = entry.name.toLowerCase();
+                                        if (n.includes("browser")) return Icons.icon("web-browser-symbolic");
+                                        if (n.includes("file")) return Icons.icon("folder-symbolic");
+                                        if (n.includes("terminal")) return Icons.icon("terminal-symbolic");
+                                        if (n.includes("settings")) return Icons.icon("preferences-system-symbolic");
+                                        return "";
+                                    }
+                                }
+
+                                // Pure text fallback when no icon is available at all —
+                                // first letter of the entry name, in lieu of an emoji.
                                 Text {
                                     anchors.centerIn: parent
-                                    visible: !appIcon.visible
+                                    visible: !appIcon.visible && parent.parent.source === ""
                                     font.pixelSize: 32
                                     color: "white"
-                                    text: {
-                                        let n = entry.name.toLowerCase();
-                                        if (n.includes("browser")) return "🌐";
-                                        if (n.includes("file")) return "📂";
-                                        if (n.includes("terminal")) return "📟";
-                                        if (n.includes("settings")) return "⚙️";
-                                        return entry.name.charAt(0).toUpperCase();
-                                    }
+                                    text: entry.name.charAt(0).toUpperCase()
                                 }
                                 
                                 // Visual indicator if already running
@@ -366,7 +380,7 @@ PanelWindow {
                                     width: 5; height: 5; radius: 2.5
                                     color: "white"
                                     opacity: 0.8
-                                    visible: shellRoot.runningAppIds.includes(entry.id)
+                                    visible: ConfigStore.runningAppIds.includes(entry.id)
                                 }
                             }
 
@@ -394,15 +408,15 @@ PanelWindow {
                                     // position rather than trusting local
                                     // MouseArea mapping, which has been
                                     // unreliable for menu placement.
-                                    shellRoot.openContextMenuAtCursor(root.screen, buildAppMenuModel(entry))
+                                    UIState.openContextMenuAtCursor(root.screen, buildAppMenuModel(entry))
                                 } else {
                                     entry.execute()
-                                    shellRoot.appDrawerOpen = false
+                                    UIState.appDrawerOpen = false
                                     searchField.text = ""
                                 }
                             }
                             onPressAndHold: {
-                                shellRoot.openContextMenuAtCursor(root.screen, buildAppMenuModel(entry))
+                                UIState.openContextMenuAtCursor(root.screen, buildAppMenuModel(entry))
                             }
                         }
                     }
@@ -476,7 +490,7 @@ PanelWindow {
         sequence: "Escape"
         enabled: root.visible
         onActivated: {
-            shellRoot.appDrawerOpen = false
+            UIState.appDrawerOpen = false
             searchField.text = ""
         }
     }

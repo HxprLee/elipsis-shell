@@ -14,8 +14,8 @@ import ".."
 // Two usage modes:
 //
 // 1. Factory mode (dynamic, self-destroying) — via ShellRoot helpers:
-//      shellRoot.openContextMenuAtCursor(screen, model)
-//      shellRoot.closeContextMenu(screen)
+//      UIState.openContextMenuAtCursor(screen, model)
+//      UIState.closeContextMenu(screen)
 //
 // 2. Inline mode (persistent instance, Menu-style API):
 //      ContextMenu {
@@ -23,7 +23,7 @@ import ".."
 //          model: [ { text: "Item", icon: "", action: () => {} } ]
 //      }
 //      myMenu.popup(anchorItem, x, y)   // opens at cursor
-//      onClosed: ...                    // emitted every time it hides
+    //      onMenuClosed: ...               // emitted every time it hides
 //
 // where model is an array of { text, icon, action, isDestructive } objects;
 // an entry whose text is "---" renders as a separator.
@@ -36,12 +36,23 @@ PanelWindow {
     // instances must survive repeated open/close cycles.
     property bool autoDestroy: false
 
-    signal closed()
+    // Named menuClosed instead of closed() to dodge a duplicate-signal
+    // warning: PanelWindow's parent already emits a `closed` signal on close,
+    // and overriding it as a property change signal is rejected by the QML
+    // loader.
+    signal menuClosed()
 
     property var targetScreen: null
     property var model: []
     property real menuX: 0
     property real menuY: 0
+
+    // Hoisted to root so menuBg and the column delegate both see a stable
+    // value — children do not auto-resolve a sibling Item's property; before
+    // this, `width: menuWidth` inside the menuBg Item triggered a
+    // `ReferenceError: menuWidth is not defined` on every menu open.
+    property real menuWidth: 220
+    property real menuHeight: menuColumn.height + 16
 
     WlrLayershell.layer: WlrLayershell.Overlay
     WlrLayershell.keyboardFocus: WlrLayershell.None
@@ -71,16 +82,12 @@ PanelWindow {
     // ── Menu Container ──
     Item {
         id: menuContainer
-        width: menuWidth
-        height: menuHeight
+        width: root.menuWidth
+        height: root.menuHeight
 
         // Calculate position with edge awareness
         x: computeX()
         y: computeY()
-
-        // Menu dimensions
-        property real menuWidth: 220
-        property real menuHeight: menuColumn.height + 16
 
         // Edge-aware positioning - using functions to avoid binding loops
         function computeX() {
@@ -134,8 +141,8 @@ PanelWindow {
         // Menu background with material surface
         Item {
             id: menuBg
-            width: menuWidth
-            height: menuColumn.height + 16
+            width: root.menuWidth
+            height: root.menuHeight
 
             MaterialSurface {
                 id: bgSurface
@@ -154,7 +161,7 @@ PanelWindow {
 
                     delegate: Item {
                         id: menuItem
-                        width: menuWidth - 16
+                        width: root.menuWidth - 16
                         height: itemRow.height + 12
 
                         readonly property bool isSeparator: modelData.text === "---"
@@ -322,7 +329,7 @@ PanelWindow {
         if (autoDestroy)
             closeTimer.restart();
         if (wasVisible)
-            closed();
+            menuClosed();
     }
 
     Timer {
