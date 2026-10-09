@@ -10,6 +10,7 @@ import QtQuick.Layouts
 import Qt.labs.folderlistmodel
 import Qt5Compat.GraphicalEffects
 import "../services"
+import "quicksettings"
 
 PanelWindow {
     id: qs
@@ -1070,63 +1071,11 @@ PanelWindow {
                 property Item sourceDelegate: null
             }
 
-            property var defaultLayout: [
-                {
-                    source: "toggles/NetworkToggle.qml",
-                    colSpan: 2,
-                    rowSpan: 1
-                },
-                {
-                    source: "toggles/BluetoothToggle.qml",
-                    colSpan: 2,
-                    rowSpan: 1
-                },
-                {
-                    source: "toggles/PowerProfileToggle.qml",
-                    colSpan: 2,
-                    rowSpan: 1
-                },
-                {
-                    source: "toggles/MediaWidget.qml",
-                    colSpan: 2,
-                    rowSpan: 2
-                },
-                {
-                    source: "toggles/BrightnessSlider.qml",
-                    colSpan: 2,
-                    rowSpan: 1
-                },
-                {
-                    source: "toggles/VolumeSlider.qml",
-                    colSpan: 2,
-                    rowSpan: 1
-                },
-                {
-                    source: "toggles/SettingsToggle.qml",
-                    colSpan: 1,
-                    rowSpan: 1
-                },
-                {
-                    source: "toggles/LockToggle.qml",
-                    colSpan: 1,
-                    rowSpan: 1
-                },
-                {
-                    source: "toggles/PowerToggle.qml",
-                    colSpan: 1,
-                    rowSpan: 1
-                },
-                {
-                    source: "toggles/DndToggle.qml",
-                    colSpan: 1,
-                    rowSpan: 1
-                },
-                {
-                    source: "toggles/CaffeineToggle.qml",
-                    colSpan: 1,
-                    rowSpan: 1
-                }
-            ]
+            // Default single-page layout. Owned by quicksettings/Defaults.qml so the
+            // list can be edited without scrolling through QuickSettings.qml; kept
+            // on controlPanel as a property so callers continue to read
+            // `controlPanel.defaultLayout` without needing to import the singleton.
+            readonly property var defaultLayout: Defaults.layout
 
             property bool layoutApplied: false
 
