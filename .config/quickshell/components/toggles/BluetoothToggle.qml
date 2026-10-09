@@ -47,10 +47,10 @@ Item {
             }
 
             Component.onDestruction: {
-                if (Quickshell.Bluetooth.adapter) {
-                    Quickshell.Bluetooth.adapter.discovering = false;
-                } else if (Quickshell.Bluetooth.adapters && Quickshell.Bluetooth.adapters.values && Quickshell.Bluetooth.adapters.values.length > 0) {
-                    Quickshell.Bluetooth.adapters.values[0].discovering = false;
+                if (Bluetooth.adapter) {
+                    Bluetooth.adapter.discovering = false;
+                } else if (Bluetooth.adapters && Bluetooth.adapters.values && Bluetooth.adapters.values.length > 0) {
+                    Bluetooth.adapters.values[0].discovering = false;
                 }
             }
 
@@ -97,7 +97,7 @@ Item {
 
                             Repeater {
                                 id: pairedRepeater
-                                model: Quickshell.Bluetooth.devices ? Quickshell.Bluetooth.devices.values.filter(d => d.paired && d.name && d.name !== "" && !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(d.name)) : []
+                                model: Bluetooth.devices ? Bluetooth.devices.values.filter(d => d.paired && d.name && d.name !== "" && !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(d.name)) : []
                                 delegate: deviceDelegateComponent
                             }
                         }
@@ -130,7 +130,7 @@ Item {
                                     width: refreshRow.implicitWidth
                                     height: 24
                                     
-                                    property bool isScanning: (Quickshell.Bluetooth.adapter && Quickshell.Bluetooth.adapter.discovering) === true || !!BTSvc.bluetoothScanningManual
+                                    property bool isScanning: (Bluetooth.adapter && Bluetooth.adapter.discovering) === true || !!BTSvc.bluetoothScanningManual
 
                                     Row {
                                         id: refreshRow
@@ -171,7 +171,7 @@ Item {
 
                             Repeater {
                                 id: availableRepeater
-                                model: Quickshell.Bluetooth.devices ? Quickshell.Bluetooth.devices.values.filter(d => !d.paired && d.name && d.name !== "" && !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(d.name)) : []
+                                model: Bluetooth.devices ? Bluetooth.devices.values.filter(d => !d.paired && d.name && d.name !== "" && !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(d.name)) : []
                                 delegate: deviceDelegateComponent
                             }
 
