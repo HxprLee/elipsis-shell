@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import Qt5Compat.GraphicalEffects
+import "../services"
 
 Item {
     id: root
@@ -11,8 +12,8 @@ Item {
     property bool isToggleCircle: false // For inner toggle circles
 
     // Internal material property driven by the global shellRoot
-    property string material: shellRoot.materialTheme || "Acrylic"
-    property color accentColor: shellRoot.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
+    property string material: Wallpapers.materialTheme || "Acrylic"
+    property color accentColor: Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
 
     // Exposed foreground color for icons/text
     property color fgColor: {

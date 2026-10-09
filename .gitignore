@@ -3,7 +3,8 @@ node_modules/
 *.qslog
 /tmp/
 config/
+AGENTS.md
 elipsis-shell.wiki/
 .agents/
 skills-lock.json
-AGENTS.md
+.commandcode/
