@@ -12,9 +12,9 @@ Item {
     property bool bluetoothEnabledManual: false
     property bool bluetoothEnabled: {
         if (bluetoothEnabledManual) return true;
-        if (Bluetooth.adapter) return !!Bluetooth.adapter.powered;
-        if (Bluetooth.adapters && Bluetooth.adapters.values && Bluetooth.adapters.values.length > 0) {
-            return !!Bluetooth.adapters.values[0].powered;
+        if (Quickshell.Bluetooth.adapter) return !!Quickshell.Bluetooth.adapter.powered;
+        if (Quickshell.Bluetooth.adapters && Quickshell.Bluetooth.adapters.values && Quickshell.Bluetooth.adapters.values.length > 0) {
+            return !!Quickshell.Bluetooth.adapters.values[0].powered;
         }
         return false;
     }
@@ -47,17 +47,17 @@ Item {
     }
 
     property var connectedBluetoothDevices: {
-        if (!Bluetooth.devices) return [];
-        return Bluetooth.devices.values.filter(d => d.connected);
+        if (!Quickshell.Bluetooth.devices) return [];
+        return Quickshell.Bluetooth.devices.values.filter(d => d.connected);
     }
 
     property bool bluetoothScanningManual: btScanProc.running
 
     function startBluetoothDiscovery() {
-        if (Bluetooth.adapter) {
-            Bluetooth.adapter.discovering = true;
-        } else if (Bluetooth.adapters && Bluetooth.adapters.values && Bluetooth.adapters.values.length > 0) {
-            Bluetooth.adapters.values[0].discovering = true;
+        if (Quickshell.Bluetooth.adapter) {
+            Quickshell.Bluetooth.adapter.discovering = true;
+        } else if (Quickshell.Bluetooth.adapters && Quickshell.Bluetooth.adapters.values && Quickshell.Bluetooth.adapters.values.length > 0) {
+            Quickshell.Bluetooth.adapters.values[0].discovering = true;
         }
 
         if (!btScanProc.running) {

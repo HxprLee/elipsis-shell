@@ -15,22 +15,22 @@ Item {
     property bool isSimpleToggle: true
     property string toggleName: "Bluetooth"
     property string titleText: {
-        if (!Bluetooth.bluetoothEnabled) return "Bluetooth";
-        let count = Bluetooth.connectedBluetoothDevices.length;
-        if (count === 1) return Bluetooth.bluetoothDeviceName;
+        if (!BTSvc.bluetoothEnabled) return "Bluetooth";
+        let count = BTSvc.connectedBluetoothDevices.length;
+        if (count === 1) return BTSvc.bluetoothDeviceName;
         return "Bluetooth";
     }
     property string subtitleText: {
-        if (!Bluetooth.bluetoothEnabled) return "Off";
-        let count = Bluetooth.connectedBluetoothDevices.length;
+        if (!BTSvc.bluetoothEnabled) return "Off";
+        let count = BTSvc.connectedBluetoothDevices.length;
         if (count === 1) return "Connected";
         if (count > 1) return count + " connected";
         return "On";
     }
     property string iconSource: {
-        return Icons.icon(Bluetooth.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic");
+        return Icons.icon(BTSvc.bluetoothEnabled ? "bluetooth-active-symbolic" : "bluetooth-disabled-symbolic");
     }
-    property bool isActive: !!Bluetooth.bluetoothEnabled
+    property bool isActive: !!BTSvc.bluetoothEnabled
     property color activeColor: Wallpapers.accentColor || Qt.rgba(0.2, 0.5, 1.0, 1.0)
     
     // Expanded view support
@@ -42,15 +42,15 @@ Item {
 
             Component.onCompleted: {
                 if (root.isActive) {
-                    Bluetooth.startBluetoothDiscovery()
+                    BTSvc.startBluetoothDiscovery()
                 }
             }
 
             Component.onDestruction: {
-                if (Bluetooth.adapter) {
-                    Bluetooth.adapter.discovering = false;
-                } else if (Bluetooth.adapters && Bluetooth.adapters.values && Bluetooth.adapters.values.length > 0) {
-                    Bluetooth.adapters.values[0].discovering = false;
+                if (Quickshell.Bluetooth.adapter) {
+                    Quickshell.Bluetooth.adapter.discovering = false;
+                } else if (Quickshell.Bluetooth.adapters && Quickshell.Bluetooth.adapters.values && Quickshell.Bluetooth.adapters.values.length > 0) {
+                    Quickshell.Bluetooth.adapters.values[0].discovering = false;
                 }
             }
 
@@ -97,7 +97,7 @@ Item {
 
                             Repeater {
                                 id: pairedRepeater
-                                model: Bluetooth.devices ? Bluetooth.devices.values.filter(d => d.paired && d.name && d.name !== "" && !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(d.name)) : []
+                                model: Quickshell.Bluetooth.devices ? Quickshell.Bluetooth.devices.values.filter(d => d.paired && d.name && d.name !== "" && !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(d.name)) : []
                                 delegate: deviceDelegateComponent
                             }
                         }
@@ -130,7 +130,7 @@ Item {
                                     width: refreshRow.implicitWidth
                                     height: 24
                                     
-                                    property bool isScanning: (Bluetooth.adapter && Bluetooth.adapter.discovering) === true || !!Bluetooth.bluetoothScanningManual
+                                    property bool isScanning: (Quickshell.Bluetooth.adapter && Quickshell.Bluetooth.adapter.discovering) === true || !!BTSvc.bluetoothScanningManual
 
                                     Row {
                                         id: refreshRow
@@ -163,7 +163,7 @@ Item {
                                         anchors.fill: parent
                                         hoverEnabled: true
                                         onClicked: {
-                                            Bluetooth.startBluetoothDiscovery()
+                                            BTSvc.startBluetoothDiscovery()
                                         }
                                     }
                                 }
@@ -171,7 +171,7 @@ Item {
 
                             Repeater {
                                 id: availableRepeater
-                                model: Bluetooth.devices ? Bluetooth.devices.values.filter(d => !d.paired && d.name && d.name !== "" && !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(d.name)) : []
+                                model: Quickshell.Bluetooth.devices ? Quickshell.Bluetooth.devices.values.filter(d => !d.paired && d.name && d.name !== "" && !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(d.name)) : []
                                 delegate: deviceDelegateComponent
                             }
 
@@ -211,5 +211,5 @@ Item {
     }
 
     signal toggled()
-    onToggled: Bluetooth.toggleBluetooth()
+    onToggled: BTSvc.toggleBluetooth()
 }
