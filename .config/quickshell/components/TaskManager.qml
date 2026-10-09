@@ -18,12 +18,8 @@ PanelWindow {
         return addr.toString().replace(/[^0-9a-fA-Fx]/g, "");
     }
 
-    function getScreen() {
-        return root.screen || (Quickshell.screens.length > 0 ? Quickshell.screens[0] : null);
-    }
-
     property var screenDimensions: {
-        let s = root.getScreen();
+        let s = root.screen || (Quickshell.screens.length > 0 ? Quickshell.screens[0] : null);
         return s ? { width: s.width, height: s.height } : { width: 1920, height: 1080 };
     }
 
@@ -34,14 +30,6 @@ PanelWindow {
 
     property int viewMode: 0 // 0: Windows, 1: Workspaces
     signal forceResetDrag()
-    onScreenChanged: refreshScreenDims()
-    property bool _screenRefreshQueued: false
-    function refreshScreenDims() {
-        // Force re-evaluation of screenDimensions when screen changes
-        if (_screenRefreshQueued) return;
-        _screenRefreshQueued = true;
-        Qt.callLater(() => { _screenRefreshQueued = false; screenDimensions = ({}); });
-    }
     Connections {
         target: UIState
         function onSwitcherOpenChanged() {
