@@ -233,7 +233,15 @@ PanelWindow {
                     // zone beside the popup tore down the whole panel.
                     if (addControlPopup.opacity > 0) {
                         addControlPopup.close();
-                    } else if (expandedOverlay.isExpanded) {
+                    } else if (expandedOverlay.isExpanded || morphCompleteTimer.running) {
+                        // During the close morph, isExpanded is already
+                        // false but morphCompleteTimer is still running.
+                        // Treat that the same as "expanded view is active"
+                        // so a mid-morph bgDim tap is absorbed by
+                        // closeExpandedView() (a no-op via close()'s
+                        // re-entrancy guard) instead of falling through
+                        // to UIState.panelOpen = false, which would tear
+                        // down the whole panel.
                         controlPanel.closeExpandedView();
                     } else {
                         UIState.panelOpen = false;
@@ -2393,7 +2401,16 @@ Behavior on radius {
                                                                     || controlPanel.swipeWasGesture) {
                                                                 return;
                                                             }
-                                                            if (!controlPanel.editMode && item.hasExpandedView && !expandedOverlay.isExpanded) {
+                                                            // Also drop the open request if a close
+                                                            // morph is already running. Without this
+                                                            // guard, a click that the inner MA handles
+                                                            // as an out-of-card close (which flips
+                                                            // isExpanded → false synchronously) would
+                                                            // re-enable the cell MA below, which then
+                                                            // re-fires expandRequested in the same
+                                                            // event tick and the view snaps straight
+                                                            // back open on every out-of-card tap.
+                                                            if (!controlPanel.editMode && item.hasExpandedView && !expandedOverlay.isExpanded && !morphCompleteTimer.running) {
                                                                 controlPanel.openExpandedView(widgetBg, item, delegateItem);
                                                             }
                                                         });
@@ -2611,7 +2628,16 @@ Behavior on radius {
                                                     // the expandedLoader (notably during the brief load
                                                     // window before the expanded component's MouseAreas
                                                     // are in the scene graph).
-                                                    enabled: !controlPanel.editMode && !expandedOverlay.isExpanded
+                                                    //
+                                                    // Also gate on isSimpleToggle so this MA does not
+                                                    // intercept presses meant for complex widgets'
+                                                    // own MAs (e.g. MediaWidget.bgMouseArea's
+                                                    // pressAndHold). Without this, simpleToggleMouse
+                                                    // sits on top of the widgetLoader for complex
+                                                    // toggles too and swallows the press before the
+                                                    // widget's MA ever sees it — long-press on Media
+                                                    // would never fire bgMouseArea.onPressAndHold.
+                                                    enabled: !controlPanel.editMode && !expandedOverlay.isExpanded && !!(widgetLoader.item && widgetLoader.item.isSimpleToggle)
                                                     pressAndHoldInterval: 300
                                                     Accessible.name: (widgetLoader.item && widgetLoader.item.toggleName) || "Toggle"
                                                     Accessible.role: Accessible.Button
@@ -3427,7 +3453,11 @@ Behavior on radius {
                 // it blocks clicks on the toggle grid below.
                 // The inner MouseArea stays interactive throughout because
                 // we animate overlayFadeBg.opacity, not this Item's own opacity.
-                visible: isExpanded
+                // Keep visible while the close morph is running so the inner
+                // MouseArea stays in the scene graph and absorbs the next tap
+                // (otherwise the click falls through to outerArea, which sees
+                // isExpanded=false and tears down the whole panel).
+                visible: isExpanded || morphCompleteTimer.running
                 z: 200
 
                 property var sourceItem: null
@@ -3570,6 +3600,11 @@ Behavior on radius {
                 }
 
                 function close() {
+                    // Re-entrancy guard: ignore taps that arrive while the
+                    // close morph is already running. Without this, each
+                    // tap restarts morphCompleteTimer and the morph never
+                    // lands.
+                    if (morphCompleteTimer.running) return;
                     // Safety net: clear the long-press-guard flag so a
                     // later open from a different path starts clean.
                     expandedOverlay.pressOpenedExpanded = false;
@@ -3868,11 +3903,27 @@ Behavior on radius {
                     // Out-of-card clicks: do nothing in onPressed and
                     // let auto-accept consume the click, then call
                     // close() in onClicked.
-                    enabled: expandedOverlay.isExpanded
+                    // Keep enabled while the close morph is running so a
+                    // mid-morph tap is absorbed here (idempotent via the
+                    // re-entrancy guard in close()) instead of falling
+                    // through to outerArea / panelContainer.
+                    enabled: expandedOverlay.isExpanded || morphCompleteTimer.running
                     anchors.fill: parent
                     acceptedButtons: Qt.LeftButton
                     propagateComposedEvents: true
                     onPressed: (mouse) => {
+                        // Clear the long-press release guard as soon as a
+                        // new press lands on the inner MA. The guard
+                        // protects the release of the long-press that
+                        // opened the view (it lands at the cell position,
+                        // outside the morphed card, and would otherwise be
+                        // misread as an out-of-card close). Clearing it
+                        // here means the very next user tap (their
+                        // intentional close) is not consumed — that is
+                        // what makes the close work in 1 tap instead of 2.
+                        if (expandedOverlay.pressOpenedExpanded) {
+                            expandedOverlay.pressOpenedExpanded = false;
+                        }
                         let s = expandedOverlay.sourceItem;
                         if (!s)
                             return;
@@ -3937,6 +3988,17 @@ Behavior on radius {
             color: "transparent"
             visible: opacity > 0
             opacity: 0
+            // Close the popup automatically whenever edit mode is exited
+            // from any path (the edit button, the "Done" affordance, etc.)
+            // so it doesn't linger as a half-faded ghost panel after the
+            // user has left the control-center edit state.
+            Connections {
+                target: controlPanel
+                function onEditModeChanged() {
+                    if (!controlPanel.editMode && addControlPopup.opacity > 0)
+                        addControlPopup.close();
+                }
+            }
             // Match the controlPanel's bloom scale so the popup shrinks/expands together
             // with the rest of the panel container.
             scale: panelContainer.bloomScale
